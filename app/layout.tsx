@@ -1,14 +1,22 @@
-import { Geist, Geist_Mono } from "next/font/google"
+import { Figtree, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'})
+// Figtree is variable (wght 300-900), so no `weight` is needed — the whole
+// 400-800 range the design system uses ships in a single file.
+const figtree = Figtree({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-figtree",
+  display: "swap",
+})
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-geist-mono",
+  display: "swap",
 })
 
 export default function RootLayout({
@@ -20,7 +28,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
+      className={cn(figtree.variable, fontMono.variable, "font-sans")}
     >
       <body>
         <ThemeProvider>{children}</ThemeProvider>

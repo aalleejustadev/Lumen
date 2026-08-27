@@ -1,129 +1,561 @@
+/* ==========================================================================
+   Lumen LMS — globals.css
+   Next.js + Tailwind v4 + shadcn/ui
+   Extracted from the Lumen design system (app + marketing site).
+   ========================================================================== */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: var(--font-sans);
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
-}
+/* --------------------------------------------------------------------------
+   1. TYPOGRAPHY
+   Single family across the entire product: Figtree.
+   Weights in use: 400 / 500 / 600 / 700 / 800 (+ 400 italic).
+   Loaded and self-hosted by next/font in `app/layout.tsx`, which exposes it as
+   --font-figtree. Nothing is fetched from Google at runtime.
+   -------------------------------------------------------------------------- */
 
+/* --------------------------------------------------------------------------
+   2. DESIGN TOKENS — LIGHT (default)
+   -------------------------------------------------------------------------- */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+  /* ---- Surfaces ---- */
+  --background: #f4f4f3; /* page background          */
+  --sidebar: #f3f3f1; /* app sidebar              */
+  --card: #ffffff; /* cards, popovers, modals  */
+  --soft: #fafafa; /* inset panels (marketing) */
+  --hover: #efefec; /* row / button hover       */
+  --track: #e6e6e3; /* progress + toggle tracks */
+
+  /* ---- Text ---- */
+  --foreground: #18181b; /* primary text             */
+  --muted-foreground: #71717a; /* secondary text           */
+  --subtle-foreground: #a1a1aa; /* tertiary / meta text     */
+
+  /* ---- Lines ---- */
+  --border: #e9e9e6; /* standard border          */
+  --border-subtle: #f0f0ee; /* internal row dividers    */
+
+  /* ---- Brand accents (gradient stops) ---- */
+  --accent-1: #8b5cf6; /* violet                   */
+  --accent-2: #3b82f6; /* blue                     */
+  --accent-3: #22d3ee; /* cyan                     */
+  --gradient-brand: linear-gradient(92deg, #8b5cf6, #3b82f6 46%, #22d3ee);
+  --gradient-logo: linear-gradient(140deg, #8b5cf6, #3b82f6);
+
+  /* ---- Semantic ---- */
+  --success: #22c55e;
+  --warning: #f97316;
+  --star: #f5b40a; /* ratings                  */
+  --destructive: #ef4444;
+  --info: #3b82f6;
+
+  /* ---- Role colours ---- */
+  --role-student: #3b82f6;
+  --role-instructor: #8b5cf6;
+  --role-admin: #f97316;
+
+  /* ---- Charts (donut segments, in order) ---- */
+  --chart-1: #18181b;
+  --chart-2: #52525b;
+  --chart-3: #d4d4d8;
+  --chart-4: #22d3ee;
+  --chart-5: #8b5cf6;
+  --bar-fill: #18181b; /* progress bar fill        */
+
+  /* ---- Ambient / decorative (marketing) ---- */
+  --grid-line: rgba(24, 24, 27, 0.042);
+  --dot-color: rgba(24, 24, 27, 0.1);
+  --orb-strong: 0.3;
+  --orb-soft: 0.24;
+  --ambient: 0.16;
+
+  /* ---- Radii ---- */
+  --radius-sm: 0.5rem; /*  8px — chips, small badges      */
+  --radius: 0.6875rem; /* 11px — buttons, inputs (base)   */
+  --radius-md: 0.75rem; /* 12px — inner panels             */
+  --radius-lg: 1rem; /* 16px — cards                    */
+  --radius-xl: 1.125rem; /* 18px — feature cards            */
+  --radius-2xl: 1.375rem; /* 22px — modals, hero panels      */
+  --radius-pill: 9999px;
+
+  /* ---- Elevation ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 20px 44px -16px rgba(0, 0, 0, 0.18);
+  --shadow-card: 0 12px 40px -18px rgba(0, 0, 0, 0.22);
+  --shadow-modal: 0 46px 96px -30px rgba(0, 0, 0, 0.35);
+
+  /* ---- Motion ---- */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 0.14s;
+  --duration-base: 0.2s;
+
+  /* ---- shadcn/ui aliases ---- */
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --card-foreground: var(--foreground);
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: var(--hover);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--hover);
+  --accent: var(--hover);
+  --accent-foreground: var(--foreground);
+  --destructive-foreground: #ffffff;
+  --input: var(--border);
+  --ring: #18181b;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--hover);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
+/* --------------------------------------------------------------------------
+   3. DESIGN TOKENS — DARK
+   -------------------------------------------------------------------------- */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+  /* ---- Surfaces ---- */
+  --background: #09090b;
+  --sidebar: #0b0b0d;
+  --card: #151518;
+  --soft: #0f0f12;
+  --hover: #1e1e22;
+  --track: #26262b;
+
+  /* ---- Text ---- */
+  --foreground: #fafafa;
+  --muted-foreground: #a1a1aa;
+  --subtle-foreground: #71717a;
+
+  /* ---- Lines ---- */
+  --border: #26262b;
+  --border-subtle: #1d1d21;
+
+  /* ---- Charts ---- */
+  --chart-1: #fafafa;
+  --chart-2: #71717a;
+  --chart-3: #3f3f46;
+  --bar-fill: #fafafa;
+
+  /* ---- Ambient / decorative ---- */
+  --grid-line: rgba(255, 255, 255, 0.045);
+  --dot-color: rgba(255, 255, 255, 0.1);
+  --orb-strong: 0.42;
+  --orb-soft: 0.34;
+  --ambient: 0.24;
+
+  /* ---- Elevation (deeper in dark) ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 20px 44px -16px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 12px 40px -18px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 46px 96px -30px rgba(0, 0, 0, 0.7);
+
+  /* ---- shadcn/ui aliases ---- */
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --ring: #fafafa;
 }
 
+/* --------------------------------------------------------------------------
+   4. TAILWIND THEME MAPPING (v4)
+   Exposes every token as a utility: bg-card, text-muted-foreground,
+   border-border-subtle, rounded-lg, shadow-card, font-sans, etc.
+   -------------------------------------------------------------------------- */
+@theme inline {
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-soft: var(--soft);
+  --color-hover: var(--hover);
+  --color-track: var(--track);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-accent-1: var(--accent-1);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-star: var(--star);
+  --color-info: var(--info);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-role-student: var(--role-student);
+  --color-role-instructor: var(--role-instructor);
+  --color-role-admin: var(--role-admin);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-bar-fill: var(--bar-fill);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-card: var(--shadow-card);
+  --shadow-modal: var(--shadow-modal);
+
+  --animate-shimmer: shimmer 3.2s linear infinite;
+  --animate-popin: popin 0.14s ease-out;
+  --animate-floaty: floaty 6s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   5. BASE
+   -------------------------------------------------------------------------- */
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
   html {
-    @apply font-sans;
-    }
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-wrap: pretty;
+    margin: 0;
+  }
+
+  /* Headings run tight and heavy — the product's display voice. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  h1 {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  /* Big numerals (KPIs, stat tiles) */
+  .stat-figure {
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-2);
+    color: #fff;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+
+  ::placeholder {
+    color: var(--subtle-foreground);
+  }
+
+  /* Lucide icon sizing contract used throughout the app */
+  [data-lucide] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 19px;
+    height: 19px;
+    flex: none;
+  }
+  [data-lucide] svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
 }
+
+/* --------------------------------------------------------------------------
+   6. BRAND UTILITIES
+   -------------------------------------------------------------------------- */
+@layer utilities {
+  /* Static gradient text — headlines, emphasised words */
+  .text-gradient {
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Animated gradient text — "Become an Instructor", upsell links */
+  .text-gradient-animated {
+    background: linear-gradient(90deg, #8b5cf6, #3b82f6, #22d3ee, #8b5cf6);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 3.2s linear infinite;
+  }
+
+  /* Logo mark background */
+  .bg-logo {
+    background: var(--gradient-logo);
+  }
+
+  /* Card hover lift */
+  .lift {
+    transition:
+      transform 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    border-color: var(--subtle-foreground);
+  }
+
+  /* Popover / dropdown entrance */
+  .pop {
+    animation: popin 0.14s ease-out;
+  }
+
+  /* Decorative: hero grid, dot texture, ambient orb, fading rule */
+  .bg-hero-grid {
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 58px 58px;
+  }
+  .bg-dots {
+    background-image: radial-gradient(
+      var(--dot-color) 1.1px,
+      transparent 1.1px
+    );
+    background-size: 19px 19px;
+  }
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(110px);
+    pointer-events: none;
+  }
+  .rule-fade {
+    height: 1px;
+    border: 0;
+    margin: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--border) 18%,
+      var(--border) 82%,
+      transparent
+    );
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. KEYFRAMES
+   -------------------------------------------------------------------------- */
+@keyframes shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
+@keyframes popin {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+/* Route-change loading bar (3px, full width, glowing sweep) */
+@keyframes topbar-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* Ambient orbs — hero (centred via translate, so it lives in the keyframe) */
+@keyframes drift-1 {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(-50%, -50%) translate(9%, -6%) scale(1.12);
+  }
+  66% {
+    transform: translate(-50%, -50%) translate(-7%, 5%) scale(0.94);
+  }
+}
+@keyframes drift-2 {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1.05);
+  }
+  33% {
+    transform: translate(-50%, -50%) translate(-10%, 7%) scale(0.92);
+  }
+  66% {
+    transform: translate(-50%, -50%) translate(8%, -5%) scale(1.14);
+  }
+}
+@keyframes drift-3 {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(0.98);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate(6%, 8%) scale(1.16);
+  }
+}
+
+/* Ambient orbs — section level (no centring transform) */
+@keyframes sway {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(4%, -4%) scale(1.09);
+  }
+}
+@keyframes sway-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1.04);
+  }
+  50% {
+    transform: translate(-5%, 4%) scale(0.95);
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   REFERENCE — values as used in the designs
+   ==========================================================================
+
+   FONT — Figtree (only family)
+     400  body copy, descriptions, meta text
+     500  emphasised body, lesson titles, nav labels
+     600  buttons, table headers, active nav, labels
+     700  card titles, section headings (h2/h3), names
+     800  page titles (h1), KPI figures, prices, logo wordmark
+     400i rare pull-quotes only
+
+   TYPE SCALE (px as authored)
+     11–12   badges, pills, meta, table headers
+     12.5–13 secondary text, captions
+     13.5–14 body, nav items, buttons
+     14.5–15 lead body, card titles
+     16–17   sub-headings, section titles
+     19–21   modal titles, large card titles
+     23–26   page titles (h1)
+     30–44   hero headlines, KPI figures
+     Tracking: -0.01em small · -0.02em headings · -0.03em display
+
+   RADII
+     8px chips · 11px buttons/inputs · 12px inner panels
+     14–16px cards · 18px feature cards · 22–24px modals/hero · 9999px pills
+
+   NEXT.JS FONT SETUP — done, see `app/layout.tsx`
+     Figtree is a variable font (wght 300-900), so next/font loads it without a
+     `weight` option and the whole 400-800 range above is covered by one file.
+     It is bound to --font-figtree there and read by --font-sans in section 4.
+
+   DARK MODE — class strategy (`<html class="dark">`), matching the toggle
+   in both the app and marketing site. Pair with next-themes:
+     <ThemeProvider attribute="class" defaultTheme="light" />
+   ========================================================================== */
