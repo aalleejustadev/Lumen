@@ -2,6 +2,7 @@ import { Figtree, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import { SiteHeader } from "@/components/marketing/site-header"
 import { cn } from "@/lib/utils"
 
 // Figtree is variable (wght 300-900), so no `weight` is needed — the whole
@@ -31,7 +32,10 @@ export default function RootLayout({
       className={cn(figtree.variable, fontMono.variable, "font-sans")}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <SiteHeader />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   )

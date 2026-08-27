@@ -1,19 +1,19 @@
-import { Button } from "@/components/ui/button"
-
 export default function Page() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
-        </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
+    <main className="mx-auto w-full max-w-[1200px] px-6 py-20">
+      <div className="flex max-w-xl flex-col gap-4">
+        <h1 className="text-4xl">
+          Header <span className="text-gradient">wired up</span>
+        </h1>
+        <p className="text-muted-foreground">
+          The marketing header is mounted in the root layout, so it sits above
+          every route. It is sticky — scroll to see it hold the top edge.
+        </p>
+        <p className="font-mono text-xs text-muted-foreground">
+          (Press <kbd>d</kbd>, or use the toggle, to switch themes)
+        </p>
       </div>
-    </div>
+      <div className="h-[150vh]" />
+    </main>
   )
 }

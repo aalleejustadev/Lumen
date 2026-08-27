@@ -73,13 +73,20 @@
   --orb-soft: 0.24;
   --ambient: 0.16;
 
-  /* ---- Radii ---- */
-  --radius-sm: 0.5rem; /*  8px — chips, small badges      */
-  --radius: 0.6875rem; /* 11px — buttons, inputs (base)   */
-  --radius-md: 0.75rem; /* 12px — inner panels             */
-  --radius-lg: 1rem; /* 16px — cards                    */
-  --radius-xl: 1.125rem; /* 18px — feature cards            */
-  --radius-2xl: 1.375rem; /* 22px — modals, hero panels      */
+  /* ---- Radii ----
+     One knob. --radius is the control radius (buttons, inputs) and every
+     other step derives from it, so tightening the whole product is a
+     one-line change. The names line up with what the shadcn components
+     already reach for: rounded-lg on controls, rounded-xl on cards, and
+     var(--radius) directly in a few places. */
+  --radius: 0.625rem; /* 10px — buttons, inputs (base)   */
+  --radius-sm: calc(var(--radius) - 4px); /*  6px — chips, small badges      */
+  --radius-md: calc(var(--radius) - 2px); /*  8px — inner panels             */
+  --radius-lg: var(--radius); /* 10px — controls, cards (inner)  */
+  --radius-xl: calc(var(--radius) + 4px); /* 14px — cards                    */
+  --radius-2xl: calc(
+    var(--radius) + 10px
+  ); /* 20px — modals, hero panels      */
   --radius-pill: 9999px;
 
   /* ---- Elevation ---- */
@@ -87,6 +94,8 @@
   --shadow-pop: 0 20px 44px -16px rgba(0, 0, 0, 0.18);
   --shadow-card: 0 12px 40px -18px rgba(0, 0, 0, 0.22);
   --shadow-modal: 0 46px 96px -30px rgba(0, 0, 0, 0.35);
+  --shadow-logo: 0 6px 18px -6px
+    color-mix(in oklch, var(--accent-1) 65%, transparent);
 
   /* ---- Motion ---- */
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
@@ -155,6 +164,8 @@
   --shadow-pop: 0 20px 44px -16px rgba(0, 0, 0, 0.55);
   --shadow-card: 0 12px 40px -18px rgba(0, 0, 0, 0.6);
   --shadow-modal: 0 46px 96px -30px rgba(0, 0, 0, 0.7);
+  --shadow-logo: 0 8px 22px -6px
+    color-mix(in oklch, var(--accent-1) 75%, transparent);
 
   /* ---- shadcn/ui aliases ---- */
   --primary: #fafafa;
@@ -238,6 +249,7 @@
   --shadow-pop: var(--shadow-pop);
   --shadow-card: var(--shadow-card);
   --shadow-modal: var(--shadow-modal);
+  --shadow-logo: var(--shadow-logo);
 
   --animate-shimmer: shimmer 3.2s linear infinite;
   --animate-popin: popin 0.14s ease-out;
@@ -546,9 +558,12 @@
      30–44   hero headlines, KPI figures
      Tracking: -0.01em small · -0.02em headings · -0.03em display
 
-   RADII
-     8px chips · 11px buttons/inputs · 12px inner panels
-     14–16px cards · 18px feature cards · 22–24px modals/hero · 9999px pills
+   RADII — derived from --radius (10px), see section 2
+     rounded-sm  6px chips · rounded-md 8px inner panels
+     rounded-lg 10px buttons/inputs · rounded-xl 14px cards
+     rounded-2xl 20px modals/hero · rounded-full pills
+     The designs were authored a step rounder (11/12/16/18/22); the scale
+     was pulled in deliberately. Move --radius to shift all of it at once.
 
    NEXT.JS FONT SETUP — done, see `app/layout.tsx`
      Figtree is a variable font (wght 300-900), so next/font loads it without a
