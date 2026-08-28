@@ -70,8 +70,8 @@
   --grid-line: rgba(24, 24, 27, 0.042);
   --dot-color: rgba(24, 24, 27, 0.1);
   --orb-strong: 0.16;
-  --orb-soft: 0.12;
-  --ambient: 0.09;
+  --orb-soft: 0.1;
+  --ambient: 0.048;
 
   /* ---- Radii ----
      One knob. --radius is the control radius (buttons, inputs) and every
@@ -156,8 +156,8 @@
   --grid-line: rgba(255, 255, 255, 0.045);
   --dot-color: rgba(255, 255, 255, 0.1);
   --orb-strong: 0.22;
-  --orb-soft: 0.16;
-  --ambient: 0.12;
+  --orb-soft: 0.135;
+  --ambient: 0.065;
 
   /* ---- Elevation (deeper in dark) ---- */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -256,7 +256,8 @@
   --animate-drift-2: drift-2 26s ease-in-out infinite;
   --animate-drift-3: drift-3 30s ease-in-out infinite;
   --animate-popin: popin 0.14s ease-out;
-  --animate-floaty: floaty 6s ease-in-out infinite;
+  --animate-floaty: floaty 4s ease-in-out infinite;
+  --animate-floaty-slow: floaty 12s ease-in-out infinite;
 }
 
 /* --------------------------------------------------------------------------
@@ -453,7 +454,7 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-7px);
+    transform: translateY(-16px);
   }
 }
 

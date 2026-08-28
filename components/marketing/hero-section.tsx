@@ -1,13 +1,23 @@
 import Link from "next/link"
 import { ArrowRightIcon, ChevronRightIcon, StarIcon } from "lucide-react"
 
-import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarImage,
+} from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { HeroAppPreview } from "@/components/marketing/hero-app-preview"
 import { HeroBackdrop } from "@/components/marketing/hero-backdrop"
 import { TrustedBy } from "@/components/marketing/trusted-by"
 
-const learners = ["A", "J", "S", "T"]
+const learners = [
+  { name: "Amara Osei", src: "/avatars/learner-1.png" },
+  { name: "Jonas Reyes", src: "/avatars/learner-2.png" },
+  { name: "Sofia Kaur", src: "/avatars/learner-3.png" },
+  { name: "Tomas Neri", src: "/avatars/learner-4.png" },
+]
 
 function HeroSection() {
   return (
@@ -62,10 +72,14 @@ function HeroSection() {
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <AvatarGroup className="-space-x-1.5">
-            {learners.map((initials) => (
-              <Avatar key={initials} size="sm">
+            {learners.map((learner) => (
+              <Avatar key={learner.name} size="sm">
+                <AvatarImage src={learner.src} alt={learner.name} />
                 <AvatarFallback className="bg-hover text-[10px] font-semibold">
-                  {initials}
+                  {learner.name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")}
                 </AvatarFallback>
               </Avatar>
             ))}
@@ -80,7 +94,7 @@ function HeroSection() {
           </p>
         </div>
 
-        <HeroAppPreview className="mt-18" />
+        <HeroAppPreview className="mt-18 animate-floaty" />
 
         <TrustedBy className="mt-20" />
       </div>
