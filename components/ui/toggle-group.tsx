@@ -36,6 +36,9 @@ function ToggleGroup({
   return (
     <ToggleGroupPrimitive
       data-slot="toggle-group"
+      // Base UI drives roving arrow-key focus off this; without it a vertical
+      // group still only responds to Left/Right.
+      orientation={orientation}
       data-variant={variant}
       data-size={size}
       data-spacing={spacing}
