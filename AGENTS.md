@@ -48,6 +48,7 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
 - `components/marketing/` — the marketing site (`site-header.tsx`, `hero-section.tsx`, `stats-section.tsx`, sections, footer). Sections own their own backdrop; page-level files just stack sections.
 - `components/<surface>/` — one directory per surface as they land: `dashboard/`, `auth/`.
 - `components/theme-provider.tsx` — root-level provider, stays put.
+- `lib/config/catalog.ts` — catalog categories and demo courses. Course card art is a per-category gradient + icon on purpose: real images will arrive through an instructor image-upload feature, **not** a stock-photo integration, so don't wire Unsplash into these cards.
 - `lib/config/site.ts` — brand strings and navigation config. Nav lives here, not inline in components, so desktop and mobile nav can't drift.
 - `lib/utils.ts` — `cn()` class merger (clsx + tailwind-merge).
 - `hooks/` — shared React hooks.
@@ -67,7 +68,14 @@ the app shell isn't inheriting marketing chrome.
 ## Design references
 
 The measured baseline: 1152px content box (`max-w-[1200px] px-6`), 70px header,
-40px controls. Radii derive from `--radius` (10px): `rounded-lg` for
+40px controls. **Sections use `py-20`** — not `py-24`; keep new sections on that
+value so the page rhythm stays even.
+
+Headings run heavier than the old design-system note claimed. Measured stem
+widths off the exports: `h1`/`h2` are **800** (the base rule in `globals.css`
+sets both), card titles (`h3`) are **700** from the same base rule — so don't
+add `font-semibold` to a card title, it makes them too light. Big display
+headings inside cards take `font-extrabold` explicitly. Radii derive from `--radius` (10px): `rounded-lg` for
 controls, `rounded-xl` for cards. The designs were authored a step rounder;
 the scale was pulled in on purpose, so don't "correct" it back.
 

@@ -24,7 +24,7 @@ function HeroSection() {
     <section className="relative isolate overflow-hidden">
       <HeroBackdrop />
 
-      <div className="relative mx-auto flex w-full max-w-[1200px] flex-col items-center px-6 pt-20 pb-16">
+      <div className="relative mx-auto flex w-full max-w-[1200px] flex-col items-center px-6 py-20">
         <Link
           href="/changelog"
           className="group flex items-center gap-2 rounded-full border bg-card py-1.5 pr-2.5 pl-1.5 shadow-sm transition-colors hover:bg-hover"

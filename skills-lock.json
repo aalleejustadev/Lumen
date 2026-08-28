@@ -126,6 +126,12 @@
       "sourceType": "github",
       "skillPath": "skills/shadcn/SKILL.md",
       "computedHash": "c1a68ee06a668aced9ab2b5fbdea5f989864123794eb2e056b339a072dbb7f10"
+    },
+    "unsplash": {
+      "source": "cevatkerim/skills",
+      "sourceType": "github",
+      "skillPath": "skills/unsplash/SKILL.md",
+      "computedHash": "2f124dcb8d877c676c8b03e741c6406180bebf3176a00440e454d587319931ee"
     }
   }
 }

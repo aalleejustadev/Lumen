@@ -292,6 +292,10 @@
     letter-spacing: -0.02em;
     line-height: 1.2;
   }
+  /* h2 measures 0.159em stem in the exports — the same 800 as h1, not 700. */
+  h2 {
+    font-weight: 800;
+  }
   h1 {
     font-weight: 800;
     letter-spacing: -0.03em;
