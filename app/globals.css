@@ -45,6 +45,9 @@
   --accent-3: #22d3ee; /* cyan                     */
   --gradient-brand: linear-gradient(92deg, #8b5cf6, #3b82f6 46%, #22d3ee);
   --gradient-logo: linear-gradient(140deg, #8b5cf6, #3b82f6);
+  /* CTA panel — stops sampled off the export; identical in both themes,
+     so it is deliberately not redefined under .dark */
+  --gradient-cta: linear-gradient(97deg, #8467ee 0%, #4f7dee 46%, #60c3eb 100%);
 
   /* ---- Semantic ---- */
   --success: #22c55e;
@@ -258,6 +261,9 @@
   --animate-popin: popin 0.14s ease-out;
   --animate-floaty: floaty 4s ease-in-out infinite;
   --animate-floaty-slow: floaty 12s ease-in-out infinite;
+  --animate-nav-item: nav-item 0.44s var(--ease-out-soft) both;
+  --animate-menu-x-top: menu-x-top 0.32s var(--ease-out-soft) 0.06s both;
+  --animate-menu-x-bottom: menu-x-bottom 0.32s var(--ease-out-soft) 0.06s both;
 }
 
 /* --------------------------------------------------------------------------
@@ -405,6 +411,25 @@
       linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 58px 58px;
   }
+  /* Fades a texture out toward the middle of its box, so dots stay visible
+     around the edges but don't fight the copy in the centre. Measured off the
+     CTA export: dot contrast runs ~51 at the edges and ~10 dead centre. */
+  /* Fades a texture out toward the middle of its box so it stays visible at
+     the edges without fighting the copy. Stops trace the dot contrast measured
+     across the CTA export: 1.0 at the edges, 0.64 a fifth in, 0.35 dead
+     centre. */
+  .fade-center {
+    --fade-center: linear-gradient(
+      to right,
+      #000 0%,
+      rgba(0, 0, 0, 0.64) 20%,
+      rgba(0, 0, 0, 0.35) 50%,
+      rgba(0, 0, 0, 0.64) 80%,
+      #000 100%
+    );
+    -webkit-mask-image: var(--fade-center);
+    mask-image: var(--fade-center);
+  }
   .bg-dots {
     background-image: radial-gradient(
       var(--dot-color) 1.1px,
@@ -524,6 +549,40 @@
   }
   50% {
     transform: translate(-5%, 4%) scale(0.95);
+  }
+}
+
+/* Mobile nav: rows rise into place behind the panel's unroll, staggered by an
+   inline animation-delay. */
+@keyframes nav-item {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The panel's close button starts as the trigger's two bars — 2px tall, 7px
+   between centres — and crosses them, so the button reads as one morphing
+   control rather than two swapped icons. */
+@keyframes menu-x-top {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(3.5px) rotate(45deg);
+  }
+}
+
+@keyframes menu-x-bottom {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(-3.5px) rotate(-45deg);
   }
 }
 

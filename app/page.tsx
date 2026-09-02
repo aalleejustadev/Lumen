@@ -1,4 +1,5 @@
 import { CatalogSection } from "@/components/marketing/catalog-section"
+import { CtaSection } from "@/components/marketing/cta-section"
 import { HeroSection } from "@/components/marketing/hero-section"
 import { PlatformSection } from "@/components/marketing/platform-section"
 import { PricingSection } from "@/components/marketing/pricing-section"
@@ -16,6 +17,7 @@ export default function Page() {
       <TestimonialsSection />
       <PricingSection />
       <QuestionsSection />
+      <CtaSection />
     </main>
   )
 }

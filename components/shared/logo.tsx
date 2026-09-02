@@ -39,10 +39,20 @@ function LogoMark({ className }: { className?: string }) {
   )
 }
 
-function Logo({ className }: { className?: string }) {
+/**
+ * `markClassName` exists because the tile is not one size everywhere: the
+ * header runs it at 36px, the footer at 32px.
+ */
+function Logo({
+  className,
+  markClassName,
+}: {
+  className?: string
+  markClassName?: string
+}) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <LogoMark />
+      <LogoMark className={markClassName} />
       <span className="text-xl font-extrabold tracking-[-0.03em]">
         {siteConfig.name}
       </span>

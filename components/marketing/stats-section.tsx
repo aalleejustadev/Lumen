@@ -20,7 +20,7 @@ function StatsSection({ className }: { className?: string }) {
   return (
     <section className={cn("w-full", className)}>
       <div className="mx-auto w-full max-w-[1200px] px-6 py-12">
-        <Card className="grid grid-cols-2 gap-px bg-border py-0 ring-border lg:grid-cols-4">
+        <Card className="grid grid-cols-2 gap-px bg-border py-0 ring-border md:grid-cols-4">
           {stats.map((stat) => (
             <div
               key={stat.label}
@@ -29,7 +29,7 @@ function StatsSection({ className }: { className?: string }) {
               {/* .stat-figure tracks at -0.025em; the export measures -0.04em
                   on figures this large, so the extra tightening is local
                   rather than pushed onto every KPI in the app. */}
-              <span className="stat-figure text-3xl tracking-[-0.04em] lg:text-[38px]">
+              <span className="stat-figure text-3xl tracking-[-0.04em] md:text-[32px] lg:text-[38px]">
                 {stat.figure}
               </span>
               <span className="text-sm tracking-[-0.01em] text-muted-foreground">

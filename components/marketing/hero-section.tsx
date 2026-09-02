@@ -32,15 +32,22 @@ function HeroSection() {
           <span className="bg-logo rounded-full px-2 py-0.5 text-[11px] font-extrabold tracking-[0.04em] text-white">
             NEW
           </span>
+          {/* The full line needs ~330px of pill; below sm it would wrap to two
+              rows, so the phone gets the shorter headline. */}
           <span className="text-sm text-muted-foreground">
-            Instructor payouts now run monthly
+            <span className="sm:hidden">Payouts now run monthly</span>
+            <span className="hidden sm:inline">
+              Instructor payouts now run monthly
+            </span>
           </span>
           <ChevronRightIcon className="size-4 text-subtle-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
 
         {/* 72px display type on a 72px line in the export; weight, tracking
-            and colour all come from the base h1 rule in globals.css */}
-        <h1 className="mt-8 text-center text-5xl leading-[0.97] sm:text-6xl lg:text-[4.5rem]">
+            and colour all come from the base h1 rule in globals.css. Below sm
+            it ramps with the viewport so "Learn anything." holds one line all
+            the way down to 320px. */}
+        <h1 className="mt-8 text-center text-[clamp(2.3rem,11.5vw,3rem)] leading-[0.97] sm:text-6xl lg:text-[4.5rem]">
           Learn anything.
           <br />
           <span className="text-gradient">Teach everything.</span>
@@ -51,10 +58,10 @@ function HeroSection() {
           from, and everything you need to build and sell your own.
         </p>
 
-        <div className="mt-9 flex flex-col items-center gap-4 sm:flex-row">
+        <div className="mt-9 flex w-full flex-col items-center gap-4 sm:w-auto sm:flex-row">
           <Button
             nativeButton={false}
-            className="h-13 gap-2 px-6! text-[15px] font-semibold"
+            className="h-13 w-full max-w-[320px] gap-2 px-6! text-[15px] font-semibold sm:w-auto sm:max-w-none"
             render={<Link href="/register" />}
           >
             Start learning free
@@ -63,7 +70,7 @@ function HeroSection() {
           <Button
             variant="outline"
             nativeButton={false}
-            className="h-13 bg-card px-6 text-[15px] font-semibold"
+            className="h-13 w-full max-w-[320px] bg-card px-6 text-[15px] font-semibold sm:w-auto sm:max-w-none"
             render={<Link href="/teach" />}
           >
             Become an instructor

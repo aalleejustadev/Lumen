@@ -142,9 +142,11 @@ function PlatformSection({ className }: { className?: string }) {
           moves someone from watching to understanding.
         </p>
 
-        {/* 3 x 372px columns on 18px gutters; the lead card takes two of them */}
-        <div className="mt-8.5 grid gap-4.5 lg:grid-cols-3">
-          <Card className="gap-0 p-6.5 lg:col-span-2 lg:min-h-[317px]">
+        {/* 3 x 372px columns on 18px gutters; the lead card takes two of them.
+            Halves first, so the bento never becomes a column of letterboxes on
+            a tablet. */}
+        <div className="mt-8.5 grid gap-4.5 sm:grid-cols-2 lg:grid-cols-3">
+          <Card className="gap-0 p-6.5 sm:col-span-2 lg:min-h-[317px]">
             <FeatureIcon icon={ClockIcon} brand />
             <h3 className="mt-5.5 text-base">
               Notes pinned to the exact second
@@ -172,9 +174,9 @@ function PlatformSection({ className }: { className?: string }) {
         </div>
 
         {/* 2 x 564px cards on a 22px gutter */}
-        <div className="mt-16.5 grid gap-5.5 lg:grid-cols-2">
+        <div className="mt-16.5 grid gap-5.5 md:grid-cols-2">
           {audiences.map((audience) => (
-            <Card key={audience.eyebrow} className="gap-0 p-8.5">
+            <Card key={audience.eyebrow} className="gap-0 p-6.5 sm:p-8.5">
               <Badge
                 className={cn(
                   "h-[26px] px-3.5 text-[11px] font-bold tracking-[0.1em] uppercase",

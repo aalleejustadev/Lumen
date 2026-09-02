@@ -76,16 +76,16 @@ function TestimonialsSection({ className }: { className?: string }) {
         </div>
 
         {/* 686px quote card beside a 441px rail, on a 22px gutter */}
-        <div className="mt-9 grid gap-5.5 lg:grid-cols-[1.554fr_1fr]">
-          <Card className="relative gap-0 overflow-hidden p-7 lg:p-[46px]">
+        <div className="mt-9 grid gap-5.5 md:grid-cols-[1.554fr_1fr]">
+          <Card className="relative gap-0 overflow-hidden p-6 sm:p-7 lg:p-[46px]">
             <QuoteMark />
             <Badge className="h-[26px] w-fit bg-accent-1/10 px-3 text-[11px] font-bold tracking-[0.1em] text-accent-1 uppercase">
               {active.audience}
             </Badge>
-            <blockquote className="mt-[21px] max-w-[545px] text-xl leading-[30px] tracking-[-0.01em] lg:text-[27px] lg:leading-[39px]">
+            <blockquote className="mt-[21px] max-w-[545px] text-lg leading-[27px] tracking-[-0.01em] sm:text-xl sm:leading-[30px] lg:text-[27px] lg:leading-[39px]">
               {active.quote}
             </blockquote>
-            <div className="mt-auto flex items-end justify-between gap-6 pt-8">
+            <div className="mt-auto flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pt-8">
               <div className="flex items-center gap-3.5">
                 <Avatar className="size-13.5">
                   <AvatarImage src={active.avatar} alt="" />

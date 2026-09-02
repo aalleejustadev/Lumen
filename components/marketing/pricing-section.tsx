@@ -57,7 +57,7 @@ function PricingSection({ className }: { className?: string }) {
         </div>
 
         {/* Cards are content-height and top-aligned, not stretched */}
-        <div className="mt-10 grid items-start gap-5.25 lg:grid-cols-3">
+        <div className="mt-10 grid items-start gap-5.25 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
             <Card
               key={plan.id}
