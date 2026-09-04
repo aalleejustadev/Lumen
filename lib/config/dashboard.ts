@@ -117,6 +117,77 @@ export const workspaceModes = [
 
 export type WorkspaceMode = (typeof workspaceModes)[number]["value"]
 
+export type CommandPaletteItem = {
+  title: string
+  href: string
+  icon: LucideIcon
+}
+
+/**
+ * The ⌘K palette's two groups, from `command-dialog.png`. "Go to" is the
+ * sidebar's Learn + Community rows flattened into one list (Settings/Help
+ * Center don't belong in a jump-to-page list); "Settings" is `accountMenu`'s
+ * first four entries under their fuller command-palette phrasing.
+ */
+export const commandPaletteGroups: {
+  title: string
+  items: CommandPaletteItem[]
+}[] = [
+  {
+    title: "Go to",
+    items: [
+      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+      {
+        title: "Browse Courses",
+        href: "/dashboard/courses",
+        icon: CompassIcon,
+      },
+      {
+        title: "My Learning",
+        href: "/dashboard/learning",
+        icon: GraduationCapIcon,
+      },
+      { title: "Wishlist", href: "/dashboard/wishlist", icon: HeartIcon },
+      {
+        title: "Certificates",
+        href: "/dashboard/certificates",
+        icon: AwardIcon,
+      },
+      {
+        title: "Discussions",
+        href: "/dashboard/discussions",
+        icon: MessagesSquareIcon,
+      },
+      { title: "Messages", href: "/dashboard/messages", icon: MailIcon },
+    ],
+  },
+  {
+    title: "Settings",
+    items: [
+      {
+        title: "Profile settings",
+        href: "/dashboard/settings/profile",
+        icon: UserRoundIcon,
+      },
+      {
+        title: "Account settings",
+        href: "/dashboard/settings/account",
+        icon: ShieldCheckIcon,
+      },
+      {
+        title: "Billing & plan",
+        href: "/dashboard/settings/billing",
+        icon: CreditCardIcon,
+      },
+      {
+        title: "Notification preferences",
+        href: "/dashboard/notifications",
+        icon: BellIcon,
+      },
+    ],
+  },
+]
+
 /** The account menu behind the sidebar footer's ⋮, per the export. */
 export const accountMenu: { title: string; href: string; icon: LucideIcon }[] =
   [

@@ -14,7 +14,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { Kbd } from "@/components/ui/kbd"
-import { dashboardNav } from "@/lib/config/dashboard"
+import { commandPaletteGroups } from "@/lib/config/dashboard"
 
 /**
  * The header's search. It looks like the input in the export, but it opens a
@@ -60,10 +60,10 @@ function DashboardSearch() {
         {/* The generated `CommandDialog` doesn't wrap its children in the cmdk
             root, so the input has no store to subscribe to without this. */}
         <Command>
-          <CommandInput placeholder="Search Lumen..." />
+          <CommandInput placeholder="Type a command or search..." />
           <CommandList>
             <CommandEmpty>Nothing matches that yet.</CommandEmpty>
-            {dashboardNav.map((group) => (
+            {commandPaletteGroups.map((group) => (
               <CommandGroup key={group.title} heading={group.title}>
                 {group.items.map((item) => (
                   <CommandItem

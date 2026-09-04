@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
+import { DashboardOverview } from "@/components/dashboard/overview/dashboard-overview"
 import { getSession } from "@/lib/auth"
 import { siteConfig } from "@/lib/config/site"
 
@@ -10,58 +10,33 @@ export const metadata: Metadata = {
 }
 
 /**
- * Placeholder. The layout above already guarantees a session, so this only has
- * to prove it: the header knows you, and so does the page. The real dashboard
- * is a separate build against `ui-design/light/dashboard/`.
+ * The student Overview page, built against
+ * `ui-design/light/dashboard/student/student-dashboard.png`. Unlike the
+ * marketing routes this is a dense app screen, so it runs the full content
+ * width rather than the 1200px marketing column — `DashboardOverview` owns
+ * the bento grid beneath the heading.
  */
 export default async function DashboardPage() {
   const session = await getSession()
   const user = session!.user
-
   const firstName = user.name.split(" ")[0] || user.name
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-6 py-12 md:py-20">
-      <h1 className="text-4xl leading-[1.1] lg:text-[44px]">
-        Welcome back, {firstName}.
-      </h1>
-      <p className="mt-3 max-w-[700px] text-lg leading-[1.5] tracking-[-0.01em] text-muted-foreground">
-        You&rsquo;re signed in — this is the shell the real dashboard will fill.
-      </p>
+    <main className="w-full px-6 py-6 md:px-8 md:py-8">
+      <div className="flex items-center gap-3">
+        <h1 className="text-[32px] leading-none">Overview</h1>
+        <Badge
+          variant="outline"
+          className="h-6 gap-1.5 border-border bg-card px-2.5 font-medium text-foreground"
+        >
+          <span className="size-1.5 rounded-full bg-accent-2" />
+          {user.intent === "TEACHING" ? "Instructor mode" : "Student mode"}
+        </Badge>
+      </div>
 
-      <Card className="mt-8 max-w-[520px] gap-0 p-6.5 ring-border">
-        <h2 className="text-base">Your account</h2>
-        <dl className="mt-4 flex flex-col gap-3 text-sm">
-          <div className="flex items-baseline justify-between gap-6">
-            <dt className="text-muted-foreground">Name</dt>
-            <dd className="font-medium">{user.name}</dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-6">
-            <dt className="text-muted-foreground">Email</dt>
-            <dd className="truncate font-medium">{user.email}</dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-6">
-            <dt className="text-muted-foreground">Email verified</dt>
-            <dd>
-              <Badge
-                className={
-                  user.emailVerified
-                    ? "bg-success/15 text-success"
-                    : "bg-warning/15 text-warning"
-                }
-              >
-                {user.emailVerified ? "Verified" : "Not yet"}
-              </Badge>
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-6">
-            <dt className="text-muted-foreground">Signed up to</dt>
-            <dd className="font-medium">
-              {user.intent === "TEACHING" ? "Teach" : "Learn"}
-            </dd>
-          </div>
-        </dl>
-      </Card>
+      <div className="mt-6">
+        <DashboardOverview firstName={firstName} />
+      </div>
     </main>
   )
 }
