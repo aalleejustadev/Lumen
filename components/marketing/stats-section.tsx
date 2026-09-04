@@ -19,7 +19,7 @@ const stats = [
 function StatsSection({ className }: { className?: string }) {
   return (
     <section className={cn("w-full", className)}>
-      <div className="mx-auto w-full max-w-[1200px] px-6 py-12">
+      <div className="mx-auto w-full max-w-[1200px] px-6 py-7 md:py-12">
         <Card className="grid grid-cols-2 gap-px bg-border py-0 ring-border md:grid-cols-4">
           {stats.map((stat) => (
             <div

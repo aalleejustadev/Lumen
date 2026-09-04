@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 function QuestionsSection({ className }: { className?: string }) {
   return (
     <section className={cn("w-full", className)}>
-      <div className="mx-auto w-full max-w-[1200px] px-6 py-20">
+      <div className="mx-auto w-full max-w-[1200px] px-6 py-12 md:py-20">
         {/* 28px in the export — smaller than the other section headings */}
         <h2 className="text-center text-[28px] leading-[1.2]">
           Common questions

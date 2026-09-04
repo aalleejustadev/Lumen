@@ -404,6 +404,28 @@
     animation: popin 0.14s ease-out;
   }
 
+  /* Horizontal rail — a row that scrolls sideways instead of wrapping (the
+     catalog filters). The bar is a hairline in the theme's track colour so an
+     overflowing row still reads as part of the design; macOS overlay
+     scrollbars keep hiding it until you scroll, which is the intent. */
+  .scroll-rail {
+    scrollbar-width: thin;
+    scrollbar-color: var(--track) transparent;
+  }
+  .scroll-rail::-webkit-scrollbar {
+    height: 6px;
+  }
+  .scroll-rail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-rail::-webkit-scrollbar-thumb {
+    background: var(--track);
+    border-radius: var(--radius-pill);
+  }
+  .scroll-rail::-webkit-scrollbar-thumb:hover {
+    background: var(--subtle-foreground);
+  }
+
   /* Decorative: hero grid, dot texture, ambient orb, fading rule */
   .bg-hero-grid {
     background-image:

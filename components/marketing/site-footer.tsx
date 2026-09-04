@@ -13,7 +13,7 @@ function SiteFooter({ className }: { className?: string }) {
   return (
     <footer className={cn("w-full border-t bg-background", className)}>
       <div className="mx-auto w-full max-w-[1200px] px-6">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-10 pt-13 pb-7 md:grid-cols-[1.6fr_1fr_1fr_1fr] md:gap-y-8">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 pt-8 pb-4 md:grid-cols-[1.6fr_1fr_1fr_1fr] md:gap-y-8 md:pt-13 md:pb-7">
           <div className="col-span-2 flex flex-col gap-4 md:col-span-1">
             <Link
               href="/"

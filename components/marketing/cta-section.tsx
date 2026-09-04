@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 function CtaSection({ className }: { className?: string }) {
   return (
     <section className={cn("w-full", className)}>
-      <div className="mx-auto w-full max-w-[1200px] px-6 py-20">
+      <div className="mx-auto w-full max-w-[1200px] px-6 py-12 md:py-20">
         <div className="relative isolate overflow-hidden rounded-2xl bg-[image:var(--gradient-cta)] px-6 pt-14 pb-12 text-center lg:pt-20 lg:pb-[60px]">
           {/* soft highlight over the violet end, and the dot texture */}
           <div

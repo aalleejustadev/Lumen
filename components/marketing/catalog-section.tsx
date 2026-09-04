@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 function CatalogSection({ className }: { className?: string }) {
   return (
     <section className={cn("w-full", className)}>
-      <div className="mx-auto w-full max-w-[1200px] px-6 py-20">
+      <div className="mx-auto w-full max-w-[1200px] px-6 py-12 md:py-20">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <p className="text-xs font-semibold tracking-[0.14em] text-subtle-foreground uppercase">

@@ -69,8 +69,9 @@ the app shell isn't inheriting marketing chrome.
 ## Design references
 
 The measured baseline: 1152px content box (`max-w-[1200px] px-6`), 70px header,
-40px controls. **Sections use `py-20`** — not `py-24`; keep new sections on that
-value so the page rhythm stays even.
+40px controls. **Sections use `py-12 md:py-20`** — the 80px export value from
+`md` up, cut 40% below it so phones don't scroll through empty gutters. Not
+`py-24`; keep new sections on those two values so the page rhythm stays even.
 
 Headings run heavier than the old design-system note claimed. Measured stem
 widths off the exports: `h1`/`h2` are **800** (the base rule in `globals.css`

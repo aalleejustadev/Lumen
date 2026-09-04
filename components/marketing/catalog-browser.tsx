@@ -78,34 +78,40 @@ function CatalogBrowser() {
 
   return (
     <>
-      {/* Base UI toggle groups are single-select by default and take arrays. */}
-      <ToggleGroup
-        spacing={2.5}
-        value={[active]}
-        onValueChange={(value: string[]) => setActive(value[0] ?? "All")}
-        aria-label="Filter courses by category"
-        className="mt-8 flex-wrap"
-      >
-        {catalogCategories.map((category) => (
-          <ToggleGroupItem
-            key={category}
-            value={category}
-            size="lg"
-            className="cursor-pointer rounded-full border bg-card px-3.5 hover:bg-hover aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-          >
-            {category}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+      {/* One row, always: what doesn't fit runs off the edge and is reached by
+          scrolling. The rail bleeds to the screen edge below md so the cut lands
+          there rather than in the container's gutter, and `pt-1` keeps the
+          focus ring out of the overflow clip. */}
+      <div className="scroll-rail -mx-6 mt-7 overflow-x-auto px-6 pt-1 pb-2.5 md:mx-0 md:px-0">
+        {/* Base UI toggle groups are single-select by default and take arrays. */}
+        <ToggleGroup
+          spacing={2.5}
+          value={[active]}
+          onValueChange={(value: string[]) => setActive(value[0] ?? "All")}
+          aria-label="Filter courses by category"
+          className="w-max flex-nowrap"
+        >
+          {catalogCategories.map((category) => (
+            <ToggleGroupItem
+              key={category}
+              value={category}
+              size="lg"
+              className="shrink-0 cursor-pointer rounded-full border bg-card px-3.5 hover:bg-hover aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+            >
+              {category}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
 
       {visible.length > 0 ? (
-        <div className="mt-6.5 grid gap-5.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid gap-5.5 sm:grid-cols-2 lg:grid-cols-4">
           {visible.map((course) => (
             <CourseCard key={course.slug} course={course} />
           ))}
         </div>
       ) : (
-        <Empty className="mt-6.5 border">
+        <Empty className="mt-6 border">
           <EmptyHeader>
             <EmptyTitle>Nothing here yet</EmptyTitle>
             <EmptyDescription>

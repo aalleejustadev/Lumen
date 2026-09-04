@@ -21,7 +21,7 @@ function PricingSection({ className }: { className?: string }) {
 
   return (
     <section className={cn("w-full", className)}>
-      <div className="mx-auto w-full max-w-[1200px] px-6 py-20">
+      <div className="mx-auto w-full max-w-[1200px] px-6 py-12 md:py-20">
         <h2 className="text-center text-4xl leading-[1.1] lg:text-[44px]">
           Pay per course, or unlock everything.
         </h2>
