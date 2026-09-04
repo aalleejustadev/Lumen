@@ -74,6 +74,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   is the health check.
 - `components/shared/user-menu.tsx` — the signed-in avatar + account menu, used
   by the marketing header and the dashboard bar.
+- `components/dashboard/` — the app shell. `dashboard-sidebar.tsx` is the 244px
+  panel from the export, on shadcn's `Sidebar` so the mobile drawer and the
+  toggle shortcut come for free; `sidebar-user.tsx` is its footer row and
+  account menu. Nav lives in `lib/config/dashboard.ts`.
 - `components/auth/` — the sign-in, sign-up and reset-password screens.
   `reset-password-form.tsx` is one route with four states (request → sent,
   plus set-new-password and expired-link, both driven by the query string
@@ -119,6 +123,12 @@ add `font-semibold` to a card title, it makes them too light. Big display
 headings inside cards take `font-extrabold` explicitly. Radii derive from `--radius` (10px): `rounded-lg` for
 controls, `rounded-xl` for cards. The designs were authored a step rounder;
 the scale was pulled in on purpose, so don't "correct" it back.
+
+`body` sets `text-wrap: pretty`, which rebalances short last lines. Three of
+the exports wrap greedily instead (the auth showcase heading, the reset-password
+lead, the sidebar's upgrade card), so those opt out with `[text-wrap:wrap]`.
+If a line break doesn't match an export and the font size checks out, this is
+usually why.
 
 The auth screens are a 50/50 split at `lg`: a 410px form column centred in the
 left half, 46px controls (`h-11.5`) on white `bg-card`, a 48px-tall primary
