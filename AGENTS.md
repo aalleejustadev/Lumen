@@ -74,7 +74,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   is the health check.
 - `components/shared/user-menu.tsx` — the signed-in avatar + account menu, used
   by the marketing header and the dashboard bar.
-- `components/auth/` — the sign-in and sign-up screens. `auth-showcase.tsx` is
+- `components/auth/` — the sign-in, sign-up and reset-password screens.
+  `reset-password-form.tsx` is one route with four states (request → sent,
+  plus set-new-password and expired-link, both driven by the query string
+  Better Auth redirects back with). `auth-showcase.tsx` is
   the gradient half (shared by both, hidden below `lg`); the forms are the only
   client components that call `authClient`.
 - `hooks/` — shared React hooks.
@@ -119,7 +122,8 @@ the scale was pulled in on purpose, so don't "correct" it back.
 
 The auth screens are a 50/50 split at `lg`: a 410px form column centred in the
 left half, 46px controls (`h-11.5`) on white `bg-card`, a 48px-tall primary
-button, and a 440px showcase column inset 48px into the gradient panel. The
+button, a 32px `h1` over a **15px** lead (not `text-base` — measured off the
+exports at 243px for the sign-in line), and a 440px showcase column inset 48px into the gradient panel. The
 gradient is `--gradient-auth` — the CTA stops on the diagonal, theme-independent
 like `--gradient-cta`. The showcase heading opts out of the global
 `text-wrap: pretty`, which would otherwise rebalance the line break away from
