@@ -19,7 +19,7 @@ training data.
 | Area | Skill |
 | --- | --- |
 | shadcn/ui components, registries, `components.json`, theming | `shadcn` |
-| Prisma / Prisma Postgres schema, migrations, client, adapters | `prisma-*` |
+| Prisma schema, migrations, client, adapters | `prisma-database-setup`, `prisma-cli`, `prisma-client-api`, `prisma-driver-adapter-implementation` |
 | Better Auth setup, sessions, email+password, 2FA, organizations | `better-auth-*`, `create-auth` |
 | Neon Postgres, branches, object storage, functions, AI gateway | `neon-*` |
 
@@ -36,6 +36,12 @@ npm run start      # serve the production build
 npm run lint       # eslint (flat config, eslint-config-next)
 npm run typecheck  # tsc --noEmit
 npm run format     # prettier --write "**/*.{ts,tsx}"
+
+npm run db:generate # prisma generate (also runs on postinstall)
+npm run db:migrate  # prisma migrate dev — author + apply a migration
+npm run db:deploy   # prisma migrate deploy — apply pending migrations (CI/prod)
+npm run db:push     # prisma db push — sync schema without a migration file
+npm run db:studio   # prisma studio
 ```
 
 There is no test setup. Verify changes with `npm run typecheck` and `npm run lint`.
@@ -52,7 +58,19 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
 - `lib/config/catalog.ts` — catalog categories and demo courses. Course card art is a per-category gradient + icon on purpose: real images will arrive through an instructor image-upload feature, **not** a stock-photo integration, so don't wire Unsplash into these cards.
 - `lib/config/site.ts` — brand strings and navigation config. Nav lives here, not inline in components, so desktop and mobile nav can't drift.
 - `lib/utils.ts` — `cn()` class merger (clsx + tailwind-merge).
+- `lib/db.ts` — the Prisma client singleton. Server-side only; importing it from
+  a Client Component pulls the Postgres driver into the browser bundle.
+- `lib/generated/prisma/` — Prisma Client output. Generated, git-ignored, and
+  ESLint-ignored; never edit it, re-run `npm run db:generate` instead.
+- `prisma/schema.prisma` — models. `prisma/migrations/` appears with the first
+  `npm run db:migrate`.
 - `hooks/` — shared React hooks.
+- `prisma7.config.ts` — Prisma 7 CLI config. Prisma 7 keeps the connection URL
+  here rather than in `schema.prisma`, and it is deliberately pointed at
+  `DIRECT_URL`: migrations, introspection and Studio need session state that
+  Neon's pooled (PgBouncer) endpoint does not carry. The app itself queries over
+  the pooled `DATABASE_URL` through the driver adapter in `lib/db.ts`. There is
+  no `directUrl` field in v7 — this split *is* the mechanism.
 
 Components are named for their surface (`site-header`, `dashboard-sidebar`), and the file name matches the exported component.
 

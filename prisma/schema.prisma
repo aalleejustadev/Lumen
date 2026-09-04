@@ -1,0 +1,30 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+// Prisma 7 reads the connection URL from prisma7.config.ts, not from here —
+// the CLI gets Neon's direct endpoint, the app gets the pooled one.
+datasource db {
+  provider = "postgresql"
+}
+
+/// Placeholder so the first migration has something to create. Swap it for the
+/// real models (courses, enrolments, …) as those land.
+model WaitlistSignup {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  interest  Interest @default(LEARNING)
+  createdAt DateTime @default(now())
+
+  @@map("waitlist_signups")
+}
+
+enum Interest {
+  LEARNING
+  TEACHING
+}
