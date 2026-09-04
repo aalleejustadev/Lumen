@@ -64,6 +64,14 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   ESLint-ignored; never edit it, re-run `npm run db:generate` instead.
 - `prisma/schema.prisma` — models. `prisma/migrations/` appears with the first
   `npm run db:migrate`.
+- `lib/auth.ts` — Better Auth server config (Prisma adapter, email+password,
+  Google/GitHub, `admin` plugin). Server-side only.
+- `lib/auth-client.ts` — the browser client (`signIn`, `signUp`, `useSession`,
+  …). Its plugin list must mirror the server's.
+- `lib/email.ts` — Resend wrapper for verification/reset mail. With no
+  `RESEND_API_KEY` it logs the message in dev and throws in production.
+- `app/api/auth/[...all]/route.ts` — every auth endpoint. `GET /api/auth/ok`
+  is the health check.
 - `hooks/` — shared React hooks.
 - `prisma7.config.ts` — Prisma 7 CLI config. Prisma 7 keeps the connection URL
   here rather than in `schema.prisma`, and it is deliberately pointed at
@@ -104,6 +112,29 @@ The hero backdrop is three layers: the 58px `.bg-hero-grid`, three blurred
 `--orb-strong` / `--orb-soft` / `--ambient`, which were re-fitted against the
 alpha profile of the dark export — the shipped values were about 1.9x too
 strong. Re-measure against `ui-design/` before touching them.
+
+## Auth
+
+Better Auth over the Prisma adapter. Constants live in `.env` (and, documented
+but blank, in `.env.example`): `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+`BETTER_AUTH_TRUSTED_ORIGINS`, the Google/GitHub client pairs, `RESEND_API_KEY`
+and `EMAIL_FROM`. A social provider is only registered when both of its keys
+are present, so blank OAuth constants leave the app booting and email sign-in
+working.
+
+**The CLI trails the library.** `@better-auth/cli` is published only up to
+1.4.21 while `better-auth` is on 1.7.x, so
+`npx @better-auth/cli generate --output prisma/schema.prisma` emits a schema
+that is missing newer columns — it omitted `Account.issuer` and the
+`@@unique([issuer, accountId])` index, which fails every sign-up at runtime
+with `Unknown argument 'issuer'`. After running it, diff the result against the
+field list in `node_modules/@better-auth/core/dist/db/get-tables.mjs`, which is
+what the runtime actually writes.
+
+`prisma migrate dev` refuses to run in a non-interactive shell. To author a
+migration from a script: `prisma migrate diff --from-config-datasource
+--to-schema prisma/schema.prisma --script -o prisma/migrations/<ts>_<name>/migration.sql`
+then `prisma migrate deploy`.
 
 ## Conventions
 

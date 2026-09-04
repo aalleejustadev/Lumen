@@ -8,12 +8,14 @@ generator client {
 
 // Prisma 7 reads the connection URL from prisma7.config.ts, not from here —
 // the CLI gets Neon's direct endpoint, the app gets the pooled one.
+
 datasource db {
   provider = "postgresql"
 }
 
 /// Placeholder so the first migration has something to create. Swap it for the
 /// real models (courses, enrolments, …) as those land.
+
 model WaitlistSignup {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -27,4 +29,88 @@ model WaitlistSignup {
 enum Interest {
   LEARNING
   TEACHING
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  role          String?
+  banned        Boolean?  @default(false)
+  banReason     String?
+  banExpires    DateTime?
+  sessions      Session[]
+  accounts      Account[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  // `issuer` is required by better-auth 1.7's account key (issuer + accountId
+  // identify a provider account). @better-auth/cli only publishes up to 1.4.21
+  // and omits it, so this model is maintained against the field list in
+  // @better-auth/core/dist/db/get-tables.mjs — check there after upgrades.
+  issuer                String
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([issuer, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model RateLimit {
+  id          String @id
+  key         String
+  count       Int
+  lastRequest BigInt
+
+  @@unique([key])
+  @@map("rateLimit")
 }
