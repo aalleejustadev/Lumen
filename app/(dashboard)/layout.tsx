@@ -1,21 +1,18 @@
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
-import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { getSession } from "@/lib/auth"
 
 /**
  * Everything under this group requires a session — the guard lives here rather
  * than in each page so a new route can't forget it.
  *
- * `--sidebar-width` is the export's 244px panel; the bar above the content is
- * still thin on purpose, since `dashboard-header.png` (search, cart,
- * notifications) is its own build.
+ * `--sidebar-width` is the export's 244px panel, and `DashboardHeader` is the
+ * bar from `dashboard-header.png`. Both read the session from here rather than
+ * fetching their own.
  */
 export default async function DashboardLayout({
   children,
@@ -26,22 +23,30 @@ export default async function DashboardLayout({
   if (!session) redirect("/login")
 
   const { user } = session
+  // shadcn's provider writes `sidebar_state` on every toggle; reading it here
+  // is what makes the rail survive a reload.
+  const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
 
   return (
     <SidebarProvider
-      style={{ "--sidebar-width": "244px" } as React.CSSProperties}
+      defaultOpen={sidebarOpen}
+      style={
+        {
+          "--sidebar-width": "244px",
+          // The collapsed rail from `sidebar-toggled.png`.
+          "--sidebar-width-icon": "76px",
+        } as React.CSSProperties
+      }
     >
       <DashboardSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
         isAdmin={user.role === "admin"}
       />
       <SidebarInset>
-        <header className="sticky top-0 z-40 flex h-[70px] shrink-0 items-center gap-3 border-b bg-background px-6">
-          <SidebarTrigger className="-ml-1.5 md:hidden" />
-          <div className="ml-auto flex items-center gap-3">
-            <ThemeToggle />
-          </div>
-        </header>
+        <DashboardHeader
+          user={{ name: user.name, email: user.email, image: user.image }}
+          isAdmin={user.role === "admin"}
+        />
         {children}
       </SidebarInset>
     </SidebarProvider>

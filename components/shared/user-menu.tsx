@@ -15,23 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { authClient } from "@/lib/auth-client"
+import { initialsOf, type MenuUser } from "@/lib/user"
 import { cn } from "@/lib/utils"
-
-type MenuUser = {
-  name: string
-  email: string
-  image?: string | null
-}
-
-/**
- * Two letters from the display name, falling back to the address. Only ever
- * seen when the provider gave us no picture, or the picture fails to load.
- */
-function initialsOf(name: string, email: string) {
-  const source = name.trim() || email
-  const parts = source.split(/[\s@._-]+/).filter(Boolean)
-  return (parts[0]?.[0] ?? "?").concat(parts[1]?.[0] ?? "").toUpperCase()
-}
 
 /**
  * The signed-in half of the site header: an avatar that opens the account
@@ -135,4 +120,4 @@ function UserMenu({ user, className }: { user: MenuUser; className?: string }) {
   )
 }
 
-export { UserMenu, initialsOf, type MenuUser }
+export { UserMenu }

@@ -16,7 +16,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Logo } from "@/components/shared/logo"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
-import { initialsOf, type MenuUser } from "@/components/shared/user-menu"
+import { initialsOf, type MenuUser } from "@/lib/user"
 import { authClient } from "@/lib/auth-client"
 import { marketingNav, siteConfig } from "@/lib/config/site"
 import { cn } from "@/lib/utils"

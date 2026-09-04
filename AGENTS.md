@@ -75,9 +75,21 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
 - `components/shared/user-menu.tsx` — the signed-in avatar + account menu, used
   by the marketing header and the dashboard bar.
 - `components/dashboard/` — the app shell. `dashboard-sidebar.tsx` is the 244px
-  panel from the export, on shadcn's `Sidebar` so the mobile drawer and the
-  toggle shortcut come for free; `sidebar-user.tsx` is its footer row and
-  account menu. Nav lives in `lib/config/dashboard.ts`.
+  panel from the export; the header's toggle collapses it to the 76px icon rail
+  in `sidebar-toggled.png` (`collapsible="icon"`, `--sidebar-width-icon`), and
+  the layout reads the `sidebar_state` cookie so that survives a reload. Rows
+  are plain links rather than `SidebarMenuButton`, so the rail's hiding is done
+  with `group-data-[collapsible=icon]:` variants and each row carries its own
+  tooltip. The Student/Instructor switch renders twice — a radiogroup when
+  expanded, and on the rail a single button showing the mode you are *not* in,
+  which switches you when tapped; `dashboard-header.tsx` is the 70px bar above the
+  content; `account-menu.tsx` is the menu both of them hang off (the sidebar's
+  footer row and the header's avatar), so the two can't drift.
+  `dashboard-search.tsx` is the ⌘K palette. Nav lives in
+  `lib/config/dashboard.ts`.
+- `lib/user.ts` — `MenuUser` and `initialsOf`. Deliberately not in a
+  `"use client"` file: Server Components render the chrome, and a client
+  module's functions can't be called from the server.
 - `components/auth/` — the sign-in, sign-up and reset-password screens.
   `reset-password-form.tsx` is one route with four states (request → sent,
   plus set-new-password and expired-link, both driven by the query string
@@ -153,6 +165,11 @@ but blank, in `.env.example`): `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 and `EMAIL_FROM`. A social provider is only registered when both of its keys
 are present, so blank OAuth constants leave the app booting and email sign-in
 working.
+
+The generated `CommandDialog` does not wrap its children in cmdk's `Command`
+root — using `CommandInput` inside it without adding one throws
+`Cannot read properties of undefined (reading 'subscribe')`. See
+`dashboard-search.tsx`.
 
 `getSession()` (in `lib/auth.ts`, wrapped in React `cache`) is how Server
 Components read the session; `authClient.useSession()` is the client

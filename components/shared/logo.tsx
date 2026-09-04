@@ -46,14 +46,22 @@ function LogoMark({ className }: { className?: string }) {
 function Logo({
   className,
   markClassName,
+  labelClassName,
 }: {
   className?: string
   markClassName?: string
+  /** The collapsed sidebar keeps the mark and drops the wordmark. */
+  labelClassName?: string
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <LogoMark className={markClassName} />
-      <span className="text-xl font-extrabold tracking-[-0.03em]">
+      <span
+        className={cn(
+          "text-xl font-extrabold tracking-[-0.03em]",
+          labelClassName
+        )}
+      >
         {siteConfig.name}
       </span>
     </span>
