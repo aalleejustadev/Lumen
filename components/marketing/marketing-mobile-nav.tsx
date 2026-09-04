@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowRightIcon, ArrowUpRightIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ArrowRightIcon, ArrowUpRightIcon, LogOutIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -12,8 +13,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Logo } from "@/components/shared/logo"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
+import { initialsOf, type MenuUser } from "@/components/shared/user-menu"
+import { authClient } from "@/lib/auth-client"
 import { marketingNav, siteConfig } from "@/lib/config/site"
 import { cn } from "@/lib/utils"
 
@@ -53,9 +57,17 @@ function MenuBars({ crossed }: { crossed?: boolean }) {
  * Everything animation-related is a CSS keyframe, so the global
  * prefers-reduced-motion rule already flattens it to an instant open.
  */
-function MarketingMobileNav() {
+function MarketingMobileNav({ user }: { user: MenuUser | null }) {
+  const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const close = () => setOpen(false)
+
+  async function signOut() {
+    close()
+    await authClient.signOut()
+    router.push("/")
+    router.refresh()
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -149,22 +161,67 @@ function MarketingMobileNav() {
             style={{ animationDelay: `${110 + marketingNav.length * 55}ms` }}
             className="flex animate-nav-item flex-col gap-2.5 px-6 pt-2 pb-[max(2rem,env(safe-area-inset-bottom))]"
           >
-            <Button
-              nativeButton={false}
-              className="h-12 gap-2 px-5! font-semibold"
-              render={<Link href="/register" onClick={close} />}
-            >
-              Get started
-              <ArrowRightIcon data-icon="inline-end" />
-            </Button>
-            <Button
-              variant="outline"
-              nativeButton={false}
-              className="h-12 bg-card font-semibold"
-              render={<Link href="/login" onClick={close} />}
-            >
-              Log in
-            </Button>
+            {user ? (
+              <>
+                {/* Identity first — the panel should answer "am I signed in?"
+                    before it offers anywhere to go. */}
+                <div className="mb-1 flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
+                  <Avatar className="size-9">
+                    <AvatarImage
+                      src={user.image ?? undefined}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                    />
+                    <AvatarFallback className="bg-hover text-xs font-semibold text-foreground">
+                      {initialsOf(user.name, user.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm font-bold">
+                      {user.name}
+                    </span>
+                    <span className="truncate text-sm text-muted-foreground">
+                      {user.email}
+                    </span>
+                  </span>
+                </div>
+                <Button
+                  nativeButton={false}
+                  className="h-12 gap-2 px-5! font-semibold"
+                  render={<Link href="/dashboard" onClick={close} />}
+                >
+                  Dashboard
+                  <ArrowRightIcon data-icon="inline-end" />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={signOut}
+                  className="h-12 gap-2 bg-card font-semibold"
+                >
+                  <LogOutIcon />
+                  Log out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  nativeButton={false}
+                  className="h-12 gap-2 px-5! font-semibold"
+                  render={<Link href="/register" onClick={close} />}
+                >
+                  Get started
+                  <ArrowRightIcon data-icon="inline-end" />
+                </Button>
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  className="h-12 bg-card font-semibold"
+                  render={<Link href="/login" onClick={close} />}
+                >
+                  Log in
+                </Button>
+              </>
+            )}
 
             <div className="mt-4 flex items-center justify-between rounded-xl border bg-card px-4 py-3 [@media(max-height:680px)]:mt-2">
               <span className="text-sm text-muted-foreground">Appearance</span>

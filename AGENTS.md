@@ -72,6 +72,11 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `RESEND_API_KEY` it logs the message in dev and throws in production.
 - `app/api/auth/[...all]/route.ts` — every auth endpoint. `GET /api/auth/ok`
   is the health check.
+- `components/shared/user-menu.tsx` — the signed-in avatar + account menu, used
+  by the marketing header and the dashboard bar.
+- `components/auth/` — the sign-in and sign-up screens. `auth-showcase.tsx` is
+  the gradient half (shared by both, hidden below `lg`); the forms are the only
+  client components that call `authClient`.
 - `hooks/` — shared React hooks.
 - `prisma7.config.ts` — Prisma 7 CLI config. Prisma 7 keeps the connection URL
   here rather than in `schema.prisma`, and it is deliberately pointed at
@@ -86,11 +91,16 @@ Import via the `@/*` alias (`@/components/ui/button`, `@/lib/utils`), never rela
 
 ### Route groups
 
-`SiteHeader` currently mounts in the root layout, which is fine while the
-marketing site is the only surface. Once the dashboard or auth screens land,
-split into route groups — `app/(marketing)/layout.tsx`, `app/(auth)/`,
-`app/(dashboard)/` — and move the header into the marketing group's layout so
-the app shell isn't inheriting marketing chrome.
+Split, as of the auth screens: `app/(marketing)/` owns the header and footer in
+its own layout, `app/(auth)/` brings the two-up auth shell, `app/(dashboard)/`
+guards its subtree with a session check in the layout. The root layout is now
+just `<html>`, fonts and `ThemeProvider` — put nothing surface-specific there.
+
+`SiteHeader` awaits `getSession()`, which makes the marketing routes
+dynamically rendered (`ƒ /` in the build output) rather than prerendered. That
+is deliberate: the session cookie cache answers it without a database round
+trip, and a prerendered header that tells a signed-in user to log in is worse
+than losing the static route. Auth screens stay static.
 
 ## Design references
 
@@ -107,6 +117,14 @@ headings inside cards take `font-extrabold` explicitly. Radii derive from `--rad
 controls, `rounded-xl` for cards. The designs were authored a step rounder;
 the scale was pulled in on purpose, so don't "correct" it back.
 
+The auth screens are a 50/50 split at `lg`: a 410px form column centred in the
+left half, 46px controls (`h-11.5`) on white `bg-card`, a 48px-tall primary
+button, and a 440px showcase column inset 48px into the gradient panel. The
+gradient is `--gradient-auth` — the CTA stops on the diagonal, theme-independent
+like `--gradient-cta`. The showcase heading opts out of the global
+`text-wrap: pretty`, which would otherwise rebalance the line break away from
+the export.
+
 The hero backdrop is three layers: the 58px `.bg-hero-grid`, three blurred
 `.orb`s, and a fade to `--background`. Orb opacity comes from
 `--orb-strong` / `--orb-soft` / `--ambient`, which were re-fitted against the
@@ -121,6 +139,11 @@ but blank, in `.env.example`): `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 and `EMAIL_FROM`. A social provider is only registered when both of its keys
 are present, so blank OAuth constants leave the app booting and email sign-in
 working.
+
+`getSession()` (in `lib/auth.ts`, wrapped in React `cache`) is how Server
+Components read the session; `authClient.useSession()` is the client
+equivalent. Signing out is a round trip — show a pending state, don't assume it
+returns instantly.
 
 **The CLI trails the library.** `@better-auth/cli` is published only up to
 1.4.21 while `better-auth` is on 1.7.x, so

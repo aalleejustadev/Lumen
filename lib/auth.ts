@@ -1,3 +1,5 @@
+import { cache } from "react"
+import { headers } from "next/headers"
 import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { nextCookies } from "better-auth/next-js"
@@ -63,8 +65,35 @@ export const auth = betterAuth({
 
   socialProviders,
 
+  user: {
+    additionalFields: {
+      // Which side of the classroom the account signed up for — the "I want
+      // to" choice on the register screen. Free-form on purpose: it is a
+      // preference for shaping onboarding, not an authorisation role (that is
+      // the admin plugin's `role`).
+      intent: {
+        type: "string",
+        required: false,
+        defaultValue: "LEARNING",
+        input: true,
+      },
+    },
+  },
+
+  account: {
+    accountLinking: {
+      // Off by default, which leaves anyone who signed up with a password and
+      // later linked Google/GitHub without the avatar the provider hands us.
+      // Linking copies `name` and `image` across; `email`/`emailVerified` are
+      // never touched, so a link can't rebind the identity.
+      updateUserInfoOnLink: true,
+    },
+  },
+
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    // 30 days, because the sign-in screen promises "Keep me signed in for 30
+    // days" — `rememberMe: false` still downgrades it to a browser session.
+    expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24, // refresh a rolling session once a day
     // Every `getSession()` is otherwise a round trip to Neon; a 5-minute
     // signed cookie cache keeps the common case off the database entirely.
@@ -91,3 +120,15 @@ export const auth = betterAuth({
 
 export type Session = typeof auth.$Infer.Session
 export type SessionUser = Session["user"]
+
+/**
+ * The current session, for Server Components. `cache` dedupes it per request,
+ * so a layout and a page can both ask without a second lookup, and the cookie
+ * cache configured above usually answers it without touching Postgres.
+ *
+ * Reading `headers()` opts the calling route into dynamic rendering — that is
+ * the price of a header that knows who you are without a logged-out flash.
+ */
+export const getSession = cache(async () =>
+  auth.api.getSession({ headers: await headers() })
+)

@@ -48,6 +48,15 @@
   /* CTA panel — stops sampled off the export; identical in both themes,
      so it is deliberately not redefined under .dark */
   --gradient-cta: linear-gradient(97deg, #8467ee 0%, #4f7dee 46%, #60c3eb 100%);
+  /* Auth showcase panel — the same three stops on the diagonal. Sampled off
+     the login export: violet at the top-left corner, the blue midpoint dead
+     centre, cyan at the bottom-right. Also theme-independent. */
+  --gradient-auth: linear-gradient(
+    135deg,
+    #8467ee 0%,
+    #4f7dee 46%,
+    #60c3eb 100%
+  );
 
   /* ---- Semantic ---- */
   --success: #22c55e;

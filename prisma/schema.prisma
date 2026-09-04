@@ -43,6 +43,8 @@ model User {
   banned        Boolean?  @default(false)
   banReason     String?
   banExpires    DateTime?
+  // `user.additionalFields.intent` in lib/auth.ts — LEARNING | TEACHING
+  intent        String?   @default("LEARNING")
   sessions      Session[]
   accounts      Account[]
 

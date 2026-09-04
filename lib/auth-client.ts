@@ -1,5 +1,7 @@
-import { adminClient } from "better-auth/client/plugins"
+import { adminClient, inferAdditionalFields } from "better-auth/client/plugins"
 import { createAuthClient } from "better-auth/react"
+
+import type { auth } from "@/lib/auth"
 
 /**
  * Better Auth, browser side. No `baseURL` on purpose: the client defaults to
@@ -9,9 +11,14 @@ import { createAuthClient } from "better-auth/react"
  *
  * The plugin list mirrors the server's — `adminClient()` is the counterpart of
  * `admin()` in `lib/auth.ts`, and the two must stay in step.
+ *
+ * `inferAdditionalFields<typeof auth>()` teaches the client about the extra
+ * user fields declared on the server (today: `intent`), so `signUp.email()`
+ * accepts them and `session.user` carries them. The import is `import type`,
+ * so nothing from the server config reaches the browser bundle.
  */
 export const authClient = createAuthClient({
-  plugins: [adminClient()],
+  plugins: [inferAdditionalFields<typeof auth>(), adminClient()],
 })
 
 export const { signIn, signUp, signOut, useSession, getSession } = authClient
