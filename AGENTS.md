@@ -131,6 +131,21 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `learning-path-card.tsx`'s two rows are each their own bordered box
   (`rounded-xl border p-5`, no `bg-soft` tint — the export's interior reads as
   plain white, same as the parent card).
+- `components/dashboard/courses/` — the student catalog at
+  `/dashboard/courses`, from `browse-courses-page.png`: `course-card.tsx` is
+  the card, `browse-courses.tsx` is the header/search, category toggle,
+  price/level/rating/sort filters, grid and pagination, all client-side over
+  `lib/config/browse-courses.ts`. `Course` now exists in
+  `prisma/schema.prisma` (with `CourseCategory`/`CourseLevel` enums and a
+  nullable `instructorId` onto `User`) so the shape is ready, but there's no
+  instructor-authoring flow yet to populate it — same "swap the config file
+  once real queries exist" arrangement as the Overview page. Card art is the
+  per-category gradient + icon from `catalog-browser.tsx`, not the export's
+  photos — see `lumen-course-card-art`. The default "Most Popular" sort is a
+  plain `reviews` descending sort, not a stored order, and happens to
+  reproduce the export's page-1 course order exactly (the seed data's highest
+  review counts are the same 8 courses in the same order) — don't reorder
+  `courseSeeds` without re-checking that.
 - `lib/user.ts` — `MenuUser` and `initialsOf`. Deliberately not in a
   `"use client"` file: Server Components render the chrome, and a client
   module's functions can't be called from the server.

@@ -47,9 +47,61 @@ model User {
   intent        String?   @default("LEARNING")
   sessions      Session[]
   accounts      Account[]
+  // Populated once a TEACHING user actually publishes something — nullable
+  // both ways round, since neither direction exists yet.
+  coursesTaught Course[]
 
   @@unique([email])
   @@map("user")
+}
+
+/// Browse Courses catalog (`/dashboard/courses`). The page itself still reads
+/// `lib/config/browse-courses.ts` — there's no instructor-authoring flow yet
+/// to populate this for real — but the table is shaped for what that flow
+/// will need, so the page can swap its data source later without a schema
+/// change. `instructorName` stands in for a display name until courses are
+/// actually authored by a `User` (`instructorId` is nullable for exactly that
+/// reason); `priceCents`/`listPriceCents` avoid float rounding on money.
+model Course {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  title          String
+  instructorName String
+  instructorId   String?
+  instructor     User?          @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  category       CourseCategory
+  level          CourseLevel
+  durationHours  Int
+  rating         Float          @default(0)
+  reviewsCount   Int            @default(0)
+  priceCents     Int
+  listPriceCents Int
+  /// Instructor-uploaded art, once that feature exists. Null renders the
+  /// per-category gradient + icon placeholder — see `lumen-course-card-art`.
+  thumbnailUrl   String?
+  published      Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([category])
+  @@index([instructorId])
+  @@map("course")
+}
+
+enum CourseCategory {
+  WEB_DEV
+  DESIGN
+  DATA_AI
+  BUSINESS
+  MARKETING
+  FINANCE
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL_LEVELS
 }
 
 model Session {
