@@ -31,6 +31,13 @@ export type CourseLesson = {
   questions?: number
   /** The blue "Preview" link — free to watch without buying. */
   preview?: boolean
+  /** Runtime of the free preview *clip*, in seconds, shown on the preview
+   *  player's scrubber as M:SS (`course-preview-dialog.tsx`). Only meaningful
+   *  alongside `preview`, and shorter than `minutes` because the clip is an
+   *  excerpt — which is why the syllabus and the player quote different
+   *  numbers for the same lesson, exactly as the two exports do. Without it
+   *  the player falls back to formatting `minutes`. */
+  previewSeconds?: number
 }
 
 export type CourseSection = {
@@ -166,12 +173,19 @@ const flagshipDetails: Record<string, DetailExtras> = {
         lessonsLabel: "4 lessons",
         durationLabel: "1h 20m",
         lessons: [
-          { title: "Introduction", type: "video", minutes: 20, preview: true },
+          {
+            title: "Introduction",
+            type: "video",
+            minutes: 20,
+            preview: true,
+            previewSeconds: 252,
+          },
           {
             title: "Setting up your workspace",
             type: "video",
             minutes: 18,
             preview: true,
+            previewSeconds: 400,
           },
           { title: "Mastering Tools", type: "practice", minutes: 32 },
           { title: "Quiz · Tools & Workflow", type: "quiz", questions: 5 },

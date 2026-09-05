@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { CoursePreviewDialog } from "@/components/dashboard/courses/sale/course-preview-dialog"
 import type { CourseDetail } from "@/lib/config/course-details"
 import { cn } from "@/lib/utils"
 
@@ -51,6 +52,12 @@ function CoursePurchaseCard({ course }: { course: CourseDetail }) {
       : null,
   ].filter((item) => item !== null)
 
+  // `CoursePreviewDialog` is a Client Component and `course.icon` is a
+  // `LucideIcon` component reference, which can't cross that boundary as a
+  // prop — so it's stripped off before the course goes down (see the dialog's
+  // own note).
+  const { icon: CourseIcon, ...previewCourse } = course
+
   return (
     <Card className="gap-0 overflow-hidden p-0 ring-border lg:sticky lg:top-[86px] lg:self-start">
       <div
@@ -59,15 +66,17 @@ function CoursePurchaseCard({ course }: { course: CourseDetail }) {
           course.art
         )}
       >
-        <course.icon className="absolute inset-0 m-auto size-16 text-white/15" />
+        <CourseIcon className="absolute inset-0 m-auto size-16 text-white/15" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-        <button
-          type="button"
-          className="absolute bottom-4 left-4 flex cursor-pointer items-center gap-2 text-sm font-semibold text-white"
-        >
-          <PlayIcon className="size-4 fill-white" />
-          Preview this course
-        </button>
+        <CoursePreviewDialog course={previewCourse}>
+          <button
+            type="button"
+            className="absolute bottom-4 left-4 flex cursor-pointer items-center gap-2 text-sm font-semibold text-white"
+          >
+            <PlayIcon className="size-4 fill-white" />
+            Preview this course
+          </button>
+        </CoursePreviewDialog>
       </div>
 
       <div className="p-6.5">

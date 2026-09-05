@@ -7,6 +7,7 @@ import {
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { CoursePreviewDialog } from "@/components/dashboard/courses/sale/course-preview-dialog"
 import type { CourseDetail } from "@/lib/config/course-details"
 import { cn } from "@/lib/utils"
 
@@ -17,6 +18,12 @@ import { cn } from "@/lib/utils"
  * scrim behind the text block so it stays legible over any category color.
  */
 function CourseHero({ course }: { course: CourseDetail }) {
+  // `CoursePreviewDialog` is a Client Component and `course.icon` is a
+  // `LucideIcon` component reference, which can't cross that boundary as a
+  // prop — so it's stripped off before the course goes down (see the dialog's
+  // own note).
+  const { icon: CourseIcon, ...previewCourse } = course
+
   return (
     <div
       className={cn(
@@ -24,18 +31,25 @@ function CourseHero({ course }: { course: CourseDetail }) {
         course.art
       )}
     >
-      <course.icon className="absolute inset-0 m-auto size-32 text-white/10" />
+      <CourseIcon className="absolute inset-0 m-auto size-32 text-white/10" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
 
-      <button
-        type="button"
-        className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-foreground shadow-pop transition-colors hover:bg-white/90"
-      >
-        <PlayIcon className="size-4 fill-foreground" />
-        Preview this course
-      </button>
+      <CoursePreviewDialog course={previewCourse}>
+        <button
+          type="button"
+          className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-foreground shadow-pop transition-colors hover:bg-white/90"
+        >
+          <PlayIcon className="size-4 fill-foreground" />
+          Preview this course
+        </button>
+      </CoursePreviewDialog>
 
-      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 p-8">
+      {/* `pointer-events-none` — nothing in here is interactive, but as the
+          last sibling in this `relative` stack it would otherwise paint (and
+          hit-test) on top of "Preview this course" above, since its `h1`/`p`
+          are full-width block elements whose empty space still intercepts
+          clicks meant for the button behind them. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-3 p-8">
         <Badge className="h-6 w-fit bg-black/55 px-3 text-xs font-medium text-white backdrop-blur-sm">
           {course.category}
         </Badge>
