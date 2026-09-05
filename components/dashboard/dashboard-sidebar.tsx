@@ -12,6 +12,14 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -103,7 +111,16 @@ function NavRow({ item, active }: { item: DashboardNavItem; active: boolean }) {
   )
 }
 
-/** Settings is the one row with children, hence the chevron in the export. */
+/**
+ * Settings is the one row with children, hence the chevron in the export.
+ * Expanded, that's a normal inline `Collapsible`. On the rail there's no room
+ * to expand inline, so the same row instead opens its sub-items as a flyout
+ * menu to the right — and still carries a tooltip, like every other rail
+ * icon. (`RowTooltip` can't be reused as-is here: it hands its child straight
+ * to `TooltipTrigger`'s `render`, which needs a single Base UI–composable
+ * element, and a `DropdownMenuTrigger` has to be *that* element too — so the
+ * two are nested by hand instead of stacking two independent wrappers.)
+ */
 function NavRowWithChildren({
   item,
   pathname,
@@ -111,8 +128,62 @@ function NavRowWithChildren({
   item: DashboardNavItem
   pathname: string
 }) {
+  const { state, isMobile } = useSidebar()
   const childActive = item.items?.some((child) => pathname === child.href)
+  const active = pathname === item.href || childActive
   const [open, setOpen] = React.useState(Boolean(childActive))
+
+  if (state === "collapsed" && !isMobile) {
+    return (
+      <Tooltip>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className={cn(
+                      rowClass,
+                      "cursor-pointer",
+                      active
+                        ? "bg-card font-medium text-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-hover hover:text-foreground"
+                    )}
+                  />
+                }
+              />
+            }
+          >
+            <item.icon className="size-4.5 shrink-0" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="right"
+            align="start"
+            sideOffset={12}
+            className="w-48"
+          >
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{item.title}</DropdownMenuLabel>
+              {item.items?.map((child) => (
+                <DropdownMenuItem
+                  key={child.href}
+                  render={<Link href={child.href} />}
+                  data-active={pathname === child.href}
+                  className="cursor-pointer data-[active=true]:bg-hover data-[active=true]:font-medium data-[active=true]:text-foreground"
+                >
+                  {child.title}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <TooltipContent side="right" sideOffset={8}>
+          {item.title}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -120,7 +191,7 @@ function NavRowWithChildren({
         className={cn(
           rowClass,
           "cursor-pointer",
-          pathname === item.href || childActive
+          active
             ? "bg-card font-medium text-foreground shadow-sm"
             : "text-muted-foreground hover:bg-hover hover:text-foreground"
         )}
@@ -262,9 +333,16 @@ function DashboardSidebar({
           <WorkspaceSwitch />
         </SidebarHeader>
 
-        {/* The promo card lives inside the scroll area, pushed down by
-          `mt-auto`: pinned to the footer it looked identical on a tall screen
-          but ate the drawer on a phone, leaving Help Center unreachable. */}
+        {/* The promo card lives inside the scroll area rather than a fixed
+          footer — pinned to the footer it looked identical on a tall screen
+          but ate the drawer on a phone, leaving Help Center unreachable.
+          `sticky bottom-0` gets the "always visible" the fixed footer would
+          have given for free, without that cost: `mt-auto` still sends it to
+          the bottom of the list when everything fits, and once the list
+          itself needs to scroll, sticky keeps the card glued to the visible
+          bottom edge instead of scrolling out of view with the rows above
+          it. The wrapper needs its own opaque `bg-sidebar` so scrolled rows
+          don't show through underneath it while it's stuck. */}
         <SidebarContent className="gap-0 px-3 pt-8 group-data-[collapsible=icon]:px-0">
           {dashboardNav.map((group) => (
             <div key={group.title} className="not-first:mt-4.5">
@@ -290,7 +368,7 @@ function DashboardSidebar({
               </div>
             </div>
           ))}
-          <div className="mt-auto pt-8 group-data-[collapsible=icon]:hidden">
+          <div className="sticky bottom-0 mt-auto bg-sidebar pt-8 pb-1 group-data-[collapsible=icon]:hidden">
             <UpgradeCard />
           </div>
         </SidebarContent>

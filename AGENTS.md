@@ -87,7 +87,23 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   content; `account-menu.tsx` is the menu both of them hang off (the sidebar's
   footer row and the header's avatar), so the two can't drift.
   `dashboard-search.tsx` is the ⌘K palette. Nav lives in
-  `lib/config/dashboard.ts`.
+  `lib/config/dashboard.ts`. Settings is the one row with children: expanded
+  it's an inline `Collapsible`; on the rail there's no room for that, so
+  `NavRowWithChildren` switches (via `useSidebar()`'s `state`) to a
+  `DropdownMenu` flyout that *also* carries the row's tooltip — the two are
+  nested by hand (`DropdownMenuTrigger render={<TooltipTrigger render={<button/>}/>}`)
+  rather than composed through the generic `RowTooltip` helper, which only
+  accepts a single Base UI–composable child and can't take a whole
+  `<DropdownMenu>` tree. A `DropdownMenuLabel` throws
+  (`MenuGroupContext is missing`) unless it's inside a `DropdownMenuGroup`,
+  even a single-item one. The `UpgradeCard` above the footer is
+  `sticky bottom-0` (with its own `bg-sidebar`, so scrolled rows don't show
+  through) rather than a fixed footer — `position: sticky` keeps it pinned to
+  the visible bottom edge of `SidebarContent`'s own scroll even when the nav
+  list is taller than the sidebar and even at initial scroll position, without
+  taking the fixed vertical space a true footer would — the earlier fix for
+  the mobile drawer (a fixed footer there squeezed the nav list short enough
+  to make Help Center hard to reach) still holds.
 - `components/dashboard/overview/` — the student Overview page's bento grid,
   from `ui-design/light/dashboard/student/student-dashboard.png` — one file per
   card (`welcome-card.tsx`, `learning-path-card.tsx`, `overall-progress-card.tsx`,
