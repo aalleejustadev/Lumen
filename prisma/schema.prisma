@@ -32,23 +32,25 @@ enum Interest {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  role          String?
-  banned        Boolean?  @default(false)
-  banReason     String?
-  banExpires    DateTime?
+  id                String         @id
+  name              String
+  email             String
+  emailVerified     Boolean        @default(false)
+  image             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  role              String?
+  banned            Boolean?       @default(false)
+  banReason         String?
+  banExpires        DateTime?
   // `user.additionalFields.intent` in lib/auth.ts — LEARNING | TEACHING
-  intent        String?   @default("LEARNING")
-  sessions      Session[]
-  accounts      Account[]
+  intent            String?        @default("LEARNING")
+  sessions          Session[]
+  accounts          Account[]
   // Populated once this user actually starts teaching — see `Instructor`.
   instructorProfile Instructor?
+  cartItems         CartItem[]
+  wishlistItems     WishlistItem[]
 
   @@unique([email])
   @@map("user")
@@ -182,6 +184,11 @@ model CourseLesson {
   questionsCount  Int?
   /// The blue "Preview" link — free to watch without buying the course.
   isPreview       Boolean       @default(false)
+  /// Runtime of the free preview *clip*, shown on the preview player's
+  /// scrubber (`course-preview-dialog.tsx`). Shorter than `durationMinutes`
+  /// because the clip is an excerpt, so the syllabus and the player quote
+  /// different numbers for the same lesson.
+  previewSeconds  Int?
   order           Int
 
   @@index([sectionId])
@@ -274,4 +281,43 @@ model RateLimit {
 
   @@unique([key])
   @@map("rateLimit")
+}
+
+/// A course sitting in a student's cart (`/dashboard/cart`).
+///
+/// `courseSlug` is a plain string rather than a relation to `Course` on
+/// purpose: the catalog still lives in `lib/config/browse-courses.ts` and the
+/// `course` table has no rows yet, so a foreign key would make it impossible
+/// to add anything to a cart today. The slug is the identifier every course
+/// route already keys on, so it stays stable through that switch — turn this
+/// into `courseId` + a relation once an instructor-authoring flow populates
+/// `Course` for real.
+///
+/// No quantity column: a course is bought once, so the row's existence *is*
+/// the quantity, which is also what `@@unique([userId, courseSlug])` enforces
+/// — adding the same course twice updates nothing instead of duplicating.
+model CartItem {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseSlug String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, courseSlug])
+  @@index([userId])
+  @@map("cart_item")
+}
+
+/// A course a student saved for later from the sale page's "Wishlist" button.
+/// Same `courseSlug`-not-a-relation reasoning as `CartItem` above.
+model WishlistItem {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseSlug String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, courseSlug])
+  @@index([userId])
+  @@map("wishlist_item")
 }

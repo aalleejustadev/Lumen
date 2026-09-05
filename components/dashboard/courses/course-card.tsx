@@ -1,9 +1,9 @@
 import Link from "next/link"
-import { ShoppingCartIcon, StarIcon } from "lucide-react"
+import { StarIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { AddToCartButton } from "@/components/dashboard/courses/add-to-cart-button"
 import type { BrowseCourse } from "@/lib/config/browse-courses"
 
 /**
@@ -69,10 +69,7 @@ function CourseCard({ course }: { course: BrowseCourse }) {
             ${course.listPrice.toFixed(2)}
           </span>
         </p>
-        <Button size="sm" className="h-9 gap-1.5 px-3.5! font-semibold">
-          <ShoppingCartIcon data-icon="inline-start" className="size-4" />
-          Add
-        </Button>
+        <AddToCartButton slug={course.slug} />
       </div>
     </Card>
   )

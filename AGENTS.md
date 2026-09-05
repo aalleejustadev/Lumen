@@ -236,6 +236,26 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   was an invisible dark-on-dark blob in dark mode. Fixed in both files with
   `!` (`bg-primary!` etc.), the one case in the app where that's necessary
   rather than just tidier.
+- `components/dashboard/cart/` — `/dashboard/cart`, from `cart-page.png`:
+  `cart-item-card.tsx` (a row), `remove-from-cart-button.tsx` (client),
+  `order-summary-card.tsx`, composed by `cart-page.tsx`. Measured off that
+  export at DPR 2: a 920px column centred in the page, split `[1fr_346px]`
+  with a 22px gap. **This is the first surface that reads real rows** —
+  `cart_item` / `wishlist_item` are written for real; only the course each
+  row points at still resolves through `lib/config/browse-courses.ts`. The
+  export shows Discount `$0.00`: that row is an order-level promo discount
+  (there's no promo system yet), *not* the list-vs-sale saving — keep
+  `total = subtotal - discount` or the three numbers stop adding up. The
+  export only draws a filled cart; empty falls back to the `Empty` component.
+- `lib/cart.ts` — cart/wishlist reads (`getCart`, `isWishlisted`). Pulls in
+  `lib/db`, so the same "never from a Client Component" rule applies.
+  `lib/actions/cart.ts` and `lib/actions/wishlist.ts` are the `"use server"`
+  writes: each re-checks the session and re-resolves the course from the
+  catalog rather than trusting a slug or title from the client, and returns
+  `{ ok, message }` for the caller to toast instead of throwing.
+  `cart_item.courseSlug` is a plain string, not a `Course` relation — the
+  `course` table has no rows yet, so a foreign key would make it impossible
+  to add anything to a cart; see the model's own note.
 - `lib/user.ts` — `MenuUser` and `initialsOf`. Deliberately not in a
   `"use client"` file: Server Components render the chrome, and a client
   module's functions can't be called from the server.
@@ -345,6 +365,7 @@ then `prisma migrate deploy`.
 - Style with Tailwind utility classes composed through `cn()`. Use the CSS variable tokens defined in `app/globals.css` (`bg-background`, `text-muted-foreground`, …) instead of raw color values, so light/dark both work.
 - Variants come from `class-variance-authority`; icons from `lucide-react`.
 - Theming is `next-themes` with `attribute="class"`; pressing `d` toggles dark mode (see `components/theme-provider.tsx`).
+- Toasts are **Base UI's `toast`, not sonner** — sonner is for Radix/React-Aria projects and this one is `base` (the shadcn skill enforces this). Import `toast` from `@/components/ui/toast` and call `toast.add({ title, type })`. `<Toaster />` is mounted once in the root layout, beside `children` rather than wrapping them: `toast` is a module-level manager, so callers don't need to be inside the provider.
 - Prettier config is authoritative: no semicolons, double quotes, 2-space indent, 80 columns, `prettier-plugin-tailwindcss` sorts class names. Run `npm run format` after editing.
 
 ## shadcn/ui

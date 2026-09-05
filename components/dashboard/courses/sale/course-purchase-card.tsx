@@ -5,17 +5,18 @@ import {
   ClockIcon,
   DownloadIcon,
   FileQuestionIcon,
-  HeartIcon,
   PlayIcon,
-  Share2Icon,
-  ShoppingCartIcon,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { CoursePreviewDialog } from "@/components/dashboard/courses/sale/course-preview-dialog"
+import {
+  CourseBuyButtons,
+  CourseSaveButtons,
+} from "@/components/dashboard/courses/sale/course-purchase-actions"
+import { isWishlisted } from "@/lib/cart"
 import type { CourseDetail } from "@/lib/config/course-details"
 import { cn } from "@/lib/utils"
 
@@ -26,8 +27,16 @@ import { cn } from "@/lib/utils"
  * required alongside `sticky`: CSS Grid's default `align-items: stretch`
  * otherwise stretches the item to the (taller) left column's height, leaving
  * nothing for it to stick within.
+ *
+ * Async because it reads the viewer's wishlist state for `CourseSaveButtons`.
+ * That's a query inside a component rather than a prop threaded from the
+ * page, which keeps the button's data next to the button — `getSession()` is
+ * React-cached, so it costs one extra row lookup, not another session round
+ * trip.
  */
-function CoursePurchaseCard({ course }: { course: CourseDetail }) {
+async function CoursePurchaseCard({ course }: { course: CourseDetail }) {
+  const wishlisted = await isWishlisted(course.slug)
+
   const includes = [
     {
       icon: PlayIcon,
@@ -100,16 +109,7 @@ function CoursePurchaseCard({ course }: { course: CourseDetail }) {
           </p>
         ) : null}
 
-        <Button className="mt-4.5 h-11 w-full gap-2 text-sm font-semibold shadow-sm">
-          <ShoppingCartIcon data-icon="inline-start" />
-          Add to cart
-        </Button>
-        <Button
-          variant="outline"
-          className="mt-2.5 h-11 w-full bg-card text-sm font-semibold shadow-sm"
-        >
-          Buy now
-        </Button>
+        <CourseBuyButtons slug={course.slug} />
         <p className="mt-3 text-center text-[13px] text-muted-foreground">
           30-day money-back guarantee
         </p>
@@ -131,22 +131,7 @@ function CoursePurchaseCard({ course }: { course: CourseDetail }) {
 
         <Separator className="my-5" />
 
-        <div className="flex gap-2.5">
-          <Button
-            variant="outline"
-            className="h-10 flex-1 gap-1.5 bg-card shadow-sm"
-          >
-            <HeartIcon data-icon="inline-start" className="size-4" />
-            Wishlist
-          </Button>
-          <Button
-            variant="outline"
-            className="h-10 flex-1 gap-1.5 bg-card shadow-sm"
-          >
-            <Share2Icon data-icon="inline-start" className="size-4" />
-            Share
-          </Button>
-        </div>
+        <CourseSaveButtons slug={course.slug} wishlisted={wishlisted} />
       </div>
     </Card>
   )
