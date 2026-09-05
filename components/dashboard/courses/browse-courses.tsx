@@ -286,9 +286,16 @@ function BrowseCourses() {
                   <PaginationItem key={pageNumber}>
                     <PaginationLink
                       isActive={pageNumber === safePage}
+                      // `!` forces these: `isActive` makes `PaginationLink`
+                      // use the "outline" Button variant, whose
+                      // `dark:bg-input/30` — a `:is(.dark *)`-wrapped
+                      // selector — outranks a plain `bg-primary` on
+                      // specificity in dark mode regardless of source
+                      // order, the same trap `size-14` hit on `Avatar` (see
+                      // the note on `instructor-header-card.tsx`).
                       className={cn(
                         pageNumber === safePage
-                          ? "border-transparent bg-primary text-primary-foreground hover:text-white hover:bg-primary/80"
+                          ? "border-transparent! bg-primary! text-primary-foreground! hover:bg-primary/80! hover:text-white!"
                           : "bg-card"
                       )}
                       onClick={(event) => {

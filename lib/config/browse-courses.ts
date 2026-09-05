@@ -266,6 +266,47 @@ const courseSeeds: CourseSeed[] = [
     price: 14.99,
     listPrice: 89.99,
   },
+  // The next three round Simon Simorangkir out to the 6 courses his
+  // instructor profile (`instructor-page__part{1,2}.png`) shows — the first
+  // two match that export's numbers exactly (its own page 1); the third
+  // doesn't appear in the export (only 2 of the 6 sit on its page 2) so it's
+  // invented to fill the count out.
+  {
+    slug: "colour-theory-for-designers",
+    title: "Colour Theory for Designers",
+    instructor: "Simon Simorangkir",
+    category: "Design",
+    level: "Beginner",
+    durationHours: 14,
+    rating: 4.6,
+    reviews: 6210,
+    price: 11.99,
+    listPrice: 64.99,
+  },
+  {
+    slug: "advanced-illustration-techniques",
+    title: "Advanced Illustration Techniques",
+    instructor: "Simon Simorangkir",
+    category: "Design",
+    level: "Advanced",
+    durationHours: 16,
+    rating: 4.8,
+    reviews: 4120,
+    price: 14.99,
+    listPrice: 84.99,
+  },
+  {
+    slug: "icon-design-fundamentals",
+    title: "Icon Design Fundamentals",
+    instructor: "Simon Simorangkir",
+    category: "Design",
+    level: "Beginner",
+    durationHours: 12,
+    rating: 4.7,
+    reviews: 3840,
+    price: 12.99,
+    listPrice: 69.99,
+  },
 ]
 
 export const browseCourses: BrowseCourse[] = courseSeeds.map((seed, index) => ({

@@ -47,41 +47,90 @@ model User {
   intent        String?   @default("LEARNING")
   sessions      Session[]
   accounts      Account[]
-  // Populated once a TEACHING user actually publishes something — nullable
-  // both ways round, since neither direction exists yet.
-  coursesTaught Course[]
+  // Populated once this user actually starts teaching — see `Instructor`.
+  instructorProfile Instructor?
 
   @@unique([email])
   @@map("user")
 }
 
-/// Browse Courses catalog (`/dashboard/courses`). The page itself still reads
-/// `lib/config/browse-courses.ts` — there's no instructor-authoring flow yet
-/// to populate this for real — but the table is shaped for what that flow
-/// will need, so the page can swap its data source later without a schema
-/// change. `instructorName` stands in for a display name until courses are
-/// actually authored by a `User` (`instructorId` is nullable for exactly that
-/// reason); `priceCents`/`listPriceCents` avoid float rounding on money.
+/// A public teaching profile — the bio/stats block on a course sale page
+/// (`your-instructor` section) and the full profile at
+/// `/dashboard/instructors/[slug]`. Split out from `User` because it needs to
+/// exist for instructors that aren't real accounts yet (all of today's dummy
+/// data): `userId` links it to a real account once that person signs up and
+/// is nullable for exactly that reason.
+model Instructor {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  userId        String?  @unique
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name          String
+  title         String
+  /// One-line bio for the course sale page's "Your instructor" card.
+  bio           String
+  /// Longer, multi-paragraph bio for the full profile page's "About" card —
+  /// a separate field rather than reusing `bio` since the two pages show
+  /// different lengths of the same person's story.
+  about         String[]
+  /// Expertise tags on the profile page ("Vector illustration", …).
+  skills        String[]
+  imageUrl      String?
+  teachingSince Int
+  rating        Float    @default(0)
+  reviewsCount  Int      @default(0)
+  studentsCount Int      @default(0)
+  courses       Course[]
+
+  @@map("instructor")
+}
+
+/// Browse Courses catalog (`/dashboard/courses`) and the course sale page
+/// (`/dashboard/courses/[slug]`). Both pages still read
+/// `lib/config/browse-courses.ts` / `lib/config/course-details.ts` — there's
+/// no instructor-authoring flow yet to populate this for real — but the
+/// tables are shaped for what that flow will need, so the pages can swap
+/// their data source later without a schema change. `priceCents`/
+/// `listPriceCents` avoid float rounding on money; `description`,
+/// `requirements` and `learningOutcomes` are Postgres text arrays (one
+/// paragraph/bullet per element) rather than a rich-text blob, since that's
+/// all the sale page renders today.
 model Course {
-  id             String         @id @default(cuid())
-  slug           String         @unique
-  title          String
-  instructorName String
-  instructorId   String?
-  instructor     User?          @relation(fields: [instructorId], references: [id], onDelete: SetNull)
-  category       CourseCategory
-  level          CourseLevel
-  durationHours  Int
-  rating         Float          @default(0)
-  reviewsCount   Int            @default(0)
-  priceCents     Int
-  listPriceCents Int
+  id                       String          @id @default(cuid())
+  slug                     String          @unique
+  title                    String
+  subtitle                 String
+  description              String[]
+  instructorId             String
+  instructor               Instructor      @relation(fields: [instructorId], references: [id])
+  category                 CourseCategory
+  level                    CourseLevel
+  durationHours            Int
+  rating                   Float           @default(0)
+  reviewsCount             Int             @default(0)
+  priceCents               Int
+  listPriceCents           Int
+  /// Null means no active sale — the sale-only UI (banner, "X% off") hides.
+  saleEndsAt               DateTime?
+  requirements             String[]
+  learningOutcomes         String[]
+  /// "This course includes" list — counts an instructor fills in on publish,
+  /// not derived from `sections`/`lessons` (a lesson's minutes count toward
+  /// `durationHours`; these are separate summary stats the export shows).
+  videoHours               Int             @default(0)
+  articlesCount            Int             @default(0)
+  quizzesCount             Int             @default(0)
+  hasDownloadableResources Boolean         @default(true)
+  hasCertificate           Boolean         @default(true)
+  lifetimeAccess           Boolean         @default(true)
   /// Instructor-uploaded art, once that feature exists. Null renders the
   /// per-category gradient + icon placeholder — see `lumen-course-card-art`.
-  thumbnailUrl   String?
-  published      Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  thumbnailUrl             String?
+  published                Boolean         @default(true)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  sections                 CourseSection[]
+  reviews                  CourseReview[]
 
   @@index([category])
   @@index([instructorId])
@@ -102,6 +151,64 @@ enum CourseLevel {
   INTERMEDIATE
   ADVANCED
   ALL_LEVELS
+}
+
+/// "Course content" accordion — one row of `Getting your bearings` /
+/// `Shapes, paths, and the pen tool` / etc. Per-section lesson count and
+/// total duration are computed from `lessons` at query time, not stored.
+model CourseSection {
+  id       String         @id @default(cuid())
+  courseId String
+  course   Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title    String
+  order    Int
+  lessons  CourseLesson[]
+
+  @@index([courseId])
+  @@map("course_section")
+}
+
+/// One row inside an expanded `CourseSection`. `durationMinutes` backs the
+/// "20 min" meta text for video/article/practice rows; `questionsCount`
+/// backs "5 questions" for quiz rows instead — a lesson only ever has one of
+/// the two, matching which meta text the export shows per row type.
+model CourseLesson {
+  id              String        @id @default(cuid())
+  sectionId       String
+  section         CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  title           String
+  type            LessonType
+  durationMinutes Int?
+  questionsCount  Int?
+  /// The blue "Preview" link — free to watch without buying the course.
+  isPreview       Boolean       @default(false)
+  order           Int
+
+  @@index([sectionId])
+  @@map("course_lesson")
+}
+
+enum LessonType {
+  VIDEO
+  ARTICLE
+  QUIZ
+  PRACTICE
+}
+
+/// One row in "Student reviews". The star-breakdown bars (78% / 16% / …) are
+/// computed by aggregating these at query time, not stored redundantly.
+model CourseReview {
+  id             String   @id @default(cuid())
+  courseId       String
+  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  authorName     String
+  authorImageUrl String?
+  rating         Int
+  body           String
+  createdAt      DateTime @default(now())
+
+  @@index([courseId])
+  @@map("course_review")
 }
 
 model Session {
