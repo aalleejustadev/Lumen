@@ -6,11 +6,26 @@ import { siteConfig } from "@/lib/config/site"
  * cut-out, so the gradient reads through the middle. The cut-out is a mask
  * rather than a filled circle to keep it in step with `--gradient-logo`.
  */
-function LogoMark({ className }: { className?: string }) {
+function LogoMark({
+  className,
+  tone = "brand",
+}: {
+  className?: string
+  /**
+   * `solid` paints the tile in `--foreground` instead of `--gradient-logo`,
+   * for surfaces that show the mark as a merchant identity rather than as
+   * branding — the checkout summary column, which the export draws in flat
+   * #18181b. A prop rather than a class override because `.bg-logo` sets the
+   * `background` *shorthand*, so a later `bg-*` utility can't reliably beat
+   * it on source order alone.
+   */
+  tone?: "brand" | "solid"
+}) {
   return (
     <span
       className={cn(
-        "bg-logo inline-flex size-9 shrink-0 items-center justify-center rounded-lg shadow-logo",
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
+        tone === "brand" ? "bg-logo shadow-logo" : "bg-foreground",
         className
       )}
     >

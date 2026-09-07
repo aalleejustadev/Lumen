@@ -265,6 +265,105 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `cart_item.courseSlug` is a plain string, not a `Course` relation — the
   `course` table has no rows yet, so a foreign key would make it impossible
   to add anything to a cart; see the model's own note.
+- `components/checkout/` + `app/(checkout)/` — `/checkout`, from
+  `checkout-page.png`. **Read the geometry note before changing any of it.**
+  Measured off that export at DPR 2: a **920 x 708** panel on a
+  `--background` page, `rounded-2xl`, hairline `--border`, split by a vertical
+  `--border` rule at x=944 into a **448px** summary column on `--background`
+  and a **472px** payment column on `--card`, both with 38px padding. Those
+  are the app's own tokens, and the export puts "Back to cart" *inside* the
+  panel — which is why the session runs in **`ui_mode: "elements"`** (the
+  docs' *custom* flow) and not `embedded_page`. Under `embedded_page` the
+  whole panel is one Stripe iframe: the columns would be Stripe's greys, the
+  type scale Stripe's, and a back link impossible (Stripe draws that from
+  `cancel_url`, which embedded sessions reject outright). An earlier pass
+  built it that way and could not match the export; don't switch back.
+  `checkout-summary.tsx` (server) is the left column, straight from the cart —
+  amounts come from our rows rather than Stripe's session because the
+  thumbnails do, and the two agree because `lib/actions/checkout.ts` builds
+  `line_items` from those exact rows. Its **Tax row is $0.00 because there is
+  no tax** (`automatic_tax` is off), not because the export says so — turn
+  tax on and it has to read `checkout.total.taxInclusive`.
+  `checkout-payment.tsx` (client) is the right column; only two blocks in it
+  are Stripe's, the `ExpressCheckoutElement` bar and the
+  `ContactDetailsElement` + `PaymentElement` fields. The header, the "Or pay
+  with card" rule, the submit button and the Stripe footer are ours.
+  `checkout-appearance.ts` is the seam between our tokens and Stripe's
+  iframes: nothing of ours reaches inside them, so every value is handed over
+  explicitly, and Figtree is re-declared as a Google Fonts URL because
+  `next/font` self-hosts it out of `/_next` where Stripe's iframe can't read
+  it. `LogoMark` grew a `tone="solid"` prop for the export's flat #18181b
+  mark — a prop and not a class override, because `.bg-logo` sets the
+  `background` shorthand and a later `bg-*` utility can't reliably beat it.
+  `lib/actions/checkout.ts` builds the session from cart rows the server read
+  itself, so no amount, slug or title in it came from the client, and it
+  re-opens the last still-open session for an unchanged cart so a reload
+  doesn't leave a trail of PENDING orders — but **only when that session's
+  `ui_mode` is one the Elements SDK can drive**. Without that check the reuse
+  path happily handed back a session left open by the earlier
+  `embedded_page` build, and Stripe.js refused it with "You must create a
+  Checkout Session with ui_mode=custom or ui_mode=elements". Sessions stay
+  open for 24h, so any future change of `ui_mode` would hit the same trap. Its `line_items` use inline
+  `price_data` rather than stored Stripe Price ids, because courses live in
+  `lib/config/browse-courses.ts` and have never been pushed to Stripe as
+  Products — create real Prices when instructor authoring lands. Two things
+  there look like omissions and are not: `payment_method_types` is absent on
+  purpose (that is what enables dynamic payment methods; setting it silently
+  pins the form to cards), and `integration_identifier` is set because the
+  SDK's API version is past `2026-03-25.dahlia`. The form is narrowed to Card
+  and Amazon Pay with **`excluded_payment_method_types`**, which subtracts
+  from whatever the Dashboard has enabled — so it is a subtraction, not a
+  whitelist, and anything switched on in the Dashboard later shows up unless
+  it is added to that list (Klarna already had to be). For a rule that
+  survives Dashboard changes, the durable tool is a
+  `payment_method_configuration` holding just those two; that is an
+  account-level object, so nothing here creates one.
+  **Link is the exception and does not go in that list** — the API rejects
+  `link` there outright, because Link is a wallet rather than a payment method
+  type. It is switched off client-side with `wallets: { link: "never" }` on
+  the `PaymentElement`. This is worth knowing because the tab labelled
+  **"Bank"** (with the "US$5 back when you pay by bank" promo) is *Link's*
+  pay-by-bank, not `us_bank_account`: excluding `us_bank_account` removes
+  nothing visible. The tell is that the session offered exactly three types
+  (`card`, `link`, `amazon_pay`) against three visible tabs.
+- **The reuse path needs a guard per session-shaping option.** Sessions stay
+  open for 24h, so after any change to how a session is built, an old one can
+  still match on cart and recency and get handed back — offering the *old*
+  behaviour. This has already bitten twice: a leftover `embedded_page` session
+  the Elements SDK refused outright, and sessions carrying a stale exclusion
+  list. `ELEMENTS_UI_MODES` and `sameExclusions` in `lib/actions/checkout.ts`
+  are those guards; add one alongside them whenever a new option starts
+  shaping the session.
+- **Fulfilment lives in `app/api/stripe/webhook/route.ts`, never the return
+  page.** `/checkout/return` only *reports* — it reads the session back and
+  says where the payment stands. A customer can pay and close the tab, and a
+  delayed-notification method (bank debit, voucher) settles days later with no
+  browser involved, so anything that only ran on the return page would drop
+  those orders. The handler verifies the signature before reading a single
+  field, then hands off to `lib/orders.ts`, which is idempotent because it has
+  to be: delivery is at-least-once, and `checkout.session.completed` and
+  `checkout.session.async_payment_succeeded` both fire for the same session.
+  The `payment_status === "unpaid"` guard is the subtle one — `completed`
+  arrives *while* a delayed payment is still in flight, so fulfilling on it
+  alone would grant access for payments that later fail and never fulfil the
+  ones that succeed. Without `STRIPE_WEBHOOK_SECRET` set, nothing is ever
+  fulfilled; the endpoint answers 503 so Stripe retries once it is.
+- `lib/stripe.ts` — the server client, `server-only` so an import from a
+  Client Component is a build error rather than a leaked key. Returns `null`
+  when the key is blank, the same posture blank OAuth keys get: `/checkout`
+  says checkout isn't configured instead of throwing. Stripe's own guidance is
+  to use a **restricted** key (`rk_`) over `sk_` — see `.env.example`.
+- `next.config.ts` — carries a Content-Security-Policy scoped to `/checkout*`,
+  the only pages that load Stripe.js. Host lists come verbatim from Stripe's
+  integration security guide, unioned across its Stripe.js, Checkout and Link
+  sets (Link is on by default, and is what draws the autofill glyphs in the
+  export). `script-src` keeps `'unsafe-inline'` because Next inlines its
+  bootstrap and flight payloads; a per-request nonce is stronger and needs a
+  proxy to mint one. `'unsafe-eval'` and `ws:` are dev-only.
+- The Stripe agent skills ship in `.agents/skills/stripe-*` and are now
+  symlinked into `.claude/skills/` like the rest — they were not, so they were
+  invisible to the skill list. `stripe-best-practices` is the one to read
+  before touching any of the above.
 - `lib/user.ts` — `MenuUser` and `initialsOf`. Deliberately not in a
   `"use client"` file: Server Components render the chrome, and a client
   module's functions can't be called from the server.
@@ -308,8 +407,12 @@ Import via the `@/*` alias (`@/components/ui/button`, `@/lib/utils`), never rela
 
 Split, as of the auth screens: `app/(marketing)/` owns the header and footer in
 its own layout, `app/(auth)/` brings the two-up auth shell, `app/(dashboard)/`
-guards its subtree with a session check in the layout. The root layout is now
-just `<html>`, fonts and `ThemeProvider` — put nothing surface-specific there.
+guards its subtree with a session check in the layout, and `app/(checkout)/`
+is a deliberately chrome-free shell (no sidebar, no app bar) with the same
+session guard repeated — a route group's layout only covers its own subtree,
+so it can't inherit the dashboard's. The root layout is now just `<html>`,
+fonts, `ThemeProvider` and `NavigationProgress` — put nothing surface-specific
+there.
 
 `SiteHeader` awaits `getSession()`, which makes the marketing routes
 dynamically rendered (`ƒ /` in the build output) rather than prerendered. That
@@ -393,7 +496,7 @@ then `prisma migrate deploy`.
 - Variants come from `class-variance-authority`; icons from `lucide-react`.
 - Theming is `next-themes` with `attribute="class"`; pressing `d` toggles dark mode (see `components/theme-provider.tsx`).
 - Toasts are **Base UI's `toast`, not sonner** — sonner is for Radix/React-Aria projects and this one is `base` (the shadcn skill enforces this). Import `toast` from `@/components/ui/toast` and call `toast.add({ title, type })`. `<Toaster />` is mounted once in the root layout, beside `children` rather than wrapping them: `toast` is a module-level manager, so callers don't need to be inside the provider.
-- Prettier config is authoritative: no semicolons, double quotes, 2-space indent, 80 columns, `prettier-plugin-tailwindcss` sorts class names. Run `npm run format` after editing.
+- Prettier config is authoritative: no semicolons, double quotes, 2-space indent, 80 columns, `prettier-plugin-tailwindcss` sorts class names. Format the files you touched — `npx prettier --write <paths>` — **not** `npm run format`. That script is `prettier --write "**/*.{ts,tsx}"`, which sweeps `components/ui/` too and reformats ~19 generated files into a diff that has nothing to do with your change, contradicting the "don't run Prettier across this directory" rule above.
 
 ## shadcn/ui
 

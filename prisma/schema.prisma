@@ -51,6 +51,7 @@ model User {
   instructorProfile Instructor?
   cartItems         CartItem[]
   wishlistItems     WishlistItem[]
+  orders            Order[]
 
   @@unique([email])
   @@map("user")
@@ -320,4 +321,62 @@ model WishlistItem {
   @@unique([userId, courseSlug])
   @@index([userId])
   @@map("wishlist_item")
+}
+
+/// A checkout attempt. Created the moment a Stripe Checkout Session is opened
+/// (`lib/actions/checkout.ts`), so an abandoned checkout leaves a PENDING row
+/// rather than nothing at all — which is what makes the return page's
+/// fulfilment idempotent: it only ever moves PENDING to PAID.
+///
+/// Money is stored in minor units (cents) as `Int` for the same reason Stripe
+/// uses them: a float can't hold 12.99 exactly, and an order total is the one
+/// number in this app that must never drift.
+model Order {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The Checkout Session this order was opened with. Unique, so the return
+  /// page can look an order up by the `session_id` Stripe puts in the URL and
+  /// a replayed redirect can't create a second order.
+  stripeSessionId       String      @unique
+  /// Set once payment succeeds — kept for refunds and receipts.
+  stripePaymentIntentId String?
+  status                OrderStatus @default(PENDING)
+  /// Cents. Mirrors Stripe's `amount_total`.
+  amountTotal           Int
+  currency              String      @default("usd")
+  /// The address Stripe collected, which is not necessarily the account's.
+  email                 String?
+  items                 OrderItem[]
+  createdAt             DateTime    @default(now())
+  paidAt                DateTime?
+
+  @@index([userId])
+  @@map("order")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  /// A delayed-notification payment method (bank debit, voucher) that Stripe
+  /// later told us failed — `checkout.session.async_payment_failed`.
+  FAILED
+  EXPIRED
+}
+
+/// One course on an order. Title and price are *snapshots*, not lookups: the
+/// catalog can be re-priced or a course withdrawn, and a past order has to
+/// keep saying what was actually bought for what. `courseSlug` is a plain
+/// string for the same reason as `CartItem.courseSlug` — see that model.
+model OrderItem {
+  id         String @id @default(cuid())
+  orderId    String
+  order      Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courseSlug String
+  title      String
+  /// Cents, at the moment of purchase.
+  unitAmount Int
+
+  @@index([orderId])
+  @@map("order_item")
 }

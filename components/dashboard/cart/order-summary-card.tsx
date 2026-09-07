@@ -11,8 +11,10 @@ import type { CartSummary } from "@/lib/cart"
  * catalog. Measured off that export — 22px padding, 25px row pitch, a 44px
  * primary button.
  *
- * There's no checkout flow yet, so "Proceed to checkout" is deliberately
- * disabled rather than pointing at a route that would 404.
+ * "Proceed to checkout" leaves the dashboard shell entirely — `/checkout` is
+ * its own chrome-free route group, matching the export and the usual rule
+ * that a payment page shouldn't offer somewhere else to go. Still disabled on
+ * an empty cart, which `/checkout` also guards against server-side.
  */
 function OrderSummaryCard({ summary }: { summary: CartSummary }) {
   const rows = [
@@ -45,8 +47,10 @@ function OrderSummaryCard({ summary }: { summary: CartSummary }) {
       </div>
 
       <Button
+        nativeButton={false}
         disabled={summary.lines.length === 0}
         className="mt-4 h-11 w-full text-sm font-semibold shadow-sm"
+        render={<Link href="/checkout" />}
       >
         Proceed to checkout
       </Button>
