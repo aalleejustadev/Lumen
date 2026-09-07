@@ -277,6 +277,103 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `browse-courses-page.png` (these exports render type about 15% smaller than
   the design system's own scale, which is why the `40px controls` baseline
   beats the literal measurement), so don't "fix" it by shrinking the type.
+- `components/dashboard/learning/course/` — the *enrolled* course page at
+  `/dashboard/learning/[slug]`, from `course-page__part{1,2}.png` plus the
+  three tab exports (`course-QA__tab.png`, `course-reviews__tab.png`,
+  `course-notes__tab.png`). This is where "Continue" on
+  `/dashboard/learning` goes; `/dashboard/courses/[slug]` stays the *sale*
+  page for students who haven't bought — the two show the same syllabus from
+  opposite sides, so don't merge them. One file per piece
+  (`course-video-player.tsx`, `course-instructor-bar.tsx`, `course-tabs.tsx`,
+  `course-overview-tab.tsx`, `course-qa-tab.tsx`, `course-reviews-tab.tsx`,
+  `course-notes-tab.tsx`, `study-progress-card.tsx`,
+  `course-completion-card.tsx`), composed by `course-page.tsx`. Measured off
+  the export at DPR 2: an 892px left column and a **576px** right one with a
+  24px gutter — a far heavier sidebar than the sale page's 348px purchase
+  card, because the syllabus lives there rather than in the main column; it
+  steps down to 420px below `xl` and stacks below `lg`. Neither column is
+  sticky (the export scrolls both together). **Overview is the one tab that
+  renders without a card** — the export puts it straight on the page
+  background while the other three sit on `bg-card` panels, so the panels own
+  their own cards rather than `course-tabs.tsx` wrapping them all. The tab
+  list needs `h-11!` and `data-active:bg-card!`: the generated `TabsList` is
+  `group-data-horizontal/tabs:h-8` and `TabsTrigger` is
+  `dark:data-active:bg-input/30`, wrapped selectors that survive `cn()`'s
+  tailwind-merge (it only drops a generated class when both carry the same
+  variant prefix) and then outrank a plain override on specificity — the same
+  trap `Avatar` and `PaginationLink` sprang. Its triggers also need
+  `flex-none`, or `flex-1` sizes all four pills to the widest label.
+  There is no `<video>` behind the player and no lesson route: the surface is
+  the category gradient with local play state, exactly as
+  `course-preview-dialog.tsx` renders it (`lumen-course-card-art`). Quiz rows
+  are the one lesson row that links anywhere — at the quiz page below; every
+  other row is inert until there is a lesson player. That link needs
+  `[&_a]:no-underline` on its `AccordionContent`: the generated component
+  carries `[&_a]:underline`, which is right for a body-copy accordion and
+  wrong here, and being a descendant selector it beats a plain `no-underline`
+  on the row itself. The title sits *inside*
+  the left column rather than above the grid: the export's right column starts
+  level with it, so hoisting the `h1` out pushes the whole sidebar down by its
+  height.
+  Reads `lib/config/course-player.ts`, which hand-authors only
+  `mastering-illustration` (the export's own course) and generates every other
+  slug from its `CourseDetail` + the `my-learning.ts` enrolment, so every
+  "Continue" leads somewhere real. That flagship entry keeps the export's own
+  contradiction — 4 sections / 12 lessons with 2 done here, against the same
+  course's "14 of 25 lessons" card on My Learning — because the brief is to
+  match the export; `progress` is the one figure shared with the card, so the
+  55% can't drift. Q&A `replies` holds the *whole* thread and the card shows
+  the first `QA_VISIBLE_REPLIES` behind "Show N more replies", rather than a
+  separate stored count that could disagree with the rows it opens. Notes are
+  local state and the Q&A composer is inert — there is no `Enrollment`,
+  `LessonProgress`, `CourseQuestion` or `LessonNote` model yet, and for the
+  same reason the route carries **no enrolment check**: add the gate with the
+  model.
+- `components/dashboard/learning/quiz/` —
+  `/dashboard/learning/[slug]/quiz/[quizSlug]`, from `quiz-page.png`. Reached
+  from the quiz rows in the course page's completion accordion (that's what
+  their trailing chevron links at). Measured off the export at DPR 2: a 718px
+  card centred on the page (`p-7.5`), 64px option rows on a 12px rhythm, 40px
+  footer controls. Options are native radios inside their rows (`sr-only`, not
+  removed) so arrow-key selection and screen-reader grouping come from the
+  platform. Nothing is scored — there is no `QuizAttempt` model, so
+  `QuizQuestion.answerIndex` sits unread. Two states the export doesn't draw
+  because it only draws question 1 of 5: Previous is disabled on the first
+  question, and the last question's primary button reads "Finish" and hands
+  over to `quiz-results.tsx`. That results screen has no export of its own —
+  it's assembled from the quiz card's own parts (718px, `p-7.5`, same header
+  and bar) with the option rows swapped for a per-question review, and it is
+  the only place `QuizQuestion.answerIndex` is read. `PASS_PERCENT` picks
+  which of two summaries shows; nothing gates on it, and "Retake quiz" just
+  clears local state.
+- `components/dashboard/learning/course/course-feedback-dialog.tsx` — the
+  "How is the course going?" prompt from `course-feedback.png`. 518 x 437 on
+  `p-8`, a 60px amber tile over the heading, and a lead given an explicit
+  `max-w-[400px]` measure — the export wraps it to three balanced lines rather
+  than running the full content box, which padding alone won't reproduce. The
+  export draws the *unrated* state, so that's what it opens on ("Maybe later",
+  unfilled stars); picking a rating fills the row and swaps the button to a
+  primary "Submit rating", because a star row that did nothing would be worse
+  than none. **Nothing is written** — there's no `CourseReview` table — and
+  nothing triggers it for real: it should appear on its own once a student is
+  a few lessons in, which needs enrolment progress. Until then
+  `dashboard-search.tsx` carries a hand-written "Preview" group in the command
+  palette purely so the design can be looked at; **delete that group when the
+  prompt becomes automatic** — it's the one entry in the palette that isn't a
+  navigation. Its `DialogClose` sets `focus-visible:` rules explicitly: Base
+  UI moves focus there on open, so without them every open shows the browser's
+  black outline instead of the app's ring.
+- `lib/course-return.ts` — the "where did you come from" seam between a course
+  page and the instructor profile. A course has *two* pages (sale and
+  enrolled) and both carry "View profile", so `?from=<slug>` alone sent
+  everyone back to the sale page; `?via=sale|learning` carries the surface.
+  Both directions live in this one module — `instructorProfileHref` for the
+  two cards, `courseReturnLink` for the profile route — so a third caller
+  can't invent another spelling. Both query values are resolved rather than
+  trusted: `from` has to name a real course and `via` has to be one of the two
+  surfaces, or the link falls back to Browse, which keeps a hand-edited
+  `?from=../../x` out of an `href`. Absent `via` means the sale page, which is
+  what a link written before this existed meant.
 - `components/dashboard/cart/` — `/dashboard/cart`, from `cart-page.png`:
   `cart-item-card.tsx` (a row), `remove-from-cart-button.tsx` (client),
   `order-summary-card.tsx`, composed by `cart-page.tsx`. Measured off that
@@ -461,9 +558,22 @@ The measured baseline: 1152px content box (`max-w-[1200px] px-6`), 70px header,
 `py-24`; keep new sections on those two values so the page rhythm stays even.
 
 Headings run heavier than the old design-system note claimed. Measured stem
-widths off the exports: `h1`/`h2` are **800** (the base rule in `globals.css`
-sets both), card titles (`h3`) are **700** from the same base rule — so don't
-add `font-semibold` to a card title, it makes them too light. Big display
+widths off the **marketing** exports: `h1`/`h2` are **800** (the base rule in
+`globals.css` sets both), card titles (`h3`) are **700** from the same base
+rule — so don't add `font-semibold` to a card title, it makes them too light.
+
+**The dashboard exports disagree, and the base rule is wrong there.** Stem
+widths measured off `course-page__part1.png` and `my-learning-page.png` put
+the page title at **0.14–0.148em** — that is 700, not the 800 the `h2`/`h1`
+base rules apply (which render 0.176em). Card titles inside dashboard cards
+measure 700 too, and `globals.css` forces every `h2` to 800. So on dashboard
+surfaces a page title and a card title both need an explicit `font-bold` to
+come *down* to 700; a row label inside a card (an accordion section header,
+a tab) is a step below that again at 500/600. The enrolled course page and
+the quiz page are built this way. **`/dashboard/learning` and
+`/dashboard/courses` were not** — their `h1`s still render 800 against
+exports that draw 700; left alone rather than swept in unasked, but they are
+the same mismatch. Big display
 headings inside cards take `font-extrabold` explicitly. Radii derive from `--radius` (10px): `rounded-lg` for
 controls, `rounded-xl` for cards. The designs were authored a step rounder;
 the scale was pulled in on purpose, so don't "correct" it back.

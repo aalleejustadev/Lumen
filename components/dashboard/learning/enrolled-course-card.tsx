@@ -13,12 +13,12 @@ import type { EnrolledCourse } from "@/lib/config/my-learning"
  * badge, not the export's photos (see `lumen-course-card-art`) — but the
  * body below the title carries progress instead of price and rating.
  *
- * Everything links to the course page: there is no lesson player yet, so
- * "Continue" would otherwise be a dead link. Point both at
- * `/dashboard/learning/[slug]` once one exists.
+ * Everything links to `/dashboard/learning/[slug]` — the *enrolled* course
+ * page, not `/dashboard/courses/[slug]`, which is the sale page for students
+ * who haven't bought yet.
  */
 function EnrolledCourseCard({ course }: { course: EnrolledCourse }) {
-  const href = `/dashboard/courses/${course.slug}`
+  const href = `/dashboard/learning/${course.slug}`
 
   return (
     <Card className="gap-0 overflow-hidden p-0 transition-shadow hover:shadow-card">

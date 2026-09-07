@@ -113,6 +113,16 @@ function resolve(seeds: EnrollmentSeed[], completed: boolean) {
 export const inProgressCourses = resolve(inProgressSeeds, false)
 export const completedCourses = resolve(completedSeeds, true)
 
+/** The enrolment behind one course, across both buckets — what
+ *  `lib/config/course-player.ts` reads so the enrolled course page's progress
+ *  and the card's progress bar come from the same seed. `undefined` for a
+ *  course the student isn't enrolled in. */
+export function enrollmentBySlug(slug: string): EnrolledCourse | undefined {
+  return [...inProgressCourses, ...completedCourses].find(
+    (course) => course.slug === slug
+  )
+}
+
 export const learningTabs = [
   { value: "in-progress", label: "In Progress", courses: inProgressCourses },
   { value: "completed", label: "Completed", courses: completedCourses },

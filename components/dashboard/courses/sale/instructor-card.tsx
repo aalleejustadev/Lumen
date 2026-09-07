@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { CourseInstructorProfile } from "@/lib/config/course-details"
-import { instructorSlug } from "@/lib/config/instructor-profiles"
+import { instructorProfileHref } from "@/lib/course-return"
 
 function initialsOf(name: string) {
   return name
@@ -14,8 +14,9 @@ function initialsOf(name: string) {
     .join("")
 }
 
-/** `courseSlug` becomes `?from=` on the profile link, so its "Back to
- *  course" knows where to return to. */
+/** `courseSlug` becomes `?from=` on the profile link — with `via=sale`, so
+ *  the profile's "Back to course" returns here rather than to the same
+ *  course's enrolled page. See `lib/course-return.ts`. */
 function InstructorCard({
   instructor,
   courseSlug,
@@ -72,7 +73,10 @@ function InstructorCard({
           nativeButton={false}
           render={
             <Link
-              href={`/dashboard/instructors/${instructorSlug(instructor.name)}?from=${courseSlug}`}
+              href={instructorProfileHref(instructor.name, {
+                courseSlug,
+                via: "sale",
+              })}
             />
           }
         >
