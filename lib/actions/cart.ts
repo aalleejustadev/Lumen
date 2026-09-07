@@ -14,6 +14,20 @@ import { browseCourses } from "@/lib/config/browse-courses"
  * request can't park arbitrary strings in someone's cart. They return a
  * `{ ok, message }` result instead of throwing: the caller turns it straight
  * into a toast, and a failed add shouldn't blow up the page.
+ *
+ * Both revalidate the dashboard *layout* rather than the two pages that list
+ * cart contents. Cart state is no longer only on those pages: the header's
+ * badge is counted in `app/(dashboard)/layout.tsx`, and every route under the
+ * shell shows it. One layout-scoped call says that and subsumes the two
+ * page-scoped ones.
+ *
+ * What makes the badge move without a reload is a different mechanism, worth
+ * not confusing with the above: an action that revalidated *anything* makes
+ * Next re-render the current URL's whole tree — layout included — and ship it
+ * back with the action's return value (`skipPageRendering` in
+ * `next/dist/server/app-render/action-handler.js` keys off whether any
+ * revalidation happened, not off which path was named). The path argument is
+ * what invalidates the *other* dashboard routes' cache entries.
  */
 
 export type CartActionResult = {
@@ -50,8 +64,7 @@ export async function addToCart(slug: string): Promise<CartActionResult> {
     data: { userId: session.user.id, courseSlug: slug },
   })
 
-  revalidatePath("/dashboard/cart")
-  revalidatePath(`/dashboard/courses/${slug}`)
+  revalidatePath("/dashboard", "layout")
   return { ok: true, message: `${course.title} was added to your cart` }
 }
 
@@ -68,8 +81,7 @@ export async function removeFromCart(slug: string): Promise<CartActionResult> {
     return { ok: false, message: "That course was not in your cart." }
   }
 
-  revalidatePath("/dashboard/cart")
-  revalidatePath(`/dashboard/courses/${slug}`)
+  revalidatePath("/dashboard", "layout")
   const course = findCourse(slug)
   return {
     ok: true,

@@ -85,7 +85,15 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   tooltip. The Student/Instructor switch renders twice — a radiogroup when
   expanded, and on the rail a single button showing the mode you are *not* in,
   which switches you when tapped; `dashboard-header.tsx` is the 70px bar above the
-  content; `account-menu.tsx` is the menu both of them hang off (the sidebar's
+  content — its cart icon carries a count badge fed by `getCartCount()` in
+  `app/(dashboard)/layout.tsx`, so the number is server-rendered chrome rather
+  than client state, and `lib/actions/cart.ts` keeps it live: any Server Action
+  that revalidates makes Next re-render the current URL's whole tree, layout
+  included, and return it alongside the action's own result (so the badge moves
+  without a navigation or a `router.refresh()`). `getCartCount` resolves slugs
+  against the catalog the same way `getCart` does rather than being a bare
+  `count()`, or the badge would advertise rows the cart page itself drops;
+  `account-menu.tsx` is the menu both of them hang off (the sidebar's
   footer row and the header's avatar), so the two can't drift.
   `dashboard-search.tsx` is the ⌘K palette. Nav lives in
   `lib/config/dashboard.ts`. Settings is the one row with children: expanded
@@ -247,7 +255,8 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   (there's no promo system yet), *not* the list-vs-sale saving — keep
   `total = subtotal - discount` or the three numbers stop adding up. The
   export only draws a filled cart; empty falls back to the `Empty` component.
-- `lib/cart.ts` — cart/wishlist reads (`getCart`, `isWishlisted`). Pulls in
+- `lib/cart.ts` — cart/wishlist reads (`getCart`, `getCartCount`,
+  `isWishlisted`). Pulls in
   `lib/db`, so the same "never from a Client Component" rule applies.
   `lib/actions/cart.ts` and `lib/actions/wishlist.ts` are the `"use server"`
   writes: each re-checks the session and re-resolves the course from the

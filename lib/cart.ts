@@ -61,6 +61,28 @@ export async function getCart(): Promise<CartSummary> {
   return { lines, subtotal, discount, total: subtotal - discount }
 }
 
+/**
+ * How many courses sit in the signed-in user's cart — the number on the
+ * header's cart badge. 0 for signed-out visitors.
+ *
+ * Deliberately not `db.cartItem.count()`: `getCart` drops rows whose slug no
+ * longer resolves against the catalog, so a bare count would show the badge a
+ * course the cart page itself refuses to render. Resolving the slugs here is
+ * what keeps the two numbers the same. Carts are a handful of rows, so the
+ * extra work is the slug lookups, not a second query.
+ */
+export async function getCartCount() {
+  const session = await getSession()
+  if (!session) return 0
+
+  const rows = await db.cartItem.findMany({
+    where: { userId: session.user.id },
+    select: { courseSlug: true },
+  })
+
+  return rows.filter((row) => courseBySlug(row.courseSlug) !== undefined).length
+}
+
 /** Whether this course is on the signed-in user's wishlist. */
 export async function isWishlisted(slug: string) {
   const session = await getSession()

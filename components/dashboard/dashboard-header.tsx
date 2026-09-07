@@ -15,13 +15,21 @@ import { initialsOf, type MenuUser } from "@/lib/user"
  * a 70px row over the content column, a 38px collapse control, the 40px search
  * field, then the instructor link, cart, notifications, theme and avatar — the
  * three icons bare rather than boxed, with a rule before the avatar.
+ *
+ * `cartCount` comes down from the layout — the header is a Server Component,
+ * so the badge is server-rendered rather than held in client state. It stays
+ * current because the cart actions in `lib/actions/cart.ts` revalidate, which
+ * makes Next re-render this layout as part of the action's response; see the
+ * note there.
  */
 function DashboardHeader({
   user,
   isAdmin,
+  cartCount = 0,
 }: {
   user: MenuUser
   isAdmin?: boolean
+  cartCount?: number
 }) {
   return (
     <header className="sticky top-0 z-40 flex h-[70px] shrink-0 items-center gap-3 border-b bg-background px-4 sm:gap-4 sm:px-6">
@@ -42,12 +50,28 @@ function DashboardHeader({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Cart"
+          aria-label={
+            cartCount > 0
+              ? `Cart, ${cartCount} ${cartCount === 1 ? "course" : "courses"}`
+              : "Cart"
+          }
           nativeButton={false}
-          className="hidden size-9.5 cursor-pointer sm:inline-flex"
+          className="relative hidden size-9.5 cursor-pointer sm:inline-flex"
           render={<Link href="/dashboard/cart" />}
         >
           <ShoppingCartIcon />
+          {/* Sits on the glyph's top-right corner. `min-w-4` + `px-1` rather
+              than a fixed circle so a two-digit count widens the pill instead
+              of overflowing it; the count itself is already in `aria-label`,
+              so the badge is hidden from assistive tech. */}
+          {cartCount > 0 ? (
+            <span
+              aria-hidden
+              className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground tabular-nums"
+            >
+              {cartCount > 99 ? "99+" : cartCount}
+            </span>
+          ) : null}
         </Button>
 
         <Button

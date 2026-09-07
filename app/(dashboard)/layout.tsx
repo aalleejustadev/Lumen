@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { getSession } from "@/lib/auth"
+import { getCartCount } from "@/lib/cart"
 
 /**
  * Everything under this group requires a session — the guard lives here rather
@@ -13,6 +14,10 @@ import { getSession } from "@/lib/auth"
  * `--sidebar-width` is the export's 244px panel, and `DashboardHeader` is the
  * bar from `dashboard-header.png`. Both read the session from here rather than
  * fetching their own.
+ *
+ * The header's cart badge is counted here too, for the same reason: it is
+ * chrome shared by every dashboard route, so it belongs to the shell rather
+ * than to whichever page happens to be underneath.
  */
 export default async function DashboardLayout({
   children,
@@ -26,6 +31,7 @@ export default async function DashboardLayout({
   // shadcn's provider writes `sidebar_state` on every toggle; reading it here
   // is what makes the rail survive a reload.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
+  const cartCount = await getCartCount()
 
   return (
     <SidebarProvider
@@ -46,6 +52,7 @@ export default async function DashboardLayout({
         <DashboardHeader
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin={user.role === "admin"}
+          cartCount={cartCount}
         />
         {children}
       </SidebarInset>
