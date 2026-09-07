@@ -244,6 +244,39 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   was an invisible dark-on-dark blob in dark mode. Fixed in both files with
   `!` (`bg-primary!` etc.), the one case in the app where that's necessary
   rather than just tidier.
+- `components/dashboard/learning/` — the student's enrolled courses at
+  `/dashboard/learning`, from `my-learning-page.png`: `learning-stat-card.tsx`
+  (one tile) and `learning-stats.tsx` (the four-up row),
+  `enrolled-course-card.tsx` (the card), `enrolled-courses-section.tsx`
+  (client — the In Progress/Completed switch, grid and pagination), composed
+  by `my-learning.tsx`. Unlike `browse-courses.tsx` the composer is a Server
+  Component: only the tab/pagination state needs the client, so the heading
+  and stat row never reach the bundle. Reads `lib/config/my-learning.ts`,
+  which seeds **only** progress (`completedLessons`, `totalLessons`,
+  `progress`, `nextLesson`) and resolves everything about the *course* out of
+  `lib/config/browse-courses.ts` by slug, the way `lib/cart.ts` does — there's
+  no `Enrollment` model yet, so that seed is what a real query replaces.
+  `progress` is stored rather than derived from the lesson counts because the
+  export's own four cards disagree with that ratio (14/25 shows 55%), which is
+  what time-weighted progress looks like. The export's stat row and tabs both
+  say "In Progress 5" while its footer says "of 8 courses"; the counts are
+  derived from one list here, so the majority reading (5, over two pages) wins
+  and the footer follows. The switch is a segmented control — one `bg-track`
+  container on `p-1` with the selected item as the dark pill — not the
+  catalog's row of separate pills; its selected segment needs
+  `aria-pressed:hover:bg-primary` rather than a plain `hover:`, since both are
+  single attribute selectors and Tailwind's variant order, not source order,
+  decides which wins. `LearningStatCard` is `instructor-header-card.tsx`'s
+  `StatBox` inverted (tinted tile on a white card, not a white tile on a
+  tinted box) and pulls its two lines in to `leading-7`/`leading-4` so the
+  44px tile — not the type — sets the row's 82px height. Cards link to the
+  course page: there is no lesson player yet, so "Continue" would otherwise be
+  a dead link; point it at `/dashboard/learning/[slug]` once one exists.
+  Rendered against the export, the card runs ~30px taller than drawn — the
+  same divergence the shipped `course-card.tsx` has from
+  `browse-courses-page.png` (these exports render type about 15% smaller than
+  the design system's own scale, which is why the `40px controls` baseline
+  beats the literal measurement), so don't "fix" it by shrinking the type.
 - `components/dashboard/cart/` — `/dashboard/cart`, from `cart-page.png`:
   `cart-item-card.tsx` (a row), `remove-from-cart-button.tsx` (client),
   `order-summary-card.tsx`, composed by `cart-page.tsx`. Measured off that
