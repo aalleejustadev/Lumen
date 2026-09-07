@@ -1,6 +1,8 @@
+import { Suspense } from "react"
 import { Figtree, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
+import { NavigationProgress } from "@/components/shared/navigation-progress"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -32,6 +34,13 @@ export default function RootLayout({
       className={cn(figtree.variable, fontMono.variable, "font-sans")}
     >
       <body>
+        {/* Same reasoning as `Toaster`: app-wide chrome, not a surface's.
+            The `Suspense` boundary is required — `NavigationProgress` reads
+            `useSearchParams()`, which without one would opt every route in
+            this layout into client-side rendering. */}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         {/* `Toaster` is app-wide infrastructure like `ThemeProvider`, not
             surface chrome, so it belongs here rather than in a route group's
             layout. It sits beside `children` rather than wrapping them:

@@ -266,6 +266,24 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   the gradient half (shared by both, hidden below `lg`); the forms are the only
   client components that call `authClient`.
 - `hooks/` — shared React hooks.
+- `components/shared/navigation-progress.tsx` + `instrumentation-client.ts` —
+  the app-wide route-change bar (5px gradient line, top edge, `z-[100]`).
+  The App Router has no router events and its `history.pushState` patch only
+  fires *after* a transition commits, so the start signal is Next's
+  `onRouterTransitionStart` export from `instrumentation-client.ts` (root-level
+  file convention, runs before hydration) — it covers `<Link>`, `router.push`
+  /`replace` and back/forward alike. That hook and the component talk over a
+  window event (`lib/navigation-progress.ts`), which avoids coupling the
+  instrumentation entry to the component tree; `startNavigationProgress()` is
+  exported there if something ever navigates outside the router. The end
+  signal is the component re-rendering with a new `usePathname()`
+  /`useSearchParams()`. It **must** stay inside the root layout's `<Suspense>`:
+  `useSearchParams()` without one opts every route in that layout into
+  client-side rendering, which would cost `/login` and `/register` their
+  static builds. The crawl is a single 6s ease-out CSS transition to 90%
+  rather than a timer loop, with a 420ms floor on visibility so a prefetched
+  route reads as a sweep instead of a flicker, and a 12s safety timeout so an
+  aborted navigation can't pin the bar.
 - `prisma7.config.ts` — Prisma 7 CLI config. Prisma 7 keeps the connection URL
   here rather than in `schema.prisma`, and it is deliberately pointed at
   `DIRECT_URL`: migrations, introspection and Studio need session state that
