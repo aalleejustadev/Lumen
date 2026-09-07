@@ -23,8 +23,21 @@ import { cn } from "@/lib/utils"
  * whatever the client claims it added.
  */
 
-/** "Add to cart" + "Buy now". Buy now is the same add, then straight to the
- *  cart — the checkout flow it eventually wants doesn't exist yet. */
+/**
+ * "Add to cart" + "Buy now".
+ *
+ * Both call the same server action; the difference is where they leave you.
+ * "Buy now" adds the course and goes straight to `/checkout`, skipping the
+ * cart page — the intent is already "I want this one", so a cart review step
+ * in between is a click that only costs conversions.
+ *
+ * Two consequences worth knowing. Checkout bills the **whole cart**, not just
+ * this course, so someone with items already in it pays for all of them —
+ * that is what "add it, then check out" means, and the checkout summary lists
+ * every line so it is never a surprise. And a successful "Buy now" is
+ * deliberately silent: the navigation *is* the feedback, and a toast saying
+ * the course was added would land on a page that has already moved on.
+ */
 function CourseBuyButtons({ slug }: { slug: string }) {
   const router = useRouter()
   const [pending, startTransition] = React.useTransition()
@@ -36,12 +49,26 @@ function CourseBuyButtons({ slug }: { slug: string }) {
     setPendingAction(action)
     startTransition(async () => {
       const result = await addToCart(slug)
-      toast.add({
-        title: result.message,
-        type: result.ok ? "success" : "error",
-      })
+
+      // A rejected add (signed out, course withdrawn) is the one case that
+      // still needs saying out loud, whichever button was pressed.
+      if (!result.ok) {
+        toast.add({ title: result.message, type: "error" })
+        setPendingAction(null)
+        return
+      }
+
+      if (action === "buy") {
+        // `setPendingAction(null)` is *not* called here on purpose: the
+        // spinner stays until this component unmounts with the navigation,
+        // rather than snapping back to an idle button while the checkout
+        // page is still being fetched.
+        router.push("/checkout")
+        return
+      }
+
+      toast.add({ title: result.message, type: "success" })
       setPendingAction(null)
-      if (result.ok && action === "buy") router.push("/dashboard/cart")
     })
   }
 
