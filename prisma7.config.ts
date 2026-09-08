@@ -12,6 +12,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Prisma 7 no longer runs this off the back of `migrate dev`/`reset` — it
+    // has to be invoked, which is what `npm run db:seed` is for.
+    seed: "tsx prisma/seed.ts",
   },
   datasource: {
     url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],

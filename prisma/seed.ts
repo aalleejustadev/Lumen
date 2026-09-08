@@ -1,0 +1,1209 @@
+/**
+ * Seeds the platform tables.
+ *
+ * Run with `npm run db:seed`. Every row it writes carries a `seed_` id prefix
+ * and it deletes only rows with that prefix before re-inserting, so it is
+ * re-runnable and cannot touch an account, order or cart a human created. The
+ * one exception is `uptime_sample`, which is cleared wholesale — nothing but a
+ * health monitor ever writes it, and the seed *is* the stand-in monitor.
+ *
+ * The published catalog is read out of `lib/config/browse-courses.ts` and its
+ * two companion files rather than re-authored here, so the student surfaces
+ * that still read those files and the admin surfaces that read the database
+ * describe the same 18 courses. Everything the student surfaces never needed —
+ * the review queue, categories, accounts, orders, the payout ledger, uptime —
+ * is in `prisma/seed-data.ts` or generated below.
+ *
+ * Two things about how it writes:
+ *  - All randomness runs through one seeded PRNG, so two runs produce
+ *    identical data and a number on a screenshot stays put.
+ *  - Ids are generated here rather than left to `@default(cuid())` even where
+ *    nothing needs to reference them, because that is what lets every table go
+ *    in through `createMany`. Roughly 8,000 rows over a single connection is
+ *    seconds batched and minutes row-by-row.
+ */
+
+import "dotenv/config"
+
+import { PrismaPg } from "@prisma/adapter-pg"
+
+import { Prisma, PrismaClient } from "@/lib/generated/prisma/client"
+import {
+  browseCourses,
+  type CourseLevel as BrowseLevel,
+} from "@/lib/config/browse-courses"
+import {
+  getCourseDetail,
+  type CourseSection as DetailSection,
+} from "@/lib/config/course-details"
+import {
+  getInstructorProfile,
+  instructorSlug,
+} from "@/lib/config/instructor-profiles"
+import {
+  categorySeeds,
+  categorySlugByBrowseCategory,
+  countryWeights,
+  extraInstructorSeeds,
+  featuredLearnerSeeds,
+  firstNames,
+  instructorApplicationSeeds,
+  lastNames,
+  pendingCourseSeeds,
+  reportedReviewSeeds,
+} from "./seed-data"
+
+const db = new PrismaClient({
+  // The CLI's direct endpoint, for the reason `prisma7.config.ts` gives: a
+  // long-running script wants session state, not PgBouncer's transaction mode.
+  adapter: new PrismaPg({
+    connectionString: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+  }),
+})
+
+const SEED = "seed_"
+const DAY = 24 * 60 * 60 * 1000
+const HOUR = 60 * 60 * 1000
+const NOW = new Date()
+
+/** Platform revenue share in basis points — `PlatformSetting`'s own default. */
+const REVENUE_SHARE_BPS = 7000
+/** Demo learner accounts, on top of the featured eight from the export. */
+const LEARNER_COUNT = 500
+/** How far back the oldest demo signup sits. */
+const SIGNUP_WINDOW_DAYS = 540
+
+// ---------------------------------------------------------------------------
+// Deterministic helpers
+// ---------------------------------------------------------------------------
+
+/** mulberry32 — small, fast, and identical across runs and platforms. */
+function makeRandom(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const rng = makeRandom(0x6c756d65)
+
+function ago(ms: number) {
+  return new Date(NOW.getTime() - ms)
+}
+
+function pick<T>(items: readonly T[]) {
+  return items[Math.floor(rng() * items.length)]!
+}
+
+function weighted<T extends string>(entries: readonly [T, number][]): T {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0)
+  let roll = rng() * total
+  for (const [value, weight] of entries) {
+    roll -= weight
+    if (roll <= 0) return value
+  }
+  return entries[entries.length - 1]![0]
+}
+
+function cents(dollars: number) {
+  return Math.round(dollars * 100)
+}
+
+function pad(value: number, width: number) {
+  return String(value).padStart(width, "0")
+}
+
+const LEVELS = {
+  Beginner: "BEGINNER",
+  Intermediate: "INTERMEDIATE",
+  Advanced: "ADVANCED",
+  "All Levels": "ALL_LEVELS",
+} as const satisfies Record<BrowseLevel, string>
+
+const LESSON_TYPES = {
+  video: "VIDEO",
+  article: "ARTICLE",
+  quiz: "QUIZ",
+  practice: "PRACTICE",
+} as const
+
+// ---------------------------------------------------------------------------
+// 0 · Clear what a previous run wrote
+// ---------------------------------------------------------------------------
+
+/**
+ * Order matters: `Course.instructor` and `Course.category` are required
+ * relations with no `onDelete`, which Postgres enforces as RESTRICT — so
+ * courses have to go before the rows they point at. Everything not listed here
+ * cascades from `User` or `Course`.
+ */
+async function clearSeededRows() {
+  const seeded = { id: { startsWith: SEED } }
+
+  await db.contentReport.deleteMany({ where: seeded })
+  await db.auditLog.deleteMany({ where: seeded })
+  await db.instructorEarning.deleteMany({ where: seeded })
+  await db.payout.deleteMany({ where: seeded })
+  await db.payoutRun.deleteMany({ where: seeded })
+  await db.payoutMethod.deleteMany({ where: seeded })
+  await db.user.deleteMany({ where: seeded })
+  await db.course.deleteMany({ where: seeded })
+  await db.instructor.deleteMany({ where: seeded })
+  await db.category.deleteMany({ where: seeded })
+  await db.uptimeSample.deleteMany({})
+}
+
+// ---------------------------------------------------------------------------
+// 1 · Platform settings
+// ---------------------------------------------------------------------------
+
+async function seedPlatformSettings() {
+  await db.platformSetting.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton", defaultRevenueShareBps: REVENUE_SHARE_BPS },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 2 · Categories
+// ---------------------------------------------------------------------------
+
+/** Returns slug -> row id. Parents come before children by list order. */
+async function seedCategories() {
+  const ids = new Map<string, string>()
+
+  for (const [index, seed] of categorySeeds.entries()) {
+    const id = `${SEED}cat_${seed.slug}`
+    await db.category.create({
+      data: {
+        id,
+        slug: seed.slug,
+        name: seed.name,
+        description: seed.description,
+        accentColor: seed.accentColor,
+        // Only top-level categories are offered in the browse menu.
+        showInNav: !seed.parentSlug,
+        order: index,
+        parentId: seed.parentSlug ? (ids.get(seed.parentSlug) ?? null) : null,
+      },
+    })
+    ids.set(seed.slug, id)
+  }
+
+  return ids
+}
+
+// ---------------------------------------------------------------------------
+// 3 · Instructors, and the accounts behind them
+// ---------------------------------------------------------------------------
+
+type InstructorRow = { id: string; slug: string; name: string; userId: string }
+
+type InstructorSeed = {
+  slug: string
+  name: string
+  title: string
+  bio: string
+  about: string[]
+  skills: string[]
+  avatarUrl?: string
+  teachingSince: number
+  rating: number
+  reviewsCount: number
+  studentsCount: number
+}
+
+async function seedInstructors() {
+  const seeds: InstructorSeed[] = []
+
+  for (const name of new Set(
+    browseCourses.map((course) => course.instructor)
+  )) {
+    const slug = instructorSlug(name)
+    const profile = getInstructorProfile(slug)
+    if (!profile) throw new Error(`No profile for instructor ${name}`)
+
+    // The one-line bio belongs to the sale page's instructor card, which
+    // `course-details.ts` builds; the profile page's `about` is the long form.
+    const first = profile.courses[0]
+    const bio = first
+      ? (getCourseDetail(first.slug)?.instructorProfile.bio ?? "")
+      : ""
+
+    seeds.push({ ...profile, slug, bio })
+  }
+
+  seeds.push(...extraInstructorSeeds)
+
+  await db.user.createMany({
+    data: seeds.map((seed) => ({
+      id: `${SEED}u_ins_${seed.slug}`,
+      name: seed.name,
+      email: `${seed.slug}@lumen.co`,
+      emailVerified: true,
+      image: seed.avatarUrl ?? null,
+      role: "instructor",
+      status: "ACTIVE" as const,
+      urls: [],
+      createdAt: new Date(Date.UTC(seed.teachingSince, 0, 15)),
+    })),
+  })
+
+  await db.instructor.createMany({
+    data: seeds.map((seed) => ({
+      id: `${SEED}ins_${seed.slug}`,
+      slug: seed.slug,
+      userId: `${SEED}u_ins_${seed.slug}`,
+      name: seed.name,
+      title: seed.title,
+      bio: seed.bio,
+      about: seed.about,
+      skills: seed.skills,
+      imageUrl: seed.avatarUrl ?? null,
+      teachingSince: seed.teachingSince,
+      rating: seed.rating,
+      reviewsCount: seed.reviewsCount,
+      studentsCount: seed.studentsCount,
+    })),
+  })
+
+  return new Map<string, InstructorRow>(
+    seeds.map((seed) => [
+      seed.slug,
+      {
+        id: `${SEED}ins_${seed.slug}`,
+        slug: seed.slug,
+        name: seed.name,
+        userId: `${SEED}u_ins_${seed.slug}`,
+      },
+    ])
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 4 · The published catalog
+// ---------------------------------------------------------------------------
+
+type CourseRow = {
+  id: string
+  slug: string
+  title: string
+  priceCents: number
+  instructorId: string
+  publishedAt: Date
+}
+
+async function seedPublishedCourses(
+  categories: Map<string, string>,
+  instructors: Map<string, InstructorRow>
+) {
+  const rows: CourseRow[] = []
+  const courseData: Prisma.CourseCreateManyInput[] = []
+  const submissions: Prisma.CourseSubmissionCreateManyInput[] = []
+  const curricula: { courseId: string; sections: DetailSection[] }[] = []
+  const last = browseCourses.length - 1
+
+  for (const [index, course] of browseCourses.entries()) {
+    const detail = getCourseDetail(course.slug)
+    if (!detail) throw new Error(`No detail for course ${course.slug}`)
+
+    const instructor = instructors.get(instructorSlug(course.instructor))!
+    const categoryId = categories.get(
+      categorySlugByBrowseCategory[course.category]
+    )!
+
+    // Spread publication back over ~two years, newest first, so "live courses
+    // grew N%" is a real month-over-month comparison rather than every course
+    // landing on the same day. The newest lands inside the last 30 days.
+    const publishedAt = ago((12 + (last - index) * 40) * DAY)
+    const submittedAt = new Date(publishedAt.getTime() - 6 * DAY)
+    const lessons = detail.sections.flatMap((section) => section.lessons)
+    const id = `${SEED}c_${course.slug}`
+
+    courseData.push({
+      id,
+      slug: course.slug,
+      title: course.title,
+      subtitle: detail.subtitle,
+      description: detail.description,
+      instructorId: instructor.id,
+      categoryId,
+      level: LEVELS[course.level],
+      durationHours: course.durationHours,
+      rating: course.rating,
+      // The written-review count, far smaller than the student count in
+      // `BrowseCourse.reviews` — see `CourseDetail.reviewsCount`.
+      reviewsCount: detail.reviewsCount,
+      priceCents: cents(course.price),
+      listPriceCents: cents(course.listPrice),
+      saleEndsAt: new Date(NOW.getTime() + detail.saleEndsInDays * DAY),
+      requirements: detail.requirements,
+      learningOutcomes: detail.learningOutcomes,
+      videoHours: detail.includes.videoHours,
+      articlesCount: detail.includes.articlesCount,
+      quizzesCount: detail.includes.quizzesCount,
+      hasDownloadableResources: detail.includes.downloadableResources,
+      hasCertificate: detail.includes.certificate,
+      lifetimeAccess: detail.includes.lifetimeAccess,
+      status: "PUBLISHED",
+      submittedAt,
+      publishedAt,
+      // `BrowseCourse.reviews` is the catalog's student count — what the sale
+      // page's "students" stat and the admin overview's top-courses table both
+      // draw. It is the denormalised total the schema documents, and it
+      // therefore carries history the demo `enrollment` rows below do not
+      // reproduce: those only exist for the 508 demo accounts.
+      enrollmentCount: course.reviews,
+      lessonCount: lessons.length,
+      totalDurationMinutes: course.durationHours * 60,
+      createdAt: submittedAt,
+    })
+
+    submissions.push({
+      id: `${SEED}sub_${course.slug}`,
+      courseId: id,
+      submittedById: instructor.userId,
+      submittedAt,
+      decision: "APPROVED",
+      reviewedAt: publishedAt,
+      changeReasons: [],
+    })
+
+    curricula.push({ courseId: id, sections: detail.sections })
+
+    rows.push({
+      id,
+      slug: course.slug,
+      title: course.title,
+      priceCents: cents(course.price),
+      instructorId: instructor.id,
+      publishedAt,
+    })
+  }
+
+  await db.course.createMany({ data: courseData })
+  await db.courseSubmission.createMany({ data: submissions })
+  for (const { courseId, sections } of curricula) {
+    await seedCurriculum(courseId, sections)
+  }
+
+  return rows
+}
+
+async function seedCurriculum(courseId: string, sections: DetailSection[]) {
+  const lessons: Prisma.CourseLessonCreateManyInput[] = []
+
+  await db.courseSection.createMany({
+    data: sections.map((section, index) => ({
+      id: `${SEED}sec_${courseId.slice(SEED.length)}_${index}`,
+      courseId,
+      title: section.title,
+      order: index,
+    })),
+  })
+
+  for (const [sectionIndex, section] of sections.entries()) {
+    const sectionId = `${SEED}sec_${courseId.slice(SEED.length)}_${sectionIndex}`
+    for (const [lessonIndex, lesson] of section.lessons.entries()) {
+      lessons.push({
+        id: `${sectionId}_${lessonIndex}`,
+        sectionId,
+        title: lesson.title,
+        type: LESSON_TYPES[lesson.type],
+        durationMinutes: lesson.minutes ?? null,
+        questionsCount: lesson.questions ?? null,
+        isPreview: lesson.preview ?? false,
+        previewSeconds: lesson.previewSeconds ?? null,
+        isPublished: true,
+        order: lessonIndex,
+      })
+    }
+  }
+
+  await db.courseLesson.createMany({ data: lessons })
+}
+
+// ---------------------------------------------------------------------------
+// 5 · The review queue
+// ---------------------------------------------------------------------------
+
+async function seedPendingCourses(
+  categories: Map<string, string>,
+  instructors: Map<string, InstructorRow>,
+  reviewerId: string | null
+) {
+  for (const seed of pendingCourseSeeds) {
+    const instructor = instructors.get(seed.instructorSlug)
+    if (!instructor)
+      throw new Error(`Unknown instructor slug ${seed.instructorSlug}`)
+
+    const submittedAt =
+      seed.submittedHoursAgo === undefined
+        ? null
+        : ago(seed.submittedHoursAgo * HOUR)
+
+    const id = `${SEED}c_${seed.slug}`
+    await db.course.create({
+      data: {
+        id,
+        slug: seed.slug,
+        title: seed.title,
+        subtitle: seed.subtitle,
+        description: seed.description,
+        instructorId: instructor.id,
+        categoryId: categories.get(seed.categorySlug)!,
+        level: LEVELS[seed.level],
+        durationHours: seed.durationHours,
+        priceCents: seed.priceCents,
+        listPriceCents: seed.listPriceCents,
+        requirements: seed.requirements,
+        learningOutcomes: seed.learningOutcomes,
+        videoHours: Math.max(1, Math.round(seed.durationHours * 0.8)),
+        articlesCount: Math.max(1, Math.round(seed.lessonCount * 0.15)),
+        quizzesCount: seed.status === "NEEDS_CHANGES" ? 0 : 2,
+        status: seed.status,
+        submittedAt,
+        lessonCount: seed.lessonCount,
+        totalDurationMinutes: seed.durationHours * 60,
+        createdAt: submittedAt
+          ? new Date(submittedAt.getTime() - 21 * DAY)
+          : ago(9 * DAY),
+      },
+    })
+
+    if (!submittedAt) continue
+
+    const decided =
+      seed.status === "NEEDS_CHANGES" || seed.status === "REJECTED"
+    const submissionId = `${SEED}sub_${seed.slug}`
+    await db.courseSubmission.create({
+      data: {
+        id: submissionId,
+        courseId: id,
+        submittedById: instructor.userId,
+        submittedAt,
+        decision: decided
+          ? seed.status === "REJECTED"
+            ? "REJECTED"
+            : "CHANGES_REQUESTED"
+          : null,
+        reviewedById: decided ? reviewerId : null,
+        reviewedAt: decided
+          ? new Date(submittedAt.getTime() + 20 * HOUR)
+          : null,
+        changeReasons: seed.changeReasons ?? [],
+        noteToInstructor: seed.noteToInstructor ?? null,
+      },
+    })
+
+    // The submission checklist from the admin course view: three rows computed
+    // off the curriculum, and the audio verdict, which is a human one.
+    const longEnough = seed.lessonCount >= 10 && seed.durationHours >= 5
+    await db.courseSubmissionCheck.createMany({
+      data: [
+        {
+          submissionId,
+          key: "min_lessons_and_video",
+          label: "At least 10 lessons and 5 hours of video",
+          passed: longEnough,
+        },
+        {
+          submissionId,
+          key: "cover_resolution",
+          label: "Cover image is at least 1280 × 720",
+          passed: true,
+        },
+        {
+          submissionId,
+          key: "closes_with_quiz",
+          label: "Closes with a graded quiz or project",
+          passed: seed.status !== "NEEDS_CHANGES",
+        },
+        {
+          submissionId,
+          key: "audio_quality",
+          label: "Audio is clear with no background noise",
+          passed: true,
+          automated: false,
+        },
+      ],
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6 · Accounts
+// ---------------------------------------------------------------------------
+
+type LearnerRow = { id: string; name: string; email: string; createdAt: Date }
+
+/**
+ * Signups ramp from ~0.4/day to ~1.8/day across the window, which is what
+ * makes the overview's month-over-month deltas mean anything: a flat
+ * distribution puts the same number in every window and every card reads
+ * +0.0%.
+ */
+function signupDates(count: number) {
+  const weights = Array.from({ length: SIGNUP_WINDOW_DAYS }, (_, day) => {
+    const progress = day / (SIGNUP_WINDOW_DAYS - 1)
+    return 0.4 + 1.4 * progress
+  })
+  const total = weights.reduce((sum, weight) => sum + weight, 0)
+
+  const dates: Date[] = []
+  let carry = 0
+  for (const [day, weight] of weights.entries()) {
+    carry += (weight / total) * count
+    while (carry >= 1) {
+      const daysAgo = SIGNUP_WINDOW_DAYS - 1 - day
+      dates.push(ago(daysAgo * DAY + Math.floor(rng() * DAY)))
+      carry -= 1
+    }
+  }
+  // Rounding remainder — park it on today rather than dropping accounts.
+  while (dates.length < count) dates.push(ago(Math.floor(rng() * DAY)))
+  return dates
+}
+
+async function seedLearners() {
+  const dates = signupDates(LEARNER_COUNT + featuredLearnerSeeds.length)
+  const learners: LearnerRow[] = []
+  const admins: string[] = []
+  const users: Prisma.UserCreateManyInput[] = []
+  const business: { userId: string; since: Date }[] = []
+  const taken = new Set(featuredLearnerSeeds.map((seed) => seed.email))
+
+  // The export's own eight rows first, so page one of the Users table matches
+  // it; they take the newest signup dates so they sit at the top by default.
+  for (const [index, seed] of featuredLearnerSeeds.entries()) {
+    const id = `${SEED}u_f${pad(index, 2)}`
+    const createdAt = dates[dates.length - 1 - index]!
+    users.push({
+      id,
+      name: seed.name,
+      email: seed.email,
+      emailVerified: seed.status !== "PENDING",
+      role: seed.role,
+      status: seed.status,
+      country: seed.country,
+      urls: [],
+      createdAt,
+    })
+    if (seed.role === "admin") admins.push(id)
+    if (seed.plan === "business")
+      business.push({ userId: id, since: createdAt })
+    learners.push({ id, name: seed.name, email: seed.email, createdAt })
+  }
+
+  for (let index = 0; index < LEARNER_COUNT; index++) {
+    const name = `${pick(firstNames)} ${pick(lastNames)}`
+    const base = name.toLowerCase().replace(/[^a-z]+/g, ".")
+    let email = `${base}@example.com`
+    let suffix = 2
+    while (taken.has(email)) email = `${base}${suffix++}@example.com`
+    taken.add(email)
+
+    // Roughly the mix the Users export draws: mostly active, a few invited
+    // accounts that never signed in, some dormant, a handful suspended.
+    const status = weighted([
+      ["ACTIVE", 86],
+      ["PENDING", 5],
+      ["INACTIVE", 7],
+      ["SUSPENDED", 2],
+    ] as const)
+
+    const id = `${SEED}u_l${pad(index, 4)}`
+    const createdAt = dates[index]!
+    users.push({
+      id,
+      name,
+      email,
+      emailVerified: status !== "PENDING",
+      role: "user",
+      status,
+      banned: status === "SUSPENDED",
+      banReason: status === "SUSPENDED" ? "Repeated review spam" : null,
+      country: weighted(countryWeights as [string, number][]),
+      urls: [],
+      createdAt,
+    })
+
+    if (rng() < 0.18) business.push({ userId: id, since: createdAt })
+    learners.push({ id, name, email, createdAt })
+  }
+
+  await db.user.createMany({ data: users })
+  await db.subscription.createMany({
+    data: business.map(({ userId, since }, index) => ({
+      userId,
+      stripeSubscriptionId: `sub_${SEED}${pad(index, 5)}`,
+      stripePriceId:
+        index % 3 === 0 ? "price_business_year" : "price_business_month",
+      plan: "business",
+      status: "ACTIVE" as const,
+      interval: (index % 3 === 0 ? "YEAR" : "MONTH") as "YEAR" | "MONTH",
+      currentPeriodEnd: new Date(NOW.getTime() + 20 * DAY),
+      createdAt: since,
+    })),
+  })
+
+  return { learners, admins }
+}
+
+// ---------------------------------------------------------------------------
+// 7 · Orders, enrolments and the earnings ledger
+// ---------------------------------------------------------------------------
+
+type EnrollmentRow = {
+  id: string
+  userId: string
+  courseId: string
+  orderId: string
+  paidAt: Date
+}
+
+async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
+  const orders: Prisma.OrderCreateManyInput[] = []
+  const items: Prisma.OrderItemCreateManyInput[] = []
+  const earnings: Prisma.InstructorEarningCreateManyInput[] = []
+  const enrollments: EnrollmentRow[] = []
+  const netByInstructor = new Map<string, number>()
+  let orderIndex = 0
+
+  for (const learner of learners) {
+    const basket = Number(
+      weighted([
+        ["0", 22],
+        ["1", 30],
+        ["2", 22],
+        ["3", 13],
+        ["4", 8],
+        ["5", 5],
+      ] as const)
+    )
+    if (basket === 0) continue
+
+    // Only courses that were already live — an order cannot predate the thing
+    // it bought, and the catalog was published over two years.
+    const available = courses.filter(
+      (course) => course.publishedAt < learner.createdAt
+    )
+    if (available.length === 0) continue
+
+    const chosen: CourseRow[] = []
+    const wanted = Math.min(basket, available.length)
+    while (chosen.length < wanted) {
+      const candidate = pick(available)
+      if (!chosen.some((course) => course.id === candidate.id))
+        chosen.push(candidate)
+    }
+
+    const paidAt = new Date(
+      learner.createdAt.getTime() + Math.floor(rng() * 6 * DAY)
+    )
+    if (paidAt > NOW) continue
+
+    const subtotal = chosen.reduce((sum, course) => sum + course.priceCents, 0)
+    const orderId = `${SEED}o_${pad(orderIndex++, 5)}`
+
+    orders.push({
+      id: orderId,
+      userId: learner.id,
+      stripeSessionId: `cs_test_${orderId}`,
+      stripePaymentIntentId: `pi_test_${orderId}`,
+      status: "PAID",
+      amountTotal: subtotal,
+      subtotalCents: subtotal,
+      email: learner.email,
+      createdAt: paidAt,
+      paidAt,
+    })
+
+    for (const [itemIndex, course] of chosen.entries()) {
+      const itemId = `${orderId}_i${itemIndex}`
+      items.push({
+        id: itemId,
+        orderId,
+        courseSlug: course.slug,
+        courseId: course.id,
+        title: course.title,
+        unitAmount: course.priceCents,
+        instructorId: course.instructorId,
+        revenueShareBps: REVENUE_SHARE_BPS,
+      })
+
+      const net = Math.round((course.priceCents * REVENUE_SHARE_BPS) / 10000)
+      const clearsAt = new Date(paidAt.getTime() + 30 * DAY)
+      earnings.push({
+        id: `${SEED}e_${pad(earnings.length, 6)}`,
+        instructorId: course.instructorId,
+        courseId: course.id,
+        orderItemId: itemId,
+        source: "SALE",
+        grossCents: course.priceCents,
+        platformFeeCents: course.priceCents - net,
+        netCents: net,
+        // Cleared and old enough to have been swept up by one of the monthly
+        // runs below; cleared but recent; or still inside its 30 days.
+        status:
+          clearsAt < ago(40 * DAY)
+            ? "PAID"
+            : clearsAt < NOW
+              ? "AVAILABLE"
+              : "PENDING",
+        clearsAt,
+        createdAt: paidAt,
+      })
+      netByInstructor.set(
+        course.instructorId,
+        (netByInstructor.get(course.instructorId) ?? 0) + net
+      )
+
+      enrollments.push({
+        id: `${orderId}_e${itemIndex}`,
+        userId: learner.id,
+        courseId: course.id,
+        orderId,
+        paidAt,
+      })
+    }
+  }
+
+  await db.order.createMany({ data: orders })
+  await db.orderItem.createMany({ data: items })
+  await db.instructorEarning.createMany({ data: earnings })
+
+  await db.enrollment.createMany({
+    data: enrollments.map(({ id, userId, courseId, orderId, paidAt }) => {
+      const progress = Math.floor(rng() * 101)
+      return {
+        id,
+        userId,
+        courseId,
+        source: "PURCHASE" as const,
+        orderId,
+        progressPercent: progress,
+        completedAt:
+          progress === 100 ? new Date(paidAt.getTime() + 30 * DAY) : null,
+        lastAccessedAt: new Date(
+          paidAt.getTime() + Math.floor(rng() * 40 * DAY)
+        ),
+        createdAt: paidAt,
+      }
+    }),
+  })
+
+  return { enrollments, netByInstructor, orderCount: orders.length }
+}
+
+// ---------------------------------------------------------------------------
+// 8 · Reviews, and the three that get reported
+// ---------------------------------------------------------------------------
+
+const REVIEW_BODIES = [
+  {
+    title: "Finally clicked for me",
+    body: "I had tried two other courses on this and bounced off both. The order things are introduced in here is what made the difference.",
+  },
+  {
+    title: "Worth every minute",
+    body: "Dense but never rushed. I did the exercises properly and came out with something I actually use at work.",
+  },
+  {
+    title: "Great pacing",
+    body: "Short lessons that each do one thing, so it is easy to pick back up after a few days away.",
+  },
+  {
+    title: "Good, with caveats",
+    body: "Excellent first two thirds. The last section assumes a bit more than the requirements suggest, so budget extra time.",
+  },
+  {
+    title: "Exactly what I needed",
+    body: "I came in for one specific topic and left with a much better mental model of the whole area.",
+  },
+  {
+    title: "Solid but dated in places",
+    body: "The fundamentals hold up completely. A couple of the tool screens have moved since recording.",
+  },
+]
+
+async function seedReviews(
+  enrollments: EnrollmentRow[],
+  courses: CourseRow[],
+  instructors: Map<string, InstructorRow>
+) {
+  const bySlug = new Map(courses.map((course) => [course.slug, course]))
+
+  // Hold one enrolment per reported course back, so its review can be the
+  // reported one rather than colliding on `@@unique([courseId, userId])`.
+  const reservations = new Map<string, EnrollmentRow>()
+  for (const seed of reportedReviewSeeds) {
+    const course = bySlug.get(seed.courseSlug)
+    if (!course) continue
+    const match = enrollments.find(
+      (enrollment) =>
+        enrollment.courseId === course.id &&
+        ![...reservations.values()].some((held) => held.id === enrollment.id)
+    )
+    if (match) reservations.set(seed.courseSlug, match)
+  }
+  const reserved = new Set([...reservations.values()].map((row) => row.id))
+
+  const rows: Prisma.CourseReviewCreateManyInput[] = []
+  for (const enrollment of enrollments) {
+    if (reserved.has(enrollment.id)) continue
+    if (rng() > 0.32) continue
+
+    const copy = pick(REVIEW_BODIES)
+    rows.push({
+      id: `${SEED}rv_${pad(rows.length, 6)}`,
+      courseId: enrollment.courseId,
+      userId: enrollment.userId,
+      enrollmentId: enrollment.id,
+      rating: rng() < 0.72 ? 5 : rng() < 0.75 ? 4 : 3,
+      title: copy.title,
+      body: copy.body,
+      createdAt: ago(Math.floor(rng() * 300) * DAY),
+    })
+  }
+
+  const instructorUserIds = [...instructors.values()].map((row) => row.userId)
+  const reports: Prisma.ContentReportCreateManyInput[] = []
+
+  for (const [index, seed] of reportedReviewSeeds.entries()) {
+    const reservation = reservations.get(seed.courseSlug)
+    const course = bySlug.get(seed.courseSlug)
+    if (!reservation || !course) continue
+
+    const reviewId = `${SEED}rv_flagged_${index}`
+    rows.push({
+      id: reviewId,
+      courseId: course.id,
+      userId: reservation.userId,
+      enrollmentId: reservation.id,
+      rating: seed.rating,
+      title: seed.title,
+      body: seed.body,
+      reportCount: 1,
+      createdAt: ago((3 + index) * DAY),
+    })
+
+    // Reporters are instructor accounts, which is what makes the overview's
+    // "Flagged by instructors" a fact about the rows rather than a caption.
+    reports.push({
+      id: `${SEED}rep_${index}`,
+      reporterId: instructorUserIds[index % instructorUserIds.length]!,
+      targetType: "REVIEW",
+      targetId: reviewId,
+      targetLabel: `Review on ${course.title}`,
+      reason: seed.reason,
+      note: seed.note,
+      status: "OPEN",
+      createdAt: ago((2 + index) * DAY),
+    })
+  }
+
+  await db.courseReview.createMany({ data: rows })
+  await db.contentReport.createMany({ data: reports })
+
+  return rows.length
+}
+
+// ---------------------------------------------------------------------------
+// 9 · Instructor applications
+// ---------------------------------------------------------------------------
+
+async function seedApplications(
+  learners: LearnerRow[],
+  reviewerId: string | null
+) {
+  await db.instructorApplication.createMany({
+    data: instructorApplicationSeeds.flatMap((seed, index) => {
+      const applicant = learners[learners.length - 1 - index]
+      if (!applicant) return []
+      const createdAt = ago(seed.hoursAgo * HOUR)
+      const decided = seed.status !== "PENDING"
+      return [
+        {
+          id: `${SEED}app_${pad(index, 2)}`,
+          userId: applicant.id,
+          pitch: seed.pitch,
+          portfolioUrls: seed.portfolioUrls,
+          status: seed.status,
+          reviewedById: decided ? reviewerId : null,
+          reviewedAt: decided ? new Date(createdAt.getTime() + 3 * DAY) : null,
+          decisionNote:
+            seed.status === "REJECTED"
+              ? "Guaranteed-return claims are not permitted on Lumen."
+              : null,
+          createdAt,
+        },
+      ]
+    }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 10 · Payout runs
+// ---------------------------------------------------------------------------
+
+/**
+ * Three monthly runs: two settled, and next month's still scheduled. The
+ * failed payout in the most recent settled run is what the overview's "1
+ * failed payout" counts, and the scheduled run's date is the "retry scheduled
+ * for" beside it — a failed transfer rolls into the next run rather than
+ * carrying a retry column of its own.
+ */
+async function seedPayouts(
+  instructors: Map<string, InstructorRow>,
+  netByInstructor: Map<string, number>
+) {
+  const rows = [...instructors.values()]
+
+  await db.payoutMethod.createMany({
+    data: rows.map((instructor, index) => ({
+      id: `${SEED}pm_${instructor.slug}`,
+      instructorId: instructor.id,
+      type: (index % 4 === 3 ? "PAYPAL" : "BANK_TRANSFER") as
+        "PAYPAL" | "BANK_TRANSFER",
+      label:
+        index % 4 === 3
+          ? `${instructor.slug}@lumen.co`
+          : ["Revolut Bank", "Wise", "Chase", "N26"][index % 4]!,
+      last4: index % 4 === 3 ? null : String(4000 + index * 7).slice(-4),
+      role: "PRIMARY" as const,
+      verifiedAt: ago(200 * DAY),
+      createdAt: ago(220 * DAY),
+    })),
+  })
+
+  const firstOfMonth = (monthsBack: number) =>
+    new Date(
+      Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() - monthsBack, 1, 9)
+    )
+
+  const reference = (date: Date) =>
+    `RUN-${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1, 2)}`
+
+  for (const run of [
+    { monthsBack: 2, status: "COMPLETED" as const, failIndex: -1 },
+    { monthsBack: 1, status: "PARTIALLY_FAILED" as const, failIndex: 2 },
+  ]) {
+    const scheduledFor = firstOfMonth(run.monthsBack)
+    const ref = reference(scheduledFor)
+
+    const slices = rows.map((instructor, index) => ({
+      instructor,
+      index,
+      // Half the cleared ledger per run, with a floor so an instructor with
+      // almost no sales still appears as a recipient.
+      amountCents: Math.max(
+        2500,
+        Math.round((netByInstructor.get(instructor.id) ?? 0) * 0.5)
+      ),
+    }))
+
+    await db.payoutRun.create({
+      data: {
+        id: `${SEED}run_${ref}`,
+        reference: ref,
+        scheduledFor,
+        status: run.status,
+        totalCents: slices.reduce((sum, slice) => sum + slice.amountCents, 0),
+        recipientCount: slices.length,
+        completedAt: new Date(scheduledFor.getTime() + 4 * HOUR),
+        createdAt: new Date(scheduledFor.getTime() - DAY),
+      },
+    })
+
+    await db.payout.createMany({
+      data: slices.map((slice) => {
+        const failed = slice.index === run.failIndex
+        return {
+          id: `${SEED}po_${ref}_${slice.instructor.slug}`,
+          reference: `PO-${ref.slice(4).replace("-", "")}-${10428 + slice.index}`,
+          payoutRunId: `${SEED}run_${ref}`,
+          instructorId: slice.instructor.id,
+          payoutMethodId: `${SEED}pm_${slice.instructor.slug}`,
+          amountCents: slice.amountCents,
+          status: (failed ? "FAILED" : "PAID") as "FAILED" | "PAID",
+          failureReason: failed
+            ? "The bank rejected the transfer: account details could not be verified."
+            : null,
+          paidAt: failed ? null : new Date(scheduledFor.getTime() + 3 * HOUR),
+          createdAt: scheduledFor,
+        }
+      }),
+    })
+  }
+
+  const next = firstOfMonth(-1)
+  await db.payoutRun.create({
+    data: {
+      id: `${SEED}run_${reference(next)}`,
+      reference: reference(next),
+      scheduledFor: next,
+      status: "SCHEDULED",
+      recipientCount: rows.length,
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 11 · Uptime
+// ---------------------------------------------------------------------------
+
+/**
+ * Ninety days of minute-by-minute health checks, rolled up per day. The recent
+ * month is deliberately cleaner than the one before it, so the card's delta is
+ * a real improvement rather than noise.
+ */
+async function seedUptime() {
+  const CHECKS_PER_DAY = 1440
+  /** Which day — counting back from yesterday — absorbed how many failures. */
+  const failures = new Map<number, number>([
+    [6, 5],
+    [19, 4],
+    [33, 21],
+    [41, 12],
+    [48, 9],
+    [55, 10],
+    [67, 14],
+    [78, 7],
+  ])
+
+  await db.uptimeSample.createMany({
+    data: Array.from({ length: 90 }, (_, index) => {
+      const daysAgo = index + 1
+      const day = new Date(NOW.getTime() - daysAgo * DAY)
+      day.setUTCHours(0, 0, 0, 0)
+      return {
+        id: `${SEED}up_${day.toISOString().slice(0, 10)}`,
+        day,
+        checksTotal: CHECKS_PER_DAY,
+        checksOk: CHECKS_PER_DAY - (failures.get(daysAgo) ?? 0),
+      }
+    }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 12 · Audit log
+// ---------------------------------------------------------------------------
+
+async function seedAuditLog(actorId: string | null, actorName: string) {
+  const entries = [
+    {
+      action: "Approved instructor application",
+      category: "MEMBERS" as const,
+      targetLabel: "Technical writing for engineers",
+      hoursAgo: 568,
+    },
+    {
+      action: "Rejected course submission",
+      category: "COURSES" as const,
+      targetLabel: "Writing That Converts",
+      hoursAgo: 700,
+    },
+    {
+      action: "Requested changes on submission",
+      category: "COURSES" as const,
+      targetLabel: "Brand Identity Workshop",
+      hoursAgo: 54,
+    },
+    {
+      action: "Suspended account after 5 failed sign-ins",
+      category: "SECURITY" as const,
+      targetLabel: "sasha.petrov@example.com",
+      hoursAgo: 30,
+      system: true,
+    },
+    {
+      action: "Retried failed payout",
+      category: "BILLING" as const,
+      targetLabel: "PO-202609-10430",
+      hoursAgo: 22,
+    },
+    {
+      action: "Removed reported review",
+      category: "MEMBERS" as const,
+      targetLabel: "Review on Design Systems in Figma",
+      hoursAgo: 96,
+    },
+  ]
+
+  await db.auditLog.createMany({
+    data: entries.map((entry, index) => ({
+      id: `${SEED}audit_${pad(index, 3)}`,
+      // Nullable on purpose — the export draws a **System** actor for the
+      // automatic entries.
+      actorId: entry.system ? null : actorId,
+      actorName: entry.system ? "System" : actorName,
+      actorRole: entry.system ? null : "admin",
+      action: entry.action,
+      targetLabel: entry.targetLabel,
+      category: entry.category,
+      ipAddress: entry.system ? null : "203.0.113.24",
+      createdAt: ago(entry.hoursAgo * HOUR),
+    })),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Run
+// ---------------------------------------------------------------------------
+
+async function main() {
+  console.log("clearing previously seeded rows…")
+  await clearSeededRows()
+
+  await seedPlatformSettings()
+
+  const categories = await seedCategories()
+  console.log(`categories        ${categories.size}`)
+
+  const instructors = await seedInstructors()
+  console.log(`instructors       ${instructors.size}`)
+
+  const courses = await seedPublishedCourses(categories, instructors)
+  console.log(`published courses ${courses.length}`)
+
+  const { learners, admins } = await seedLearners()
+  const reviewerId = admins[0] ?? null
+  console.log(`accounts          ${learners.length} (${admins.length} admin)`)
+
+  await seedPendingCourses(categories, instructors, reviewerId)
+  console.log(`queued courses    ${pendingCourseSeeds.length}`)
+
+  const { enrollments, netByInstructor, orderCount } = await seedPurchases(
+    learners,
+    courses
+  )
+  console.log(`orders            ${orderCount}`)
+  console.log(`enrolments        ${enrollments.length}`)
+
+  const reviews = await seedReviews(enrollments, courses, instructors)
+  console.log(`reviews           ${reviews}`)
+
+  await seedApplications(learners, reviewerId)
+  await seedPayouts(instructors, netByInstructor)
+  await seedUptime()
+  await seedAuditLog(
+    reviewerId,
+    featuredLearnerSeeds.find((seed) => seed.role === "admin")?.name ?? "System"
+  )
+
+  console.log("done")
+}
+
+main()
+  .then(() => db.$disconnect())
+  .catch(async (error) => {
+    console.error(error)
+    await db.$disconnect()
+    process.exit(1)
+  })

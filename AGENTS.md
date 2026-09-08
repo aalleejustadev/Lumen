@@ -42,6 +42,7 @@ npm run db:migrate  # prisma migrate dev — author + apply a migration
 npm run db:deploy   # prisma migrate deploy — apply pending migrations (CI/prod)
 npm run db:push     # prisma db push — sync schema without a migration file
 npm run db:studio   # prisma studio
+npm run db:seed     # prisma db seed — populates the platform tables
 ```
 
 There is no test setup. Verify changes with `npm run typecheck` and `npm run lint`.
@@ -66,6 +67,33 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   ESLint-ignored; never edit it, re-run `npm run db:generate` instead.
 - `prisma/schema.prisma` — models. `prisma/migrations/` appears with the first
   `npm run db:migrate`.
+- `prisma/seed.ts` + `prisma/seed-data.ts` — the platform seed
+  (`npm run db:seed`), wired through `prisma7.config.ts`'s `migrations.seed`
+  because Prisma 7 no longer runs it off the back of `migrate dev`. It is what
+  makes `/dashboard/admin` real: ~8,000 rows across categories, instructors,
+  courses, accounts, orders, the earnings ledger, moderation and uptime.
+  Four things about it are load-bearing:
+  - **Every row it writes carries a `seed_` id prefix and it deletes only
+    those** before re-inserting, so it is re-runnable and cannot touch an
+    account, cart or order a human made. Ids are supplied rather than left to
+    `@default(cuid())` even where nothing references them — that is what lets
+    each table go in through one `createMany`, which is the difference between
+    seconds and minutes over a single connection. `uptime_sample` is the one
+    table cleared wholesale: nothing but a health monitor writes it, and the
+    seed is the stand-in monitor.
+  - **The published catalog is read out of `lib/config/browse-courses.ts` /
+    `course-details.ts` / `instructor-profiles.ts`, not re-authored.** Those
+    files still drive the student surfaces, so re-authoring the same 18 courses
+    in the seed would give the two halves of the app different catalogs.
+    `prisma/seed-data.ts` holds only what the student surfaces never needed:
+    the six admin categories, the review queue, the demo-account pools, the
+    moderation and application copy. `tsx` is a devDependency purely so the
+    seed can resolve the `@/*` alias those imports use.
+  - **Delete order matters.** `Course.instructor` and `Course.category` are
+    required relations with no `onDelete`, which Postgres enforces as RESTRICT
+    — courses have to go before instructors and categories.
+  - **All randomness runs through one seeded PRNG**, so two runs produce
+    identical data and a figure in a screenshot stays put.
 - `lib/auth.ts` — Better Auth server config (Prisma adapter, email+password,
   Google/GitHub, `admin` plugin). Server-side only.
 - `lib/auth-client.ts` — the browser client (`signIn`, `signUp`, `useSession`,
@@ -771,6 +799,74 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   pull them. `next.config.ts` raises `serverActions.bodySizeLimit` to 5mb
   because the file is posted through a Server Action, which caps bodies at 1MB
   by default.
+- `components/dashboard/admin/` — the admin console. `/dashboard/admin` is the
+  Platform Overview page, from
+  `ui-design/light/dashboard/admin/platform-overview.png`: `platform-stats.tsx`
+  (the four-up KPI row), `attention-list.tsx` ("Needs your attention"),
+  `top-courses-card.tsx`, and `platform-format.ts` (the number and date
+  formatting the first two share — presentation, kept beside the components the
+  way `settings-controls.ts` is), composed by `platform-overview.tsx`.
+  **Nothing on the page is demo data**: `lib/admin/overview.ts` is three
+  queries and `lib/config/admin-overview.ts` is every word the page says. That
+  split is the point — the numbers have to come from the database, the phrasing
+  around them is copy, and a queue's second line ("Oldest submitted 2 days
+  ago", "All submitted this week", "Flagged by instructors") is copy written
+  against *facts* the query returns rather than a sentence the query builds.
+  Measured off the export at DPR 2: full content width on the dashboard's usual
+  32px inset, 16px between cards in a row, 32px above each section heading and
+  16px below, 20px-inset stat cards, 18px-inset 78px attention cards, and a
+  **zero-padding** top-courses card whose five flush 60px rows are divided by
+  hairlines. Rendered against the export the row height and the whole
+  top-courses card land exactly (60px, 302px) and the two stat rows run 3–6px
+  taller, which is the type being scaled up — see the design note below; don't
+  shrink the type to close it.
+  Six things worth knowing before changing any of it:
+  - The four attention rows **render inert, with no chevron**, because none of
+    their destination pages exist yet — the same treatment `settings-nav.tsx`
+    gives a section whose route hasn't landed. `AttentionQueue.built` is the
+    flag; flip it per row as each queue page ships. The export draws chevrons,
+    so this is a deliberate divergence, not an oversight.
+  - **An empty queue is dropped rather than drawn as a zero.** "0 reported
+    reviews" under a heading that says something needs attention is noise. The
+    export only draws a full queue, so the empty states are invented.
+  - **Every delta is month over month on the running total** —
+    `(now − 30 days ago) ÷ 30 days ago` — not two periods' activity compared.
+    That is the only reading the export's own "+8.4%" beside a cumulative
+    482,140 supports, and one definition across all four cards beats three.
+    **Uptime is the exception**: its delta is a difference in percentage
+    *points*, which is the thing an operator means.
+  - **The top-courses table orders on `Course.enrollmentCount`**, the
+    denormalised counter, not a `count()` over `enrollment`. That is what the
+    catalog and the sale page's "students" stat already read, so the same
+    course can't show two different student numbers on two screens; it also
+    carries history the seeded `enrollment` rows don't reproduce. The export's
+    own five rows are internally inconsistent with the shipped catalog (it puts
+    Machine Learning A–Z at 18,940 where `browse-courses.ts` says 28,910, and
+    then sorts it below an 18,920) — the catalog wins, so the real order
+    differs from the drawn one in the last two rows.
+  - **"1 failed payout · Retry scheduled for 01 Oct" is derived, not stored.**
+    `Payout` has no retry column: a failed transfer rolls into the next
+    `PayoutRun`, so the date is that run's `scheduledFor`.
+  - Row art is the per-category gradient + icon, keyed off
+    `Category.accentColor` and the category slug rather than a position in a
+    list, so a new category gets a sensible tile instead of a blank one. The
+    export draws photographs — see `lumen-course-card-art`.
+  The route guard lives in `app/(dashboard)/dashboard/admin/page.tsx`, not the
+  group layout, which only checks for *a* session; it is `notFound()` rather
+  than a redirect, so a signed-in learner who guesses the URL can't tell "you
+  may not see this" from "there is nothing here". The **admin shell is still to
+  build**: `access-admin-console__admin.png` / `exit-admin-mode__admin.png`
+  draw an admin *mode* with its own sidebar nav, a cart-less header and a
+  reduced account menu, and today the page renders inside the student shell.
+  `account-menu.tsx` already links here for admins.
+- **`UptimeSample` is the one model this page needed.** Availability is the
+  only figure on Platform Overview no other table can answer — it is a property
+  of the infrastructure, not of the catalog, the ledger or the accounts — and
+  the card draws a delta beside it, which needs history rather than a single
+  percentage parked in `PlatformSetting`. One row per day of health checks,
+  written by whatever polls the endpoint, so the card is
+  `sum(checksOk) / sum(checksTotal)` over a window. Days rather than raw pings
+  because every window the console draws is a run of whole days.
 - `lib/user.ts` — `MenuUser` and `initialsOf`. Deliberately not in a
   `"use client"` file: Server Components render the chrome, and a client
   module's functions can't be called from the server.

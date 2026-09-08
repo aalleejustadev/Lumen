@@ -1901,6 +1901,30 @@ enum AuditCategory {
   SECURITY
 }
 
+/// Availability samples, behind the **Uptime** card on Platform Overview.
+///
+/// That figure is the one number on the page no other table can answer: it is
+/// a property of the infrastructure rather than of the catalog, the ledger or
+/// the accounts, and the card draws a *delta* beside it — which needs history,
+/// not a single percentage parked in `PlatformSetting`.
+///
+/// One row per day, written by whatever polls the health endpoint, so the card
+/// is `sum(checksOk) / sum(checksTotal)` over a window rather than a number
+/// somebody typed in. Days rather than raw pings, because every window the
+/// console draws is a run of whole days and this keeps the table small enough
+/// to scan for any of them.
+model UptimeSample {
+  id          String   @id @default(cuid())
+  /// `@db.Date` — a day, not an instant, for the reason `User.dateOfBirth`
+  /// gives: a calendar day must not slide either side of UTC.
+  day         DateTime @unique @db.Date
+  checksTotal Int
+  checksOk    Int
+  createdAt   DateTime @default(now())
+
+  @@map("uptime_sample")
+}
+
 // ---------------------------------------------------------------------------
 // Help centre
 // ---------------------------------------------------------------------------
