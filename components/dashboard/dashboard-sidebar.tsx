@@ -85,7 +85,20 @@ function RowTooltip({
   )
 }
 
-function NavRow({ item, active }: { item: DashboardNavItem; active: boolean }) {
+/**
+ * `badge` is passed in rather than read off `item` so a row can carry a real
+ * count (Wishlist) alongside the placeholders still baked into
+ * `lib/config/dashboard.ts` — see `navCounts` on `DashboardSidebar`.
+ */
+function NavRow({
+  item,
+  active,
+  badge,
+}: {
+  item: DashboardNavItem
+  active: boolean
+  badge?: number
+}) {
   return (
     <RowTooltip label={item.title}>
       <Link
@@ -101,9 +114,9 @@ function NavRow({ item, active }: { item: DashboardNavItem; active: boolean }) {
         <span className="truncate group-data-[collapsible=icon]:hidden">
           {item.title}
         </span>
-        {item.badge ? (
+        {badge ? (
           <span className="ml-auto text-[13px] text-subtle-foreground tabular-nums group-data-[collapsible=icon]:hidden">
-            {item.badge}
+            {badge}
           </span>
         ) : null}
       </Link>
@@ -317,9 +330,13 @@ function UpgradeCard() {
 function DashboardSidebar({
   user,
   isAdmin,
+  navCounts,
 }: {
   user: MenuUser
   isAdmin?: boolean
+  /** Live row counts from the layout, keyed by href. A row that isn't listed
+   *  keeps the placeholder `badge` from `lib/config/dashboard.ts`. */
+  navCounts?: Record<string, number>
 }) {
   const pathname = usePathname()
 
@@ -362,6 +379,7 @@ function DashboardSidebar({
                       key={item.href}
                       item={item}
                       active={pathname === item.href}
+                      badge={navCounts?.[item.href] ?? item.badge}
                     />
                   )
                 )}

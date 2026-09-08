@@ -385,13 +385,52 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   (there's no promo system yet), *not* the list-vs-sale saving — keep
   `total = subtotal - discount` or the three numbers stop adding up. The
   export only draws a filled cart; empty falls back to the `Empty` component.
+- `components/dashboard/wishlist/` — `/dashboard/wishlist`, from
+  `wishlist-page.png`: `wishlist-row.tsx` (the list row), `wishlist-tile.tsx`
+  (the grid card), `wishlist-actions.tsx` (all three client controls — the
+  row's heart, "Enroll now", and the header's "Add all to cart"),
+  `wishlist-course.ts` (the icon-stripped course type), composed by
+  `wishlist-page.tsx`. Reads real `wishlist_item` rows, same arrangement as
+  the cart. Measured off that export at DPR 2: full-width content column, a
+  26px/700 title over a 15px lead, 124px rows, an 85 x 44 view switch beside
+  the 40px "Add all to cart" on the heading's own line, a 150 x 92 thumbnail
+  on `p-4`, and a 20px sale price beside a 13px struck list price. Rows stack
+  on a **16px** `gap` even though the export measures 14px between their
+  hairlines: `Card`'s hairline is a `ring`, which paints *outside* the layout
+  box, so a 14px gap reads as 12px. Unlike `my-learning.tsx` the composer is
+  `"use client"` all the way up — the view switch sits *in* the header row
+  next to the `h1`, the same reason `browse-courses.tsx` is client — so the
+  route strips `BrowseCourse.icon` through `toWishlistEntries` before the
+  rows cross the boundary. The export draws only the list view; the grid is
+  the invented other half of its own switch and borrows `course-card.tsx`'s
+  proportions rather than inventing a second card language (it also pages 8
+  at a time rather than the list's 4, which is the export's own rhythm). The
+  row's heart calls `removeFromWishlist`, not `toggleWishlist` — everything
+  on this page is already saved, so it is only ever a removal — and "Enroll
+  now" adds to the cart and goes straight to `/checkout`, exactly like the
+  sale page's "Buy now". `addWishlistToCart` takes **no slugs**: it reads the
+  caller's own rows server-side, so the page can't be talked into buying
+  something that was never saved. Empty falls back to `Empty` and takes the
+  header's two controls with it.
+- The sidebar's Wishlist count is real. `app/(dashboard)/layout.tsx` counts it
+  next to the cart badge and passes `navCounts` (keyed by href) to
+  `DashboardSidebar`, which is why `NavRow` takes `badge` as a prop rather
+  than reading `item.badge`: rows without a real source (Discussions,
+  Messages) keep their placeholder from `lib/config/dashboard.ts`. Every
+  wishlist action revalidates the dashboard **layout** rather than the page it
+  was pressed on, so the sale page's heart moves the sidebar number without a
+  navigation — the same mechanism the cart badge uses.
 - `lib/cart.ts` — cart/wishlist reads (`getCart`, `getCartCount`,
-  `isWishlisted`). Pulls in
+  `getWishlist`, `getWishlistCount`, `isWishlisted`). Pulls in
   `lib/db`, so the same "never from a Client Component" rule applies.
   `lib/actions/cart.ts` and `lib/actions/wishlist.ts` are the `"use server"`
   writes: each re-checks the session and re-resolves the course from the
   catalog rather than trusting a slug or title from the client, and returns
   `{ ok, message }` for the caller to toast instead of throwing.
+  `getWishlist`'s `total` sums **sale** prices, which is what the header's
+  "total if you enroll today" and the row's "Enroll now" would actually
+  charge; both count functions resolve slugs rather than running a bare
+  `count()`, for the reason `getCartCount` spells out.
   `cart_item.courseSlug` is a plain string, not a `Course` relation — the
   `course` table has no rows yet, so a foreign key would make it impossible
   to add anything to a cart; see the model's own note.

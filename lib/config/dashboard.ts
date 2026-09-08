@@ -20,7 +20,9 @@ export type DashboardNavItem = {
   title: string
   href: string
   icon: LucideIcon
-  /** Placeholder counts from the export — real ones arrive with the data. */
+  /** Placeholder counts from the export — real ones arrive with the data.
+   *  Wishlist no longer has one: `wishlist_item` rows are real, so the layout
+   *  counts them and passes the number down through `navCounts`. */
   badge?: number
   items?: { title: string; href: string }[]
 }
@@ -54,7 +56,6 @@ export const dashboardNav: DashboardNavGroup[] = [
         title: "Wishlist",
         href: "/dashboard/wishlist",
         icon: HeartIcon,
-        badge: 6,
       },
       {
         title: "Certificates",

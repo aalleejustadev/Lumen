@@ -93,3 +93,56 @@ export async function isWishlisted(slug: string) {
   })
   return row !== null
 }
+
+export type WishlistLine = {
+  /** The wishlist row's own id, so a list can key on it. */
+  id: string
+  course: BrowseCourse
+}
+
+export type WishlistSummary = {
+  lines: WishlistLine[]
+  /** Sum of the saved courses' sale prices — the "total if you enroll today"
+   *  in the page header. Sale prices, not list: it's what the row's "Enroll
+   *  now" would actually charge. */
+  total: number
+}
+
+/** The signed-in user's wishlist, newest first. Empty for signed-out
+ *  visitors. Same slug-resolution rule as `getCart`. */
+export async function getWishlist(): Promise<WishlistSummary> {
+  const session = await getSession()
+  if (!session) return { lines: [], total: 0 }
+
+  const rows = await db.wishlistItem.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "desc" },
+  })
+
+  const lines = rows.flatMap((row) => {
+    const course = courseBySlug(row.courseSlug)
+    return course ? [{ id: row.id, course }] : []
+  })
+
+  return {
+    lines,
+    total: lines.reduce((sum, line) => sum + line.course.price, 0),
+  }
+}
+
+/**
+ * How many courses the signed-in user has saved — the number beside the
+ * sidebar's Wishlist row. Resolves slugs for the same reason `getCartCount`
+ * does: a bare `count()` would advertise rows `/dashboard/wishlist` drops.
+ */
+export async function getWishlistCount() {
+  const session = await getSession()
+  if (!session) return 0
+
+  const rows = await db.wishlistItem.findMany({
+    where: { userId: session.user.id },
+    select: { courseSlug: true },
+  })
+
+  return rows.filter((row) => courseBySlug(row.courseSlug) !== undefined).length
+}

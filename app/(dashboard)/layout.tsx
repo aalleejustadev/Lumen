@@ -5,7 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { getSession } from "@/lib/auth"
-import { getCartCount } from "@/lib/cart"
+import { getCartCount, getWishlistCount } from "@/lib/cart"
 
 /**
  * Everything under this group requires a session — the guard lives here rather
@@ -15,9 +15,12 @@ import { getCartCount } from "@/lib/cart"
  * bar from `dashboard-header.png`. Both read the session from here rather than
  * fetching their own.
  *
- * The header's cart badge is counted here too, for the same reason: it is
- * chrome shared by every dashboard route, so it belongs to the shell rather
- * than to whichever page happens to be underneath.
+ * The header's cart badge and the sidebar's Wishlist count are counted here
+ * too, for the same reason: they are chrome shared by every dashboard route,
+ * so they belong to the shell rather than to whichever page happens to be
+ * underneath. `navCounts` is keyed by href so the layout — not the sidebar —
+ * owns which rows carry a real number; anything unlisted keeps the
+ * placeholder from `lib/config/dashboard.ts`.
  */
 export default async function DashboardLayout({
   children,
@@ -31,7 +34,10 @@ export default async function DashboardLayout({
   // shadcn's provider writes `sidebar_state` on every toggle; reading it here
   // is what makes the rail survive a reload.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
-  const cartCount = await getCartCount()
+  const [cartCount, wishlistCount] = await Promise.all([
+    getCartCount(),
+    getWishlistCount(),
+  ])
 
   return (
     <SidebarProvider
@@ -47,6 +53,7 @@ export default async function DashboardLayout({
       <DashboardSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
         isAdmin={user.role === "admin"}
+        navCounts={{ "/dashboard/wishlist": wishlistCount }}
       />
       <SidebarInset>
         <DashboardHeader

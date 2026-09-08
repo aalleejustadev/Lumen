@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/auth"
 import { browseCourses } from "@/lib/config/browse-courses"
+import { getWishlist } from "@/lib/cart"
 
 /**
  * Cart mutations. Reads live in `lib/cart.ts`.
@@ -86,5 +87,44 @@ export async function removeFromCart(slug: string): Promise<CartActionResult> {
   return {
     ok: true,
     message: course ? `${course.title} was removed` : "Course removed",
+  }
+}
+
+/**
+ * "Add all to cart" on `/dashboard/wishlist`. The slugs are read from the
+ * caller's own wishlist rows server-side rather than posted up from the
+ * page, so this can't be talked into adding anything the user hadn't saved.
+ *
+ * Courses already in the cart are skipped rather than re-added — `createMany`
+ * with `skipDuplicates` leans on the same `@@unique([userId, courseSlug])`
+ * that makes `addToCart` idempotent — and the message names how many actually
+ * moved, since "6 courses added" would be a lie when five were already there.
+ */
+export async function addWishlistToCart(): Promise<CartActionResult> {
+  const session = await getSession()
+  if (!session)
+    return { ok: false, message: "Sign in to add courses to your cart." }
+
+  const { lines } = await getWishlist()
+  if (lines.length === 0) {
+    return { ok: false, message: "Your wishlist is empty." }
+  }
+
+  const { count } = await db.cartItem.createMany({
+    data: lines.map((line) => ({
+      userId: session.user.id,
+      courseSlug: line.course.slug,
+    })),
+    skipDuplicates: true,
+  })
+
+  if (count === 0) {
+    return { ok: true, message: "Every saved course is already in your cart" }
+  }
+
+  revalidatePath("/dashboard", "layout")
+  return {
+    ok: true,
+    message: `${count} course${count === 1 ? "" : "s"} added to your cart`,
   }
 }
