@@ -3,6 +3,7 @@ import "server-only"
 import type Stripe from "stripe"
 
 import { getSession } from "@/lib/auth"
+import type { OrderStatus } from "@/lib/generated/prisma/enums"
 import { db } from "@/lib/db"
 import { getStripe } from "@/lib/stripe"
 
@@ -51,7 +52,15 @@ export type BillingTransaction = {
   /** `#36223` in the export — see `orderReference`. */
   reference: string
   product: string
-  status: "PENDING" | "PAID" | "FAILED" | "EXPIRED"
+  /**
+   * Taken straight from Prisma rather than spelled out again here. It was a
+   * hand-written union, and adding `REFUNDED` to the enum broke the build —
+   * which is the good outcome, but only because the compiler caught it. Deriving
+   * it means the next status added to `OrderStatus` surfaces at the one place
+   * that has to care: `STATUS_STYLES` in `billing-transactions.tsx`, which is
+   * keyed on this type and so cannot silently miss a pill.
+   */
+  status: OrderStatus
   date: Date
   amountCents: number
   currency: string

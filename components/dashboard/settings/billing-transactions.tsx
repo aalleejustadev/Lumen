@@ -53,6 +53,10 @@ const STATUS_STYLES: Record<BillingTransaction["status"], string> = {
   PENDING: "bg-warning/10 text-warning",
   FAILED: "bg-destructive/10 text-destructive",
   EXPIRED: "bg-muted text-muted-foreground",
+  // A refund is a fact, not a failure — `--info` rather than `--destructive`,
+  // and full-strength rather than the muted pill EXPIRED gets, since a
+  // refunded order is something the customer acted on and may want to find.
+  REFUNDED: "bg-info/10 text-info",
 }
 
 function money(cents: number, currency: string) {

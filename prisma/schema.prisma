@@ -13,6 +13,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// Marketing
+// ---------------------------------------------------------------------------
+
 /// Placeholder so the first migration has something to create. Swap it for the
 /// real models (courses, enrolments, …) as those land.
 
@@ -31,6 +35,10 @@ enum Interest {
   TEACHING
 }
 
+// ---------------------------------------------------------------------------
+// Identity, roles and access
+// ---------------------------------------------------------------------------
+
 /// `User.notifyAbout` — the "Notify me about…" radio on
 /// `/dashboard/settings/notifications`. `lib/config/notifications.ts` owns the
 /// labels these three values render as.
@@ -38,6 +46,17 @@ enum NotifyAbout {
   ALL_ACTIVITY
   DIRECT_MESSAGES
   NOTHING
+}
+
+/// The **Status** column on the admin Users table. Better Auth's own
+/// `banned`/`banExpires` covers SUSPENDED only; the export draws two more
+/// states it has no column for — PENDING (invited, never signed in) and
+/// INACTIVE (dormant, kept out of "active this week" counts).
+enum UserStatus {
+  ACTIVE
+  PENDING
+  INACTIVE
+  SUSPENDED
 }
 
 model User {
@@ -86,6 +105,13 @@ model User {
   /// IANA time-zone id ("Europe/London"). Will drive course deadlines and live
   /// session times; nothing formats against it yet.
   timeZone          String?
+  /// ISO-3166 alpha-2. The **Country** column on the admin Users table and a
+  /// field on Add new user. Two letters rather than a free string so the two
+  /// surfaces can't spell the same country differently.
+  country           String?
+  /// See `UserStatus`. Defaults to ACTIVE because a self-serve sign-up is
+  /// immediately active; the invitation flow creates PENDING rows instead.
+  status            UserStatus     @default(ACTIVE)
   /// From `/dashboard/settings/notifications` — the "Notify me about…"
   /// radio. A single choice rather than three booleans because the export
   /// draws it as a radio group: "Nothing" is not "all three off", it is its
@@ -122,8 +148,122 @@ model User {
   wishlistItems     WishlistItem[]
   orders            Order[]
 
+  // Learning
+  enrollments   Enrollment[]
+  lessonNotes   LessonNote[]
+  learningDays  LearningDay[]
+  learningPaths UserLearningPath[]
+  certificates  Certificate[]
+
+  // Reviews and Q&A
+  courseReviews         CourseReview[]
+  courseReviewReplies   CourseReviewReply[]
+  courseQuestions       CourseQuestion[]
+  courseQuestionReplies CourseQuestionReply[]
+  courseQuestionVotes   CourseQuestionVote[]
+
+  // Community
+  discussions       Discussion[]
+  discussionReplies DiscussionReply[]
+  discussionLikes   DiscussionLike[]
+  topicModerations  TopicModerator[]
+
+  // Messaging and notifications
+  conversations ConversationParticipant[]
+  messages      Message[]
+  announcements Announcement[]
+  notifications Notification[]
+
+  // Commerce
+  subscriptions     Subscription[]
+  couponRedemptions CouponRedemption[]
+
+  // Administration
+  invitationsSent        UserInvitation[]        @relation("InvitationAuthor")
+  invitationAccepted     UserInvitation?         @relation("InvitationRecipient")
+  instructorApplications InstructorApplication[] @relation("ApplicationApplicant")
+  applicationsReviewed   InstructorApplication[] @relation("ApplicationReviewer")
+  submissionsSubmitted   CourseSubmission[]      @relation("SubmissionAuthor")
+  submissionsReviewed    CourseSubmission[]      @relation("SubmissionReviewer")
+  reportsFiled           ContentReport[]         @relation("ReportAuthor")
+  reportsResolved        ContentReport[]         @relation("ReportResolver")
+  auditEntries           AuditLog[]
+  supportTickets         SupportTicket[]
+  mediaAssets            MediaAsset[]
+
   @@unique([email])
+  @@index([status])
   @@map("user")
+}
+
+/// An account created *for* someone from the admin console rather than by
+/// them. "Add new user" collects a name, email, country, plan and role, and
+/// carries a **Send invitation email** toggle — "turn off to create the
+/// account silently" — which is why `sendEmail` is stored rather than being a
+/// transient form field: a silently-created account has no token to redeem.
+model UserInvitation {
+  id             String           @id @default(cuid())
+  email          String
+  name           String?
+  /// The role the account gets on acceptance. Same three values as
+  /// `User.role`; the Add-new-user form draws them as three cards.
+  role           String           @default("user")
+  country        String?
+  /// Which plan to start them on — the form's Plan select. Null means Free.
+  plan           String?
+  token          String           @unique
+  sendEmail      Boolean          @default(true)
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  invitedById    String?
+  invitedBy      User?            @relation("InvitationAuthor", fields: [invitedById], references: [id], onDelete: SetNull)
+  /// Set once redeemed, so an invitation can be traced to the account it made.
+  acceptedUserId String?          @unique
+  acceptedUser   User?            @relation("InvitationRecipient", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+
+  @@index([email])
+  @@index([status])
+  @@map("user_invitation")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+/// "4 instructor applications · all submitted this week" on Platform Overview,
+/// the **Pending instructors** tab on Users, and the audit entry "Approved
+/// instructor application". Not unique per user: a rejected applicant can
+/// apply again, and the console should show that history rather than
+/// overwriting it — the app enforces "one open application" instead.
+model InstructorApplication {
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation("ApplicationApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  /// What they want to teach, from the application form.
+  pitch         String
+  /// Links to prior work — same text-array reasoning as `User.urls`.
+  portfolioUrls String[]
+  status        ApplicationStatus @default(PENDING)
+  reviewedById  String?
+  reviewedBy    User?             @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  decisionNote  String?
+  createdAt     DateTime          @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("instructor_application")
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 /// A public teaching profile — the bio/stats block on a course sale page
@@ -152,70 +292,179 @@ model Instructor {
   rating        Float    @default(0)
   reviewsCount  Int      @default(0)
   studentsCount Int      @default(0)
-  courses       Course[]
+
+  /// Whether this instructor's courses join platform-wide promotions. The
+  /// admin Promotions page draws one toggle per instructor ("Participating" /
+  /// "Opted out"); `Course.promotionOptIn` can override it per course, and a
+  /// null there falls back to this. Seeded from
+  /// `PlatformSetting.autoEnrollNewCoursesInPromotions`.
+  promotionOptIn     Boolean @default(true)
+  /// Payout schedule, from `payout-settings-page.png`: "Monthly on the 1st ·
+  /// minimum $100 · balances under $100 roll over". The marketing page's
+  /// "Monthly payouts from $100" is the *same* rule, so it is stored once here
+  /// and both surfaces render it rather than hard-coding the number twice.
+  payoutDayOfMonth   Int     @default(1)
+  minimumPayoutCents Int     @default(10000)
+  emailPayoutReceipt Boolean @default(true)
+
+  courses          Course[]
+  earnings         InstructorEarning[]
+  payoutMethods    PayoutMethod[]
+  payouts          Payout[]
+  watchTimeRollups WatchTimeRollup[]
+  coupons          Coupon[]
 
   @@map("instructor")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog and authoring
+// ---------------------------------------------------------------------------
+
+/// Replaces the old `CourseCategory` enum. The admin Categories page has a
+/// **New category** button, and a Postgres enum cannot be added to at runtime
+/// — that alone forces a table. The export also lists "Personal Development",
+/// which the enum never had, so it was already outgrown.
+///
+/// `parentId` is a self-relation kept deliberately: the admin page lists six
+/// top-level categories while the instructor screens use "Programming",
+/// "Web Development" and "Data Science" as if they were peers. Whichever way
+/// that resolves, a parent column is nearly free before there is data and
+/// expensive after.
+model Category {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String?
+  /// The *token* name from the New-category dialog's six swatches — not a hex.
+  /// The app already renders per-category gradients from `lib/config/catalog.ts`;
+  /// a free hex would escape the theme and break dark mode.
+  accentColor String  @default("blue")
+  /// "Featured categories appear in the browse menu."
+  showInNav   Boolean @default(true)
+  order       Int     @default(0)
+
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+
+  courses    Course[]
+  promotions Promotion[] @relation("PromotionCategories")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([parentId])
+  @@map("category")
+}
+
+/// Every state a course is drawn in, across My Courses (Published / Draft /
+/// In review) and the admin queue (In review / Needs changes / Published /
+/// Rejected). `published: Boolean` could carry none of it.
+enum CourseStatus {
+  DRAFT
+  IN_REVIEW
+  NEEDS_CHANGES
+  PUBLISHED
+  REJECTED
+  ARCHIVED
 }
 
 /// Browse Courses catalog (`/dashboard/courses`) and the course sale page
 /// (`/dashboard/courses/[slug]`). Both pages still read
 /// `lib/config/browse-courses.ts` / `lib/config/course-details.ts` — there's
-/// no instructor-authoring flow yet to populate this for real — but the
-/// tables are shaped for what that flow will need, so the pages can swap
-/// their data source later without a schema change. `priceCents`/
-/// `listPriceCents` avoid float rounding on money; `description`,
-/// `requirements` and `learningOutcomes` are Postgres text arrays (one
-/// paragraph/bullet per element) rather than a rich-text blob, since that's
-/// all the sale page renders today.
+/// no seeded catalog yet — but the table is shaped for what the Create Course
+/// wizard will write, so the pages can swap their data source without a
+/// schema change. `priceCents`/`listPriceCents` avoid float rounding on money;
+/// `description`, `requirements` and `learningOutcomes` are Postgres text
+/// arrays (one paragraph/bullet per element) rather than a rich-text blob,
+/// since that's all the sale page renders today.
 model Course {
-  id                       String          @id @default(cuid())
-  slug                     String          @unique
+  id                       String      @id @default(cuid())
+  slug                     String      @unique
   title                    String
   subtitle                 String
   description              String[]
   instructorId             String
-  instructor               Instructor      @relation(fields: [instructorId], references: [id])
-  category                 CourseCategory
+  instructor               Instructor  @relation(fields: [instructorId], references: [id])
+  categoryId               String
+  category                 Category    @relation(fields: [categoryId], references: [id])
   level                    CourseLevel
   durationHours            Int
-  rating                   Float           @default(0)
-  reviewsCount             Int             @default(0)
+  rating                   Float       @default(0)
+  reviewsCount             Int         @default(0)
   priceCents               Int
   listPriceCents           Int
+  currency                 String      @default("usd")
   /// Null means no active sale — the sale-only UI (banner, "X% off") hides.
   saleEndsAt               DateTime?
   requirements             String[]
   learningOutcomes         String[]
-  /// "This course includes" list — counts an instructor fills in on publish,
-  /// not derived from `sections`/`lessons` (a lesson's minutes count toward
-  /// `durationHours`; these are separate summary stats the export shows).
-  videoHours               Int             @default(0)
-  articlesCount            Int             @default(0)
-  quizzesCount             Int             @default(0)
-  hasDownloadableResources Boolean         @default(true)
-  hasCertificate           Boolean         @default(true)
-  lifetimeAccess           Boolean         @default(true)
+  /// The wizard's "Who is this course for?" textarea.
+  intendedAudience         String?
+  /// "This course includes" list — counts an instructor fills in on publish.
+  /// Once the curriculum is real these become derived and are recomputed at
+  /// publish time rather than trusted as input: the admin submission checklist
+  /// grades against them.
+  videoHours               Int         @default(0)
+  articlesCount            Int         @default(0)
+  quizzesCount             Int         @default(0)
+  hasDownloadableResources Boolean     @default(true)
+  hasCertificate           Boolean     @default(true)
+  lifetimeAccess           Boolean     @default(true)
   /// Instructor-uploaded art, once that feature exists. Null renders the
   /// per-category gradient + icon placeholder — see `lumen-course-card-art`.
   thumbnailUrl             String?
-  published                Boolean         @default(true)
-  createdAt                DateTime        @default(now())
-  updatedAt                DateTime        @updatedAt
-  sections                 CourseSection[]
-  reviews                  CourseReview[]
 
-  @@index([category])
+  status      CourseStatus @default(DRAFT)
+  submittedAt DateTime?
+  publishedAt DateTime?
+
+  /// "Include in Lumen Business — reach subscribers and earn from watch time."
+  /// Off means the course is buy-only and never appears to a Business
+  /// subscriber for free.
+  includedInBusiness Boolean  @default(true)
+  /// Nullable on purpose: `null` means *inherit* — from `Instructor.promotionOptIn`,
+  /// which itself defaults from the platform setting. Three levels, because the
+  /// admin Promotions export draws all three.
+  promotionOptIn     Boolean?
+
+  /// The wizard's "Course messages" step. Sent automatically on enrolment and
+  /// on completion; blank skips the message.
+  welcomeMessage         String?
+  congratulationsMessage String?
+
+  /// Denormalised counters the catalog sorts and filters on, in the same
+  /// spirit as `rating`/`reviewsCount`. Each needs exactly one recompute path
+  /// rather than increments scattered through call sites.
+  enrollmentCount      Int @default(0)
+  lessonCount          Int @default(0)
+  totalDurationMinutes Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sections         CourseSection[]
+  reviews          CourseReview[]
+  submissions      CourseSubmission[]
+  enrollments      Enrollment[]
+  certificates     Certificate[]
+  questions        CourseQuestion[]
+  coupons          Coupon[]
+  cartItems        CartItem[]
+  wishlistItems    WishlistItem[]
+  orderItems       OrderItem[]
+  earnings         InstructorEarning[]
+  watchTimeRollups WatchTimeRollup[]
+  pathModules      LearningPathModule[]
+  discussions      Discussion[]
+  conversations    Conversation[]
+  announcements    Announcement[]
+  communityTopics  CommunityTopic[]
+
+  @@index([categoryId])
   @@index([instructorId])
+  @@index([status])
   @@map("course")
-}
-
-enum CourseCategory {
-  WEB_DEV
-  DESIGN
-  DATA_AI
-  BUSINESS
-  MARKETING
-  FINANCE
 }
 
 enum CourseLevel {
@@ -252,7 +501,8 @@ model CourseLesson {
   type            LessonType
   durationMinutes Int?
   questionsCount  Int?
-  /// The blue "Preview" link — free to watch without buying the course.
+  /// The blue "Preview" link — free to watch without buying the course. The
+  /// curriculum builder draws this as a per-row toggle.
   isPreview       Boolean       @default(false)
   /// Runtime of the free preview *clip*, shown on the preview player's
   /// scrubber (`course-preview-dialog.tsx`). Shorter than `durationMinutes`
@@ -260,6 +510,21 @@ model CourseLesson {
   /// different numbers for the same lesson.
   previewSeconds  Int?
   order           Int
+
+  /// "9 of 12 lessons published" on the instructor Overview — a lesson can
+  /// exist in a published course and not be live yet.
+  isPublished  Boolean @default(false)
+  /// The uploaded video, as a `MediaAsset` id. A plain column rather than a
+  /// relation: a lesson has at most one video, and the asset table is
+  /// polymorphic over five owners.
+  videoAssetId String?
+  /// Body copy for ARTICLE lessons ("3 min read" rows).
+  articleBody  String?
+
+  quiz      Quiz?
+  progress  LessonProgress[]
+  notes     LessonNote[]
+  questions CourseQuestion[]
 
   @@index([sectionId])
   @@map("course_lesson")
@@ -272,21 +537,784 @@ enum LessonType {
   PRACTICE
 }
 
+/// One trip through admin review — a row per submission, not a status field on
+/// the course. A course can be sent back, fixed and resubmitted; the queue and
+/// the audit trail both need that history, and `Course.status` only ever holds
+/// the latest outcome.
+model CourseSubmission {
+  id       String @id @default(cuid())
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  submittedById String?
+  submittedBy   User?    @relation("SubmissionAuthor", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime @default(now())
+
+  decision         SubmissionDecision?
+  reviewedById     String?
+  reviewedBy       User?               @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  /// The five checkboxes on the Request changes dialog. An array because the
+  /// dialog allows any combination, and none of them is a primary reason.
+  changeReasons    ChangeReason[]
+  /// "Be specific — what should they fix before resubmitting?"
+  noteToInstructor String?
+
+  checks CourseSubmissionCheck[]
+
+  @@index([courseId])
+  @@map("course_submission")
+}
+
+enum SubmissionDecision {
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+enum ChangeReason {
+  AUDIO_VIDEO_QUALITY
+  INCOMPLETE_CURRICULUM
+  MISSING_QUIZ_OR_PROJECT
+  CONTENT_ACCURACY
+  COPYRIGHT_CONCERN
+}
+
+/// The four-item **Submission checklist** on the admin course view. Three of
+/// the four are computable (lesson count and video minutes, cover resolution,
+/// closes with a graded quiz); "audio is clear with no background noise" is a
+/// human verdict. That one is why the results are stored rather than derived
+/// on every render — and `automated` records which kind each row was.
+model CourseSubmissionCheck {
+  id           String           @id @default(cuid())
+  submissionId String
+  submission   CourseSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  /// Stable machine key, e.g. `min_lessons_and_video`.
+  key          String
+  label        String
+  passed       Boolean
+  automated    Boolean          @default(true)
+
+  @@unique([submissionId, key])
+  @@map("course_submission_check")
+}
+
+// ---------------------------------------------------------------------------
+// Enrolment and learning progress
+// ---------------------------------------------------------------------------
+
+/// How someone came to have access. BUSINESS_PLAN rows are created like any
+/// other so progress, notes and certificates survive a lapsed subscription —
+/// access is then gated at read time on the subscription's status, rather than
+/// by deleting the enrolment and losing the learner's history with it.
+enum EnrollmentSource {
+  PURCHASE
+  BUSINESS_PLAN
+  COUPON
+  ADMIN_GRANT
+  FREE
+}
+
+/// The keystone table. Eleven drawn screens are blocked on it: My Learning,
+/// the enrolled course page and its gate, Continue Learning, the instructor
+/// Students table, Certificates, the Overview bento, and the "Enrolled only"
+/// community visibility rule.
+model Enrollment {
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId String
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  source   EnrollmentSource @default(PURCHASE)
+  /// Set for PURCHASE and COUPON rows, so a refund can find what to revoke.
+  orderId  String?
+  order    Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  /// **Stored, not derived.** The exports contradict a plain lesson ratio on
+  /// purpose — My Learning shows "14 of 25 lessons" against 55%, which is what
+  /// time-weighted progress looks like. Computed from watch seconds against
+  /// lesson duration and written here, the way `lib/config/my-learning.ts`
+  /// already models it.
+  progressPercent  Int       @default(0)
+  completedLessons Int       @default(0)
+  /// Where "Continue" resumes.
+  currentLessonId  String?
+  lastAccessedAt   DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  lessonProgress LessonProgress[]
+  quizAttempts   QuizAttempt[]
+  certificate    Certificate?
+  reviews        CourseReview[]
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([userId])
+  @@map("enrollment")
+}
+
+/// Per-lesson state. `secondsWatched` is not optional detail — it drives
+/// "Avg. watch time 72.5%", the Where-Students-Spend-Time donut, and
+/// instructor payouts under Lumen Business (see `WatchTimeRollup`).
+model LessonProgress {
+  id             String       @id @default(cuid())
+  enrollmentId   String
+  enrollment     Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId       String
+  lesson         CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  secondsWatched Int          @default(0)
+  completedAt    DateTime?
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([enrollmentId, lessonId])
+  @@index([lessonId])
+  @@map("lesson_progress")
+}
+
+/// The Notes tab on the enrolled course page, which is local state today.
+/// Many notes per lesson — the tab draws a list — each pinned to a moment in
+/// the video by `timestampSeconds`.
+model LessonNote {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId         String
+  lesson           CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  body             String
+  timestampSeconds Int?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([userId, lessonId])
+  @@map("lesson_note")
+}
+
+/// A daily rollup per learner. One table answers four separately drawn
+/// figures — the 46-day longest streak on Certificates, the 7-day-streak
+/// notification, "128 hours completed", and Your Progress by Month — without
+/// scanning the whole progress table on every dashboard render.
+model LearningDay {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// `@db.Date` for the same reason `User.dateOfBirth` is: a streak is counted
+  /// in calendar days, and a timestamp slides one either side of UTC.
+  date             DateTime @db.Date
+  minutesWatched   Int      @default(0)
+  minutesReading   Int      @default(0)
+  minutesQuizzing  Int      @default(0)
+  lessonsCompleted Int      @default(0)
+
+  @@unique([userId, date])
+  @@map("learning_day")
+}
+
+/// "Full-Stack Developer — 4 of 10 modules completed" on the student Overview.
+model LearningPath {
+  id          String               @id @default(cuid())
+  slug        String               @unique
+  title       String
+  description String?
+  accentColor String               @default("green")
+  published   Boolean              @default(false)
+  modules     LearningPathModule[]
+  learners    UserLearningPath[]
+  createdAt   DateTime             @default(now())
+
+  @@map("learning_path")
+}
+
+model LearningPathModule {
+  id             String       @id @default(cuid())
+  learningPathId String
+  learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  courseId       String
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title          String
+  order          Int
+
+  @@index([learningPathId])
+  @@index([courseId])
+  @@map("learning_path_module")
+}
+
+model UserLearningPath {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  learningPathId   String
+  learningPath     LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  completedModules Int          @default(0)
+  startedAt        DateTime     @default(now())
+  completedAt      DateTime?
+
+  @@unique([userId, learningPathId])
+  @@map("user_learning_path")
+}
+
+// ---------------------------------------------------------------------------
+// Quizzes and certificates
+// ---------------------------------------------------------------------------
+
+/// One per QUIZ lesson. The help centre has a whole "Quizzes & grading" topic
+/// covering scoring, retakes and passing requirements, so all three are
+/// columns rather than constants: `quiz-results.tsx` currently hard-codes
+/// `PASS_PERCENT`.
+model Quiz {
+  id             String         @id @default(cuid())
+  lessonId       String         @unique
+  lesson         CourseLesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title          String
+  passPercent    Int            @default(70)
+  retakesAllowed Boolean        @default(true)
+  questions      QuizQuestion[]
+  attempts       QuizAttempt[]
+
+  @@map("quiz")
+}
+
+model QuizQuestion {
+  id          String       @id @default(cuid())
+  quizId      String
+  quiz        Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  prompt      String
+  explanation String?
+  order       Int
+  options     QuizOption[]
+  answers     QuizAnswer[]
+
+  @@index([quizId])
+  @@map("quiz_question")
+}
+
+/// A row per option rather than an `answerIndex` integer on the question, so
+/// reordering the options in the editor can't silently change which one is
+/// correct.
+model QuizOption {
+  id         String       @id @default(cuid())
+  questionId String
+  question   QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label      String
+  isCorrect  Boolean      @default(false)
+  order      Int
+  answers    QuizAnswer[]
+
+  @@index([questionId])
+  @@map("quiz_option")
+}
+
+/// Retakes append rows rather than overwriting, so "Retake quiz" keeps a
+/// history. The instructor Students table's **Quiz 5/5** column reads the
+/// latest attempt for that enrolment.
+model QuizAttempt {
+  id           String       @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  quizId       String
+  quiz         Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  startedAt    DateTime     @default(now())
+  submittedAt  DateTime?
+  scorePercent Int?
+  correctCount Int?
+  passed       Boolean?
+  answers      QuizAnswer[]
+
+  @@index([enrollmentId])
+  @@index([quizId])
+  @@map("quiz_attempt")
+}
+
+/// What the results screen renders per question — it already draws that
+/// layout, from local state.
+model QuizAnswer {
+  id               String       @id @default(cuid())
+  attemptId        String
+  attempt          QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String?
+  selectedOption   QuizOption?  @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+
+  @@unique([attemptId, questionId])
+  @@map("quiz_answer")
+}
+
+/// The Certificates page draws a human ID (`LMN-DS-4821`), an issue date, an
+/// instructor name and a letter **grade** (A+, A, B+). The grade comes from
+/// quiz attempts, which is the second reason quizzes must land before
+/// certificates ship.
+model Certificate {
+  id            String     @id @default(cuid())
+  /// The printed ID. Human-facing and quoted on the card, so it is stored
+  /// rather than derived from the cuid.
+  serial        String     @unique
+  /// The Share button's destination — a public verification page, so it must
+  /// not be guessable from the serial.
+  publicSlug    String     @unique
+  enrollmentId  String     @unique
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  grade         String?
+  scorePercent  Int?
+  /// Neon Object Storage key for the generated PDF — rendered once on issue
+  /// rather than on every download.
+  pdfStorageKey String?
+  issuedAt      DateTime   @default(now())
+
+  @@index([userId])
+  @@map("certificate")
+}
+
+// ---------------------------------------------------------------------------
+// Reviews and moderation
+// ---------------------------------------------------------------------------
+
 /// One row in "Student reviews". The star-breakdown bars (78% / 16% / …) are
 /// computed by aggregating these at query time, not stored redundantly.
+///
+/// Reworked from loose `authorName`/`authorImageUrl` strings: every moderation
+/// screen — Reported reviews, *Suspend reviewer*, *Message author*, the
+/// instructor's *You replied* state — needs a real account behind the review,
+/// and `enrollmentId` is what enforces "only people who took the course".
 model CourseReview {
-  id             String   @id @default(cuid())
-  courseId       String
-  course         Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  authorName     String
-  authorImageUrl String?
-  rating         Int
-  body           String
-  createdAt      DateTime @default(now())
+  id           String             @id @default(cuid())
+  courseId     String
+  course       Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentId String?
+  enrollment   Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  rating       Int
+  /// The headline the instructor Reviews page draws above the body
+  /// ("Finally clicked for me").
+  title        String?
+  body         String
+  /// Exactly the three outcomes the admin row offers: keep it, hide it while
+  /// the author appeals, or remove it.
+  status       ReviewStatus       @default(VISIBLE)
+  reportCount  Int                @default(0)
+  reply        CourseReviewReply?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  /// Soft delete. The audit log names its targets, and a removed review a
+  /// moderator acted on must still resolve to something 24 months later.
+  deletedAt    DateTime?
 
+  @@unique([courseId, userId])
   @@index([courseId])
   @@map("course_review")
 }
+
+enum ReviewStatus {
+  VISIBLE
+  HIDDEN_PENDING_APPEAL
+  REMOVED
+}
+
+/// One instructor reply per review, rendered inline beneath it — which is why
+/// `reviewId` is unique rather than a thread.
+model CourseReviewReply {
+  id        String       @id @default(cuid())
+  reviewId  String       @unique
+  review    CourseReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@map("course_review_reply")
+}
+
+/// Filed by instructors from their Reviews page and by learners from a thread;
+/// resolved by admins on Reported reviews. Polymorphic because the same queue
+/// handles reviews, discussions, replies, questions and people.
+model ContentReport {
+  id             String           @id @default(cuid())
+  reporterId     String?
+  reporter       User?            @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: SetNull)
+  targetType     ReportTargetType
+  targetId       String
+  /// Denormalised so the queue can render "on Mastering Illustration" without
+  /// five conditional joins, and still reads correctly after a soft delete.
+  targetLabel    String?
+  reason         ReportReason
+  note           String?
+  status         ReportStatus     @default(OPEN)
+  resolvedById   String?
+  resolvedBy     User?            @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime         @default(now())
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@map("content_report")
+}
+
+enum ReportTargetType {
+  REVIEW
+  DISCUSSION
+  DISCUSSION_REPLY
+  COURSE_QUESTION
+  USER
+}
+
+/// The first three are the pills drawn on Reported reviews.
+enum ReportReason {
+  SPAM
+  ABUSIVE
+  SPOILERS
+  COPYRIGHT
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  REMOVED
+  DISMISSED
+  HIDDEN_PENDING_APPEAL
+}
+
+// ---------------------------------------------------------------------------
+// Community, Q&A and messaging
+// ---------------------------------------------------------------------------
+
+/// Who can see a topic. ENROLLED_ONLY is "restricted to learners in a linked
+/// course", which is why `courseId` exists on the topic.
+enum TopicVisibility {
+  EVERYONE
+  ENROLLED_ONLY
+  STAFF_ONLY
+}
+
+/// The admin Community page and its Create-topic dialog. Learners see these as
+/// the filter pills on Discussions, which is why the dialog says so.
+model CommunityTopic {
+  id                        String          @id @default(cuid())
+  slug                      String          @unique
+  name                      String
+  description               String?
+  accentColor               String          @default("blue")
+  visibility                TopicVisibility @default(EVERYONE)
+  /// "Turn off for announcement-style topics" — this is what renders the
+  /// **Staff post only** pill.
+  learnersCanStartThreads   Boolean         @default(true)
+  /// "New threads are held until a moderator approves them" — the source of
+  /// `DiscussionStatus.PENDING_APPROVAL`.
+  requiresModeratorApproval Boolean         @default(false)
+  /// Only meaningful when `visibility` is ENROLLED_ONLY.
+  courseId                  String?
+  course                    Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  order                     Int             @default(0)
+
+  moderators  TopicModerator[]
+  discussions Discussion[]
+  createdAt   DateTime         @default(now())
+
+  @@map("community_topic")
+}
+
+/// Per-topic, not global — the dialog is explicit: "Moderators act only inside
+/// this topic." The four booleans are the four permission switches it draws.
+model TopicModerator {
+  id         String         @id @default(cuid())
+  topicId    String
+  topic      CommunityTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canPin     Boolean        @default(true)
+  canLock    Boolean        @default(true)
+  canDelete  Boolean        @default(false)
+  canSuspend Boolean        @default(false)
+  createdAt  DateTime       @default(now())
+
+  @@unique([topicId, userId])
+  @@index([userId])
+  @@map("topic_moderator")
+}
+
+enum DiscussionStatus {
+  PUBLISHED
+  PENDING_APPROVAL
+  REMOVED
+}
+
+/// A community thread. Distinct from `CourseQuestion` on purpose — the
+/// instructor sidebar lists Discussions and Q&A separately, and only Q&A is
+/// anchored to a lesson and carries an "answered by instructor" state.
+model Discussion {
+  id         String           @id @default(cuid())
+  topicId    String
+  topic      CommunityTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  /// Optional cohort context — the list draws course tags beside topic tags.
+  courseId   String?
+  course     Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  title      String
+  body       String
+  tags       String[]
+  isPinned   Boolean          @default(false)
+  isLocked   Boolean          @default(false)
+  status     DiscussionStatus @default(PUBLISHED)
+  /// Denormalised — the list draws both counts on every row, and the sidebar
+  /// badge sums them.
+  likeCount  Int              @default(0)
+  replyCount Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  deletedAt  DateTime?
+
+  replies DiscussionReply[]
+
+  @@index([topicId])
+  @@index([courseId])
+  @@map("discussion")
+}
+
+model DiscussionReply {
+  id           String            @id @default(cuid())
+  discussionId String
+  discussion   Discussion        @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  /// One level of nesting is drawn; the self-relation allows more without a
+  /// migration if the thread view ever deepens.
+  parentId     String?
+  parent       DiscussionReply?  @relation("ReplyThread", fields: [parentId], references: [id], onDelete: Cascade)
+  children     DiscussionReply[] @relation("ReplyThread")
+  body         String
+  likeCount    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  deletedAt    DateTime?
+
+  @@index([discussionId])
+  @@map("discussion_reply")
+}
+
+/// A row per (user, target) so a heart can be un-liked and can't be
+/// double-counted — the counters on `Discussion` and `DiscussionReply` are
+/// caches of this table, not the truth.
+model DiscussionLike {
+  id         String         @id @default(cuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetType LikeTargetType
+  targetId   String
+  createdAt  DateTime       @default(now())
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@map("discussion_like")
+}
+
+enum LikeTargetType {
+  DISCUSSION
+  DISCUSSION_REPLY
+}
+
+/// The course Q&A tab and the instructor Q&A queue. Anchored to a **lesson**
+/// ("Lesson 2 · Mastering Tools"), sorted by votes, and filtered by
+/// `answeredByInstructor` — which is what the Unanswered/Answered tabs and the
+/// "Awaiting reply" pill both key off.
+model CourseQuestion {
+  id                   String        @id @default(cuid())
+  courseId             String
+  course               Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonId             String?
+  lesson               CourseLesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  authorId             String
+  author               User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title                String
+  body                 String
+  voteCount            Int           @default(0)
+  replyCount           Int           @default(0)
+  answeredByInstructor Boolean       @default(false)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  deletedAt            DateTime?
+
+  replies CourseQuestionReply[]
+  votes   CourseQuestionVote[]
+
+  @@index([courseId])
+  @@index([lessonId])
+  @@map("course_question")
+}
+
+/// The Instructor/Student badge and the tinted row come from the author's
+/// role, read at render time — storing the badge would let it drift the day
+/// someone's role changes.
+model CourseQuestionReply {
+  id         String         @id @default(cuid())
+  questionId String
+  question   CourseQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body       String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  deletedAt  DateTime?
+
+  @@index([questionId])
+  @@map("course_question_reply")
+}
+
+model CourseQuestionVote {
+  id         String         @id @default(cuid())
+  questionId String
+  question   CourseQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime       @default(now())
+
+  @@unique([questionId, userId])
+  @@map("course_question_vote")
+}
+
+/// Messages is drawn twice, once per side, and the header always names a
+/// course context ("Student · Mastering Illustration") — so the course belongs
+/// to the conversation, not to each message.
+model Conversation {
+  id             String        @id @default(cuid())
+  courseId       String?
+  course         Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  /// Set when the thread was seeded by a broadcast, so a reply can be traced
+  /// back to what prompted it.
+  announcementId String?
+  announcement   Announcement? @relation(fields: [announcementId], references: [id], onDelete: SetNull)
+  lastMessageAt  DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([lastMessageAt])
+  @@map("conversation")
+}
+
+/// The unread pills in the list and the sidebar's **Messages 5** badge are
+/// both a count of messages sent after `lastReadAt` — never a stored integer,
+/// which drifts the first time a write fails halfway.
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  archivedAt     DateTime?
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participant")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  sentAt         DateTime     @default(now())
+  deletedAt      DateTime?
+
+  @@index([conversationId, sentAt])
+  @@map("message")
+}
+
+/// "Message all" on the instructor Students page and the admin Users row menu.
+/// Fanning a broadcast straight into one `Conversation` per recipient is right
+/// for the inbox and wrong for the sender, who should see one sent item — so
+/// the broadcast is its own row and seeds normal threads, letting replies land
+/// in a normal conversation.
+model Announcement {
+  id             String   @id @default(cuid())
+  authorId       String
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  courseId       String?
+  course         Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  subject        String
+  body           String
+  recipientCount Int      @default(0)
+  sentAt         DateTime @default(now())
+
+  conversations Conversation[]
+
+  @@index([authorId])
+  @@map("announcement")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/// Exactly the five categories in the drawn Notifications sidebar. The counts
+/// beside each are `count(readAt is null)` filtered by this column.
+enum NotificationCategory {
+  COURSE
+  MESSAGE
+  COMMUNITY
+  CERTIFICATE
+  BILLING
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   NotificationCategory
+  title      String
+  body       String?
+  /// Where the row links. Polymorphic rather than a column per source: the
+  /// feed already mixes lessons, messages, threads, certificates and offers.
+  targetType String?
+  targetId   String?
+  /// A named actor renders an avatar instead of a category glyph, which is how
+  /// the mentor-group request row is drawn.
+  actorId    String?
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+
+  action NotificationAction?
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notification")
+}
+
+/// Not every notification is a line of text — "Requesting to add you to the
+/// Illustration mentor group" carries **Accept** / **Decline**. Without
+/// somewhere to write the outcome the buttons do nothing and the row never
+/// settles.
+model NotificationAction {
+  id             String                  @id @default(cuid())
+  notificationId String                  @unique
+  notification   Notification            @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  actionType     String
+  payload        Json?
+  state          NotificationActionState @default(PENDING)
+  resolvedAt     DateTime?
+
+  @@map("notification_action")
+}
+
+enum NotificationActionState {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Better Auth)
+// ---------------------------------------------------------------------------
 
 model Session {
   id             String   @id
@@ -353,15 +1381,17 @@ model RateLimit {
   @@map("rateLimit")
 }
 
+// ---------------------------------------------------------------------------
+// Commerce — cart, orders, plans, discounts
+// ---------------------------------------------------------------------------
+
 /// A course sitting in a student's cart (`/dashboard/cart`).
 ///
-/// `courseSlug` is a plain string rather than a relation to `Course` on
-/// purpose: the catalog still lives in `lib/config/browse-courses.ts` and the
-/// `course` table has no rows yet, so a foreign key would make it impossible
-/// to add anything to a cart today. The slug is the identifier every course
-/// route already keys on, so it stays stable through that switch — turn this
-/// into `courseId` + a relation once an instructor-authoring flow populates
-/// `Course` for real.
+/// `courseSlug` is still the identifier this row is keyed on, and `courseId`
+/// is nullable beside it. The `course` table has no rows yet, so a required
+/// foreign key would make it impossible to add anything to a cart today; the
+/// slug keeps working while the catalog is seeded, and the id is backfilled in
+/// one migration across this model, `WishlistItem` and `OrderItem` once it is.
 ///
 /// No quantity column: a course is bought once, so the row's existence *is*
 /// the quantity, which is also what `@@unique([userId, courseSlug])` enforces
@@ -371,6 +1401,8 @@ model CartItem {
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseSlug String
+  courseId   String?
+  course     Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
 
   @@unique([userId, courseSlug])
@@ -379,12 +1411,14 @@ model CartItem {
 }
 
 /// A course a student saved for later from the sale page's "Wishlist" button.
-/// Same `courseSlug`-not-a-relation reasoning as `CartItem` above.
+/// Same `courseSlug`-plus-nullable-`courseId` reasoning as `CartItem` above.
 model WishlistItem {
   id         String   @id @default(cuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseSlug String
+  courseId   String?
+  course     Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
 
   @@unique([userId, courseSlug])
@@ -394,30 +1428,46 @@ model WishlistItem {
 
 /// A checkout attempt. Created the moment a Stripe Checkout Session is opened
 /// (`lib/actions/checkout.ts`), so an abandoned checkout leaves a PENDING row
-/// rather than nothing at all — which is what makes the return page's
-/// fulfilment idempotent: it only ever moves PENDING to PAID.
+/// rather than nothing at all — which is what makes fulfilment idempotent: it
+/// only ever moves PENDING to PAID.
 ///
 /// Money is stored in minor units (cents) as `Int` for the same reason Stripe
 /// uses them: a float can't hold 12.99 exactly, and an order total is the one
 /// number in this app that must never drift.
 model Order {
-  id                    String      @id @default(cuid())
+  id                    String             @id @default(cuid())
   userId                String
-  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// The Checkout Session this order was opened with. Unique, so the return
   /// page can look an order up by the `session_id` Stripe puts in the URL and
   /// a replayed redirect can't create a second order.
-  stripeSessionId       String      @unique
+  stripeSessionId       String             @unique
   /// Set once payment succeeds — kept for refunds and receipts.
   stripePaymentIntentId String?
-  status                OrderStatus @default(PENDING)
+  status                OrderStatus        @default(PENDING)
   /// Cents. Mirrors Stripe's `amount_total`.
   amountTotal           Int
-  currency              String      @default("usd")
+  /// The three lines the checkout summary draws above the total. All default
+  /// to 0 so the existing checkout action, which sets none of them, keeps
+  /// working — the Discount row is hard-coded to $0.00 today waiting for
+  /// exactly this, and `total = subtotal - discount + tax` once it isn't.
+  subtotalCents         Int                @default(0)
+  discountCents         Int                @default(0)
+  taxCents              Int                @default(0)
+  currency              String             @default("usd")
   /// The address Stripe collected, which is not necessarily the account's.
   email                 String?
+  /// At most one of these applies to an order: a coupon is the instructor's
+  /// own code, a promotion is platform-wide.
+  couponId              String?
+  coupon                Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  promotionId           String?
+  promotion             Promotion?         @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   items                 OrderItem[]
-  createdAt             DateTime    @default(now())
+  refunds               Refund[]
+  enrollments           Enrollment[]
+  couponRedemptions     CouponRedemption[]
+  createdAt             DateTime           @default(now())
   paidAt                DateTime?
 
   @@index([userId])
@@ -431,21 +1481,557 @@ enum OrderStatus {
   /// later told us failed — `checkout.session.async_payment_failed`.
   FAILED
   EXPIRED
+  REFUNDED
 }
 
 /// One course on an order. Title and price are *snapshots*, not lookups: the
 /// catalog can be re-priced or a course withdrawn, and a past order has to
-/// keep saying what was actually bought for what. `courseSlug` is a plain
-/// string for the same reason as `CartItem.courseSlug` — see that model.
+/// keep saying what was actually bought for what.
 model OrderItem {
-  id         String @id @default(cuid())
-  orderId    String
-  order      Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  courseSlug String
-  title      String
+  id              String  @id @default(cuid())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courseSlug      String
+  courseId        String?
+  course          Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  title           String
   /// Cents, at the moment of purchase.
-  unitAmount Int
+  unitAmount      Int
+  /// Snapshots too, and for the same reason. The platform's default revenue
+  /// share is an editable admin setting; a payout computed two years later
+  /// must use the rate that was in force at purchase, not today's.
+  instructorId    String?
+  revenueShareBps Int?
+
+  earnings InstructorEarning[]
 
   @@index([orderId])
   @@map("order_item")
+}
+
+/// The marketing page promises a 30-day refund guarantee and the admin Reports
+/// card tracks a **2.1% refund rate** — a rate over rows, so refunds are rows.
+/// A refund also reverses the instructor's earning, which is why
+/// `InstructorEarning` has a REVERSED status rather than being deleted.
+model Refund {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  stripeRefundId String?  @unique
+  amountCents    Int
+  reason         String?
+  createdAt      DateTime @default(now())
+
+  @@index([orderId])
+  @@map("refund")
+}
+
+/// Lumen Business — $29/mo or $300/yr on the marketing pricing section, the
+/// sidebar upgrade card and the admin **Plan** column.
+///
+/// A mirror of Stripe, not a second source of truth: the billing page already
+/// reads subscriptions live. This exists so an access check and a table cell
+/// don't each cost an API call. Not unique per user — a lapsed subscription is
+/// history worth keeping — so "is this account on Business?" is a query for an
+/// ACTIVE or TRIALING row, not a column read.
+model Subscription {
+  id                   String               @id @default(cuid())
+  userId               String
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String               @unique
+  stripePriceId        String
+  plan                 String               @default("business")
+  status               SubscriptionStatus
+  interval             SubscriptionInterval
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean              @default(false)
+  trialEndsAt          DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([userId, status])
+  @@map("subscription")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+}
+
+enum SubscriptionInterval {
+  MONTH
+  YEAR
+}
+
+/// Instructor-owned discount codes, from the wizard's Coupons step and the
+/// standalone Coupons page. `code` is globally unique rather than per-course:
+/// a learner types one code at checkout and it has to resolve without also
+/// naming which course it belongs to.
+///
+/// "You can run up to three active coupons at a time" is a rule about how many
+/// rows may overlap in time, not a column — enforced in the action.
+model Coupon {
+  id                  String     @id @default(cuid())
+  code                String     @unique
+  courseId            String
+  course              Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructorId        String
+  instructor          Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  percentOff          Int
+  /// The resulting price, snapshotted when the coupon is created — the table
+  /// draws both "40% off" and "$59.99", and the list price can move afterwards.
+  resultingPriceCents Int
+  redemptionLimit     Int?
+  startsAt            DateTime   @default(now())
+  endsAt              DateTime?
+  createdAt           DateTime   @default(now())
+
+  redemptions CouponRedemption[]
+  orders      Order[]
+
+  @@index([courseId])
+  @@index([instructorId])
+  @@map("coupon")
+}
+
+/// Drives "212 / 500" and "Revenue from coupons $41,630" — both sums over
+/// rows, never counters that can drift from the orders they claim to describe.
+model CouponRedemption {
+  id            String   @id @default(cuid())
+  couponId      String
+  coupon        Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  discountCents Int
+  createdAt     DateTime @default(now())
+
+  @@unique([couponId, orderId])
+  @@index([couponId])
+  @@map("coupon_redemption")
+}
+
+/// Platform-wide sales, from the admin Promotions page. Past promotions stay
+/// as rows so the history table has something to read.
+model Promotion {
+  id                String                @id @default(cuid())
+  name              String
+  discountType      PromotionDiscountType
+  /// Percent when PERCENT, cents when FIXED_PRICE — the dialog offers "70"
+  /// or "$9.99 flat", and one column serves both because only one is ever set.
+  value             Int
+  scope             PromotionScope        @default(ALL_COURSES)
+  categories        Category[]            @relation("PromotionCategories")
+  startsAt          DateTime              @default(now())
+  endsAt            DateTime
+  /// "Overrides instructor opt-out. Use only for platform-wide events."
+  forceOnAllCourses Boolean               @default(false)
+  redemptionCount   Int                   @default(0)
+  revenueCents      Int                   @default(0)
+  createdAt         DateTime              @default(now())
+
+  orders Order[]
+
+  @@index([startsAt, endsAt])
+  @@map("promotion")
+}
+
+enum PromotionDiscountType {
+  PERCENT
+  FIXED_PRICE
+}
+
+enum PromotionScope {
+  ALL_COURSES
+  CATEGORIES
+}
+
+// ---------------------------------------------------------------------------
+// Instructor earnings and payouts
+// ---------------------------------------------------------------------------
+
+/// The ledger. Revenue & Payouts shows six figures that cannot be recomputed
+/// from orders alone — *Available for payout*, *Pending clearance* ("clears
+/// within 30 days"), *Lifetime earnings since Mar 2021* — because they are
+/// ledger **states**, not sums of sales. With this table each of them becomes
+/// one sum with a where clause.
+model InstructorEarning {
+  id               String        @id @default(cuid())
+  instructorId     String
+  instructor       Instructor    @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  courseId         String?
+  course           Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  source           EarningSource @default(SALE)
+  /// Set for SALE rows; null for BUSINESS_WATCH, which is a monthly rollup
+  /// rather than a single purchase.
+  orderItemId      String?
+  orderItem        OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  grossCents       Int
+  platformFeeCents Int
+  netCents         Int
+  currency         String        @default("usd")
+  status           EarningStatus @default(PENDING)
+  /// When a PENDING row becomes AVAILABLE — the page's "clears within 30 days".
+  clearsAt         DateTime?
+  payoutId         String?
+  payout           Payout?       @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+
+  @@index([instructorId, status])
+  @@index([payoutId])
+  @@map("instructor_earning")
+}
+
+enum EarningSource {
+  SALE
+  BUSINESS_WATCH
+  ADJUSTMENT
+  REVERSAL
+}
+
+enum EarningStatus {
+  PENDING
+  AVAILABLE
+  PAID
+  REVERSED
+}
+
+/// Payout settings draws a bank transfer and a PayPal address, tagged
+/// **Primary** and **Backup** — hence `role` rather than a lone `isDefault`.
+model PayoutMethod {
+  id           String           @id @default(cuid())
+  instructorId String
+  instructor   Instructor       @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  type         PayoutMethodType
+  /// What the row shows: a bank name, or the PayPal address.
+  label        String
+  last4        String?
+  currency     String           @default("usd")
+  role         PayoutMethodRole @default(BACKUP)
+  /// The processor's own id for the destination. Never store raw account
+  /// numbers — the export only ever renders a last-4.
+  externalRef  String?
+  verifiedAt   DateTime?
+  createdAt    DateTime         @default(now())
+
+  payouts Payout[]
+
+  @@index([instructorId])
+  @@map("payout_method")
+}
+
+enum PayoutMethodType {
+  BANK_TRANSFER
+  PAYPAL
+}
+
+enum PayoutMethodRole {
+  PRIMARY
+  BACKUP
+}
+
+/// Admin Reports lists `RUN-2026-08` with a date, recipient count, total and a
+/// status that includes **1 failed** — which is why PARTIALLY_FAILED is its
+/// own state rather than a count the UI has to infer.
+model PayoutRun {
+  id             String          @id @default(cuid())
+  reference      String          @unique
+  scheduledFor   DateTime
+  status         PayoutRunStatus @default(SCHEDULED)
+  totalCents     Int             @default(0)
+  recipientCount Int             @default(0)
+  currency       String          @default("usd")
+  completedAt    DateTime?
+  createdAt      DateTime        @default(now())
+
+  payouts Payout[]
+
+  @@map("payout_run")
+}
+
+enum PayoutRunStatus {
+  SCHEDULED
+  PROCESSING
+  COMPLETED
+  PARTIALLY_FAILED
+}
+
+/// One instructor's slice of a run: `PO-10428` in the instructor's payout
+/// history is the same row the admin's run dialog lists as a recipient. Two
+/// screens, one table — which is the point of modelling the run separately.
+model Payout {
+  id             String        @id @default(cuid())
+  reference      String        @unique
+  payoutRunId    String?
+  payoutRun      PayoutRun?    @relation(fields: [payoutRunId], references: [id], onDelete: SetNull)
+  instructorId   String
+  instructor     Instructor    @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  payoutMethodId String?
+  payoutMethod   PayoutMethod? @relation(fields: [payoutMethodId], references: [id], onDelete: SetNull)
+  amountCents    Int
+  currency       String        @default("usd")
+  status         PayoutStatus  @default(PENDING)
+  failureReason  String?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  earnings InstructorEarning[]
+
+  @@index([instructorId])
+  @@index([payoutRunId])
+  @@map("payout")
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+/// "Include in Lumen Business — reach subscribers and earn from watch time."
+///
+/// A monthly rollup per (instructor, course), from which each month's
+/// subscription revenue pool is divided. **This table is shaped for whatever
+/// the answer is; the answer is a business rule that has not been made** —
+/// what a "minute watched" counts as (elapsed, completed, counted once), what
+/// fraction of subscription revenue enters the pool, and whether the split is
+/// per-minute or per-course. `poolShareCents` stays null until a run computes
+/// it, and the resulting BUSINESS_WATCH earning references this period.
+model WatchTimeRollup {
+  id             String     @id @default(cuid())
+  instructorId   String
+  instructor     Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  courseId       String
+  course         Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// First day of the month, `@db.Date` — a period, not an instant.
+  period         DateTime   @db.Date
+  minutesWatched Int        @default(0)
+  uniqueLearners Int        @default(0)
+  poolShareCents Int?
+  createdAt      DateTime   @default(now())
+
+  @@unique([instructorId, courseId, period])
+  @@index([period])
+  @@map("watch_time_rollup")
+}
+
+// ---------------------------------------------------------------------------
+// Platform administration
+// ---------------------------------------------------------------------------
+
+/// A single row, guarded by a fixed id — `upsert` on "singleton" and there can
+/// never be a second one. Typed columns rather than a key/value bag, because
+/// every one of these is read by app code that wants a type.
+model PlatformSetting {
+  id String @id @default("singleton")
+
+  // Branding
+  logoUrl     String?
+  faviconUrl  String?
+  accentColor String  @default("violet")
+
+  // Search appearance — the public site's title and meta description.
+  websiteTitle    String @default("Lumen — Learn anything, teach everything")
+  metaDescription String @default("Learn from 12,000 expert-led courses, or build and sell your own. One platform for both sides of the classroom — start free today.")
+
+  // Access & moderation
+  instructorApplicationsOpen       Boolean @default(true)
+  newStudentSignupsOpen            Boolean @default(true)
+  requireManualCourseReview        Boolean @default(true)
+  autoEnrollNewCoursesInPromotions Boolean @default(true)
+
+  // Defaults
+  currency               String @default("usd")
+  /// Basis points, so 70% is 7000 — the admin select offers whole percentages
+  /// but the value multiplies money, and bps keeps that exact.
+  defaultRevenueShareBps Int    @default(7000)
+  supportEmail           String @default("support@lumen.co")
+
+  /// Danger zone. "Signs everyone out and shows a maintenance page except for
+  /// admins."
+  maintenanceMode Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_setting")
+}
+
+/// "Every privileged action taken by a member, with who did it and when."
+///
+/// The page states entries are retained for 24 months and **cannot be edited
+/// or deleted**, so this table is append-only in application code — no update
+/// or delete path — and retention is a scheduled job, not a button.
+/// `actorId` is nullable because the export draws a **System** actor for
+/// automatic entries like "Suspended account after 5 failed sign-ins".
+model AuditLog {
+  id          String        @id @default(cuid())
+  actorId     String?
+  actor       User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Snapshots, so a deleted account or a changed role doesn't rewrite
+  /// history the log exists to preserve.
+  actorName   String
+  actorRole   String?
+  action      String
+  targetType  String?
+  targetId    String?
+  targetLabel String?
+  category    AuditCategory
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime      @default(now())
+
+  @@index([category, createdAt])
+  @@index([actorId])
+  @@map("audit_log")
+}
+
+/// The four filter tabs on the Audit Log page.
+enum AuditCategory {
+  MEMBERS
+  COURSES
+  BILLING
+  SECURITY
+}
+
+// ---------------------------------------------------------------------------
+// Help centre
+// ---------------------------------------------------------------------------
+
+/// The student and instructor help centres draw six topics each, and they are
+/// different six — so `audience` is a column, not two tables.
+enum HelpAudience {
+  STUDENT
+  INSTRUCTOR
+  BOTH
+}
+
+model HelpCategory {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  title       String
+  description String
+  /// lucide icon name, matching how `lib/config/dashboard.ts` already stores
+  /// nav icons.
+  icon        String
+  audience    HelpAudience @default(BOTH)
+  order       Int          @default(0)
+
+  articles HelpArticle[]
+
+  @@index([audience])
+  @@map("help_category")
+}
+
+model HelpArticle {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  title       String
+  /// Markdown. The article page's "On this page" rail is derived from the
+  /// headings in here rather than stored, so the two can't disagree.
+  body        String
+  readMinutes Int          @default(3)
+  categoryId  String
+  category    HelpCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  audience    HelpAudience @default(BOTH)
+  published   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  /// "Related articles" in the right rail — an implicit self many-to-many.
+  related   HelpArticle[] @relation("RelatedArticles")
+  relatedTo HelpArticle[] @relation("RelatedArticles")
+
+  @@index([categoryId])
+  @@map("help_article")
+}
+
+/// The "Frequently asked" accordion is short-form and audience-specific, and
+/// cheap to keep separate from full articles — `lib/config/faq.ts` is already
+/// shaped like this.
+model HelpFaq {
+  id       String       @id @default(cuid())
+  question String
+  answer   String
+  audience HelpAudience @default(BOTH)
+  order    Int          @default(0)
+
+  @@index([audience])
+  @@map("help_faq")
+}
+
+/// Only implied — **Contact support**, "our support team replies within one
+/// business day". Last thing to build; handing off to email is a legitimate
+/// first version, and this table is what replaces it.
+model SupportTicket {
+  id        String              @id @default(cuid())
+  userId    String?
+  user      User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  subject   String
+  body      String
+  status    SupportTicketStatus @default(OPEN)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([status])
+  @@map("support_ticket")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+/// One table with an owner discriminator, rather than four near-identical ones
+/// for lesson video, lesson resources, message attachments and certificate
+/// PDFs. Avatars stay outside it — `lib/storage.ts` writes those against
+/// `User.image` directly and the bucket is `public_read`, so an avatar needs
+/// no row.
+///
+/// `storageKey` is the Neon Object Storage key and `url` the public address;
+/// both are stored because every upload writes a **new** key and repoints the
+/// column rather than overwriting one, which is what makes
+/// `Cache-Control: immutable` safe.
+model MediaAsset {
+  id              String         @id @default(cuid())
+  ownerType       MediaOwnerType
+  /// The lesson, message or certificate this belongs to. Not a foreign key —
+  /// the owner is one of several tables.
+  ownerId         String
+  title           String?
+  storageKey      String         @unique
+  url             String
+  mimeType        String
+  sizeBytes       Int
+  /// Video only.
+  durationSeconds Int?
+  sortOrder       Int            @default(0)
+  uploadedById    String?
+  uploadedBy      User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+
+  @@index([ownerType, ownerId])
+  @@map("media_asset")
+}
+
+enum MediaOwnerType {
+  LESSON_VIDEO
+  LESSON_RESOURCE
+  MESSAGE_ATTACHMENT
+  CERTIFICATE_PDF
+  COURSE_COVER
 }
