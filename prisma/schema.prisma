@@ -31,6 +31,15 @@ enum Interest {
   TEACHING
 }
 
+/// `User.notifyAbout` — the "Notify me about…" radio on
+/// `/dashboard/settings/notifications`. `lib/config/notifications.ts` owns the
+/// labels these three values render as.
+enum NotifyAbout {
+  ALL_ACTIVITY
+  DIRECT_MESSAGES
+  NOTHING
+}
+
 model User {
   id                String         @id
   name              String
@@ -77,6 +86,21 @@ model User {
   /// IANA time-zone id ("Europe/London"). Will drive course deadlines and live
   /// session times; nothing formats against it yet.
   timeZone          String?
+  /// From `/dashboard/settings/notifications` — the "Notify me about…"
+  /// radio. A single choice rather than three booleans because the export
+  /// draws it as a radio group: "Nothing" is not "all three off", it is its
+  /// own state, and an enum is what stops the two spellings drifting.
+  /// Defaults to the option the export draws as selected.
+  notifyAbout       NotifyAbout    @default(DIRECT_MESSAGES)
+  /// The four "Email Notifications" switches on the same page. Plain columns
+  /// rather than a JSON blob so a future mailer can filter on them in SQL
+  /// (`where courseEmails`), and their defaults are the export's own on/off
+  /// states — a brand-new account starts opted in to everything except
+  /// marketing, which is the only one of the four that is promotional.
+  courseEmails      Boolean        @default(true)
+  marketingEmails   Boolean        @default(false)
+  communityEmails   Boolean        @default(true)
+  securityEmails    Boolean        @default(true)
   /// The Stripe Customer this account's payments and saved cards hang off.
   ///
   /// Checkout used to pass a bare `customer_email`, which meant Stripe made a

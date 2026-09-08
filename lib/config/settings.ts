@@ -27,10 +27,10 @@ export type SettingsNavItem = {
  * cannot drift — the same reason `lib/config/site.ts` owns the marketing nav
  * instead of the header component.
  *
- * Profile, Account and Billing are built. Notifications has an export of its
- * own (`settings-notifications-page.png`) and is listed here so its place in
- * the information architecture is settled; flip `built` to `true` when the
- * route lands.
+ * All four sections are built, so the `built` flag currently changes nothing —
+ * it stays because it is what lets a fifth section be listed here (and so
+ * appear in the sidebar) before its route exists, rather than linking onto a
+ * 404.
  */
 export const settingsNav: SettingsNavItem[] = [
   {
@@ -59,7 +59,7 @@ export const settingsNav: SettingsNavItem[] = [
     title: "Notifications",
     href: "/dashboard/settings/notifications",
     icon: BellIcon,
-    built: false,
+    built: true,
   },
 ]
 

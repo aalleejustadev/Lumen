@@ -655,6 +655,65 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   sample size, not a designed cap — there is no pager on it — so
   `TRANSACTIONS_LIMIT` is set well above that rather than truncating real
   history at six.
+- `/dashboard/settings/notifications`, from
+  `settings-notifications-page.png`: `notifications-form.tsx` is the only
+  client piece and `settings-notifications.tsx` is its card, on the same 922px
+  / 30px-padding geometry as the profile and account sections, so nothing
+  about the shell is re-measured. `lib/config/notifications.ts` owns the three
+  radio options, the four toggle rows and the two section headings — a
+  toggle's `name` *is* its `User` column, which is what lets
+  `lib/actions/notifications.ts` loop over that list instead of naming each
+  switch twice. `lib/notifications.ts` reads. Every control is **controlled**,
+  held in one state object seeded from that row: uncontrolled
+  `defaultValue`/`defaultChecked` looked simpler and was wrong, because a
+  Server Action re-renders the route it was called from and streams fresh
+  props back, so `settings` changes identity after a save and Base UI warns
+  that an uncontrolled default moved under it. That is also why this action
+  takes a **typed payload rather than `FormData`** — unlike the profile and
+  account forms, whose values live in the DOM, everything here is already in
+  React state, so reading it back off the form would only add a way for the
+  two to disagree (it is still validated server-side; a Server Action is a
+  public endpoint). No `revalidatePath`: nothing in the chrome renders these.
+  This page is the
+  fourth settings section, so `settingsNav`'s `built` flag is now `true`
+  everywhere; it stays in the type because it is what lets a fifth section be
+  listed (and so appear in the sidebar) before its route exists.
+  It borrows only `SETTINGS_SUBMIT` from `settings-controls.ts` — that
+  vocabulary is measured for 46px text fields and none of it fits a radio, a
+  switch or a bordered row. Measured off the export at DPR 2: 18px/700 section
+  headings (`text-lg font-bold`, explicit for the reason the design note gives
+  — `globals.css` forces every `h2` to 800), radio rows on a 33px pitch,
+  77px toggle rows on a 12px gap, 16px/600 row titles over 13px muted lines.
+  Three things there are not the generated components' own look, and each is
+  fixed by repeating the variant rather than reaching for `!`: the radio is
+  **inverted** (a white face with a 1.5px `--primary` ring and a 9px
+  `--primary` dot, where shadcn fills the circle dark and punches a white dot
+  out of it); the switch is **46 x 26 with a 20px thumb inset 3px** against
+  the generated 32 x 18.4, reached with `p-[3px] border-0` so the content box
+  *is* the thumb's travel and a checked `translate-x-full` is exactly the
+  20px it needs; and the unchecked track is `--track` (the token whose comment
+  already says "progress + toggle tracks"), not the generated `--input`. The
+  toggle rows are plain `div`s rather than `Card`s because `Card`'s hairline
+  is a `ring`, which paints outside the layout box and would make the
+  export's 12px gap read as 10 — the same trap the wishlist rows document. The
+  rows' vertical padding is `py-4` against 20px sides on purpose: a CSS line
+  box is taller than the hugged text box Figma measures, and 16px is what
+  lands the row on the drawn 77px without shrinking the type.
+  The export's **"Use different settings for my mobile devices"** checkbox is
+  deliberately not built — there is no mobile app, so no mobile settings page
+  for its help text to point at — so the button follows the last toggle row.
+- **`User` gained the notification columns.** `notifyAbout` is a
+  `NotifyAbout` enum (`ALL_ACTIVITY` | `DIRECT_MESSAGES` | `NOTHING`) rather
+  than three booleans, because the export draws a radio group: "Nothing" is
+  its own state, not "all three off". The four `*Emails` booleans are plain
+  columns rather than a JSON blob so a future mailer can filter on them in
+  SQL, and their defaults are the export's own on/off states — everything on
+  except `marketingEmails`, the only promotional one of the four. Like the
+  profile and account columns these are **not** Better Auth
+  `additionalFields`, which would let a client PATCH them straight through
+  `/api/auth/update-user`. Nothing sends mail against them yet: they are the
+  preferences a future mailer reads, the same posture `language`/`timeZone`
+  are in.
 - **Checkout now uses a real Stripe `Customer`.** `lib/actions/checkout.ts`
   passed a bare `customer_email`, which makes Stripe mint a throwaway guest
   customer per session — nothing could be saved for next time and the billing
