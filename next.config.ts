@@ -47,6 +47,16 @@ const checkoutCsp = [
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  experimental: {
+    serverActions: {
+      // A Server Action body is capped at 1MB by default, and the profile
+      // page's avatar upload posts the file itself through one
+      // (`uploadAvatar`). `lib/storage.ts` refuses anything over 4MB, so this
+      // is that limit plus room for the multipart framing — raising it here
+      // rather than in the action is the only place Next reads it.
+      bodySizeLimit: "5mb",
+    },
+  },
   async headers() {
     return [
       {

@@ -16,6 +16,8 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { settingsNav } from "@/lib/config/settings"
+
 export type DashboardNavItem = {
   title: string
   href: string
@@ -90,16 +92,16 @@ export const dashboardNav: DashboardNavGroup[] = [
         icon: BellIcon,
       },
       {
-        // The chevron in the export — the sub-items are the account sections
-        // the user menu already names, rather than invented ones.
+        // The chevron in the export. The children are derived from
+        // `settingsNav` rather than listed again here, so the sidebar and the
+        // sections card on `/dashboard/settings/profile` cannot disagree about
+        // what the settings sections are. (Its "Notifications" is
+        // notification *preferences* — a different page from the
+        // `/dashboard/notifications` feed above.)
         title: "Settings",
         href: "/dashboard/settings",
         icon: SettingsIcon,
-        items: [
-          { title: "Profile", href: "/dashboard/settings/profile" },
-          { title: "Account", href: "/dashboard/settings/account" },
-          { title: "Billing", href: "/dashboard/settings/billing" },
-        ],
+        items: settingsNav.map(({ title, href }) => ({ title, href })),
       },
       {
         title: "Help Center",

@@ -533,6 +533,77 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   symlinked into `.claude/skills/` like the rest — they were not, so they were
   invisible to the skill list. `stripe-best-practices` is the one to read
   before touching any of the above.
+- `components/dashboard/settings/` — `/dashboard/settings/*`, from
+  `setting-profile-page.png`: `settings-nav.tsx` is the sections card,
+  `avatar-upload.tsx` and `profile-form.tsx` are the two client pieces, and
+  `settings-profile.tsx` composes them onto one card. The heading and the
+  two-column grid live in `app/(dashboard)/dashboard/settings/layout.tsx`, so
+  the four sections can't grow four different headings; `/dashboard/settings`
+  itself just redirects to `/profile`, which is the export's first section.
+  Measured off that export at DPR 2: unlike every other dashboard page this
+  one is **capped** rather than full-width — a 1178px content column with a
+  228px nav card, a 28px gutter, and a 922px form card on 30px padding. Rows
+  in the nav card are 40px; controls in the form are **46px** (`h-11.5`, the
+  auth screens' height, not the dashboard's usual 40px, since they're text
+  fields) with 15px labels/values over 13px help text. Its `h1` carries an
+  explicit `font-bold` for the reason the design note below gives — this page
+  and the enrolled-course/quiz pages are the ones built that way.
+  `lib/config/settings.ts` owns the four sections and **`lib/config/dashboard.ts`
+  derives the sidebar's Settings children from it**, so the card and the
+  sidebar can't drift. Only Profile is built: `settingsNav`'s `built` flag
+  makes the other three render as inert rows rather than links onto a 404 —
+  flip it as each route lands. That list's "Notifications" is notification
+  *preferences*, a different page from the `/dashboard/notifications` feed in
+  the sidebar's General group (the exports draw both).
+  Two things in the export were read rather than copied: the **Email** field
+  is a *disabled* `<select>` (the export draws the chevron, and the address is
+  Better Auth's identity key — changing it is a verification flow), and the
+  little teal glyph at the trailing edge of each URL row is a Figma artifact,
+  rendered here as the remove button a grow-by-hand list actually needs.
+  `NativeSelect` hands `className` to its **wrapper** and hardcodes
+  `h-8 pl-2.5 text-sm` on the inner `<select>`, so the 46px box is reached
+  with `[&_select]:` descendant selectors — (0,1,1) beats (0,1,0) whatever
+  order Tailwind emits, the same specificity trap `Avatar` and
+  `PaginationLink` sprang. The URL rows are `type="text"`, **not**
+  `type="url"`: the browser would refuse to submit a bare `example.com`,
+  which the action deliberately accepts and upgrades to `https://`.
+- **This is the first surface that writes to `User`.** `prisma/schema.prisma`
+  gained `username` (unique), `usernameChangedAt`, `bio` and `urls`.
+  `username` is a *handle*, not a second spelling of `name`: `name` is
+  whatever Google/GitHub hands us and two people may share it, while the
+  handle is what a future public learner page keys on — the role
+  `Instructor.slug` plays. It is seeded from `name` (`suggestUsername`) so a
+  field whose own help text calls it "your public display name" never opens
+  empty. `usernameChangedAt` exists because the export promises one change
+  per 30 days and a rule about elapsed time needs a timestamp.
+  `lib/profile.ts` reads, `lib/actions/profile.ts` writes.
+  Those three columns are deliberately **not** Better Auth `additionalFields`:
+  that would put a 400-character bio in the session cookie cache *and* let a
+  client PATCH them straight through `/api/auth/update-user`, skipping the
+  uniqueness and 30-day checks. The avatar is the exception and goes through
+  `auth.api.updateUser({ body: { image } })` — `image` is a core field that
+  the sidebar, app bar and account menu render from the *session*, which has a
+  5-minute cookie cache, so a bare `db.user.update` would leave the old
+  picture on screen for up to five minutes.
+- `lib/storage.ts` — Neon Object Storage, the `lumen-avatars` bucket behind
+  the profile page's "Upload image". `server-only` and returns `null` when the
+  credentials are blank, the same posture as `lib/stripe.ts`; the client-safe
+  size/MIME limits therefore live in `lib/config/settings.ts` instead, because
+  the file picker is a Client Component and importing this module from one is
+  a build error. Neon speaks S3, so it's the plain AWS SDK, and
+  `forcePathStyle: true` is **required** — Neon addresses buckets as
+  `<endpoint>/<bucket>/<key>`. The bucket is `public_read`: an avatar is drawn
+  on every dashboard view, so a presigned URL would have to be re-signed each
+  render and would defeat the HTTP cache. Every upload writes a **new** key
+  and repoints the column rather than overwriting one — that's what makes
+  `Cache-Control: immutable` safe — and `deleteAvatar` then collects the old
+  object, but only under that user's own prefix (`User.image` just as often
+  holds a Google/GitHub avatar). Storage is **branch-scoped** and branches
+  with the database, so the `AWS_*` variables belong to one branch; see
+  `.env.example` for the two `neonctl` commands that create the bucket and
+  pull them. `next.config.ts` raises `serverActions.bodySizeLimit` to 5mb
+  because the file is posted through a Server Action, which caps bodies at 1MB
+  by default.
 - `lib/user.ts` — `MenuUser` and `initialsOf`. Deliberately not in a
   `"use client"` file: Server Components render the chrome, and a client
   module's functions can't be called from the server.
@@ -612,7 +683,11 @@ a tab) is a step below that again at 500/600. The enrolled course page and
 the quiz page are built this way. **`/dashboard/learning` and
 `/dashboard/courses` were not** — their `h1`s still render 800 against
 exports that draw 700; left alone rather than swept in unasked, but they are
-the same mismatch. Big display
+the same mismatch. `/dashboard/settings/*` is built the corrected way (its
+"Settings" measures 0.141em, i.e. 700). Note also that the settings export
+renders type at the design system's *full* scale, unlike the my-learning and
+browse-courses exports — its `h1` measures a 32px cap where theirs measure
+~27px — so a measurement off this one can be trusted literally. Big display
 headings inside cards take `font-extrabold` explicitly. Radii derive from `--radius` (10px): `rounded-lg` for
 controls, `rounded-xl` for cards. The designs were authored a step rounder;
 the scale was pulled in on purpose, so don't "correct" it back.

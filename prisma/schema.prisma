@@ -45,6 +45,26 @@ model User {
   banExpires        DateTime?
   // `user.additionalFields.intent` in lib/auth.ts — LEARNING | TEACHING
   intent            String?        @default("LEARNING")
+  /// The public handle from `/dashboard/settings/profile`. Nullable because
+  /// Better Auth creates accounts with a `name` and no handle (sign-up asks
+  /// for "Full name"), so an account has one only once its owner saves the
+  /// profile form; that form seeds the field from `name` so it is never
+  /// presented empty. Unique — which is the whole reason it is a column of
+  /// its own rather than a second spelling of `name`: `name` is whatever
+  /// Google/GitHub hands us and two people may share it, while a handle is
+  /// the thing a future public learner page keys on, the same role
+  /// `Instructor.slug` plays.
+  username          String?        @unique
+  /// When `username` last changed. The settings page promises "you can only
+  /// change this once every 30 days", and `lib/actions/profile.ts` enforces
+  /// it — a rule about elapsed time needs a timestamp, not just the value.
+  usernameChangedAt DateTime?
+  /// The profile page's "Bio" textarea. One paragraph, plain text.
+  bio               String?
+  /// The profile page's "URLs" list — a text array rather than a join table
+  /// because the form renders bare strings with no per-row metadata, and the
+  /// array's order *is* the display order.
+  urls              String[]
   sessions          Session[]
   accounts          Account[]
   // Populated once this user actually starts teaching — see `Instructor`.
