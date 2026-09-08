@@ -27,10 +27,10 @@ export type SettingsNavItem = {
  * cannot drift — the same reason `lib/config/site.ts` owns the marketing nav
  * instead of the header component.
  *
- * Only Profile is built. Account, Billing and Notifications have exports of
- * their own (`settings-{account,billing,notifications}-page.png`) and are
- * listed here so their place in the information architecture is settled;
- * flip `built` to `true` as each route lands.
+ * Profile and Account are built. Billing and Notifications have exports of
+ * their own (`settings-{billing,notifications}-page.png`) and are listed here
+ * so their place in the information architecture is settled; flip `built` to
+ * `true` as each route lands.
  */
 export const settingsNav: SettingsNavItem[] = [
   {
@@ -43,7 +43,7 @@ export const settingsNav: SettingsNavItem[] = [
     title: "Account",
     href: "/dashboard/settings/account",
     icon: ShieldCheckIcon,
-    built: false,
+    built: true,
   },
   {
     title: "Billing",
@@ -68,6 +68,16 @@ export const settingsHeading = {
   title: "Settings",
   description: "Manage your account settings and set e-mail preferences.",
 } as const
+
+/** `User.name` on the account page — the string the chrome and email render. */
+export const MAX_NAME_LENGTH = 100
+
+/**
+ * The floor `updateAccount` enforces on a submitted date of birth. Thirteen is
+ * the usual line for an account someone signs up for themselves; the field is
+ * still optional, so this only bites once a date is actually entered.
+ */
+export const MIN_AGE_YEARS = 13
 
 /** How many URLs the profile form will let you add. */
 export const MAX_PROFILE_URLS = 5

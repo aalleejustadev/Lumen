@@ -550,11 +550,22 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   and the enrolled-course/quiz pages are the ones built that way.
   `lib/config/settings.ts` owns the four sections and **`lib/config/dashboard.ts`
   derives the sidebar's Settings children from it**, so the card and the
-  sidebar can't drift. Only Profile is built: `settingsNav`'s `built` flag
-  makes the other three render as inert rows rather than links onto a 404 —
+  sidebar can't drift. Profile and Account are built: `settingsNav`'s `built`
+  flag makes the other two render as inert rows rather than links onto a 404 —
   flip it as each route lands. That list's "Notifications" is notification
   *preferences*, a different page from the `/dashboard/notifications` feed in
   the sidebar's General group (the exports draw both).
+  `settings-controls.ts` holds the class vocabulary the forms share
+  (`SETTINGS_CONTROL` / `_LABEL` / `_DESCRIPTION` / `_SUBMIT`) — the profile
+  and account exports draw *identical* geometry, so it is measured once. Two
+  tokens in it look redundant and are the same specificity trap twice over:
+  `md:text-[15px]` (because `Input`/`Textarea` carry `md:text-sm`) and
+  `dark:bg-background` (because they carry `dark:bg-input/30`, a
+  `:is(.dark *)`-wrapped selector that beats a plain `bg-background` and would
+  fill the control *lighter* than its card in dark mode, inverting the
+  export). Repeating the variant is what lets tailwind-merge drop the
+  generated class; that is the fix, not `!` — the auth screens' `dark:bg-card`
+  inputs already work this way.
   Two things in the export were read rather than copied: the **Email** field
   is a *disabled* `<select>` (the export draws the chevron, and the address is
   Better Auth's identity key — changing it is a verification flow), and the
@@ -567,8 +578,39 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `PaginationLink` sprang. The URL rows are `type="text"`, **not**
   `type="url"`: the browser would refuse to submit a bare `example.com`,
   which the action deliberately accepts and upgrades to `https://`.
-- **This is the first surface that writes to `User`.** `prisma/schema.prisma`
-  gained `username` (unique), `usernameChangedAt`, `bio` and `urls`.
+- `/dashboard/settings/account`, from `settings-account-page.png`:
+  `account-form.tsx` and its `settings-account.tsx` card. Same geometry as the
+  profile page, so nothing is re-measured. Three readings of the export worth
+  keeping: Language and Time zone carry lucide's **`ArrowUpDown`** (a pair of
+  arrows), not the `ChevronDown` `SelectTrigger` draws for itself — the
+  built-in is always the trigger's last child, so it's hidden with
+  `[&>svg:last-child]:hidden` and redrawn as a child, the same trick
+  `course-content-card.tsx` uses on the accordion chevron; `SelectTrigger`
+  also needs **`data-[size=default]:h-11.5`** rather than a plain `h-11.5`,
+  because its own `data-[size=default]:h-8` is an attribute selector that wins
+  on specificity (repeat the variant, don't reach for `!`); and the Time zone
+  **placeholder really is `(GMT+00:00) London`** — it's drawn muted, so it's
+  filler the designer left in, kept because the brief is to match the export.
+  Date of birth is a `Popover` + `Calendar` on `captionLayout="dropdown"`
+  (a birthday is decades back, so month paging is the wrong affordance), not
+  an `<input type="date">` the export's styling can't be applied to.
+  `lib/config/locale.ts` holds the languages and a curated ~36-zone list;
+  only the IANA id is stored and the `(GMT±HH:MM)` half of each label is
+  **computed**, because an offset isn't a property of a zone (London is +00:00
+  in January and +01:00 in July). Those labels are built in the Server
+  Component and passed down, so the server's render and the browser's can't
+  disagree across a DST boundary. Language and time zone are stored
+  preferences that **nothing acts on yet** — there is no i18n layer and no
+  surface formats against the zone.
+- **These two pages are the first surfaces that write to `User`.**
+  `prisma/schema.prisma` gained `username` (unique), `usernameChangedAt`,
+  `bio`, `urls`, `dateOfBirth`, `language` and `timeZone`.
+  `dateOfBirth` is `@db.Date`, not a timestamp: a birthday has no time and no
+  zone, and it moves across every boundary as a `yyyy-MM-dd` string
+  (`lib/account.ts`) so it can't slide a day. Worth knowing when debugging it
+  by hand: the `pg` driver parses a `DATE` to *local* midnight while Prisma
+  normalizes it to UTC, so a raw `pg` query and the app disagree by a day in
+  any zone east of UTC.
   `username` is a *handle*, not a second spelling of `name`: `name` is
   whatever Google/GitHub hands us and two people may share it, while the
   handle is what a future public learner page keys on — the role
@@ -576,15 +618,16 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   field whose own help text calls it "your public display name" never opens
   empty. `usernameChangedAt` exists because the export promises one change
   per 30 days and a rule about elapsed time needs a timestamp.
-  `lib/profile.ts` reads, `lib/actions/profile.ts` writes.
+  `lib/profile.ts`/`lib/actions/profile.ts` are the profile page's read and
+  write; `lib/account.ts`/`lib/actions/account.ts` are the account page's.
   Those three columns are deliberately **not** Better Auth `additionalFields`:
   that would put a 400-character bio in the session cookie cache *and* let a
   client PATCH them straight through `/api/auth/update-user`, skipping the
-  uniqueness and 30-day checks. The avatar is the exception and goes through
-  `auth.api.updateUser({ body: { image } })` — `image` is a core field that
-  the sidebar, app bar and account menu render from the *session*, which has a
-  5-minute cookie cache, so a bare `db.user.update` would leave the old
-  picture on screen for up to five minutes.
+  uniqueness and 30-day checks. `name` and `image` are the exceptions and go
+  through `auth.api.updateUser` — both are core Better Auth fields that the
+  sidebar, app bar and account menu render from the *session*, which has a
+  5-minute cookie cache, so a bare `db.user.update` would leave the old name
+  or picture in the chrome for up to five minutes.
 - `lib/storage.ts` — Neon Object Storage, the `lumen-avatars` bucket behind
   the profile page's "Upload image". `server-only` and returns `null` when the
   credentials are blank, the same posture as `lib/stripe.ts`; the client-safe

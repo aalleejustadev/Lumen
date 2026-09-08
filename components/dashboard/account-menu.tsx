@@ -89,7 +89,7 @@ function AccountMenu({
           <DropdownMenuItem
             key={entry.href}
             render={<Link href={entry.href} />}
-            className="cursor-pointer"
+            className="cursor-pointer p-2"
           >
             <entry.icon />
             {entry.title}
@@ -102,7 +102,7 @@ function AccountMenu({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               render={<Link href="/dashboard/admin" />}
-              className="cursor-pointer"
+              className="cursor-pointer p-2"
             >
               <ShieldCheckIcon />
               Admin console
@@ -113,7 +113,7 @@ function AccountMenu({
         <DropdownMenuItem
           onClick={signOut}
           disabled={signingOut}
-          className="cursor-pointer"
+          className="cursor-pointer p-2"
         >
           <LogOutIcon />
           Log out

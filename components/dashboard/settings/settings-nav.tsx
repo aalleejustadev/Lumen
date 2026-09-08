@@ -32,7 +32,7 @@ function SettingsNav() {
 
   return (
     <Card className="[--card-spacing:--spacing(2.5)]">
-      <CardContent className="flex flex-col">
+      <CardContent className="flex flex-col gap-y-1">
         {settingsNav.map((item) => {
           const active = pathname === item.href
           const className = cn(

@@ -65,6 +65,18 @@ model User {
   /// because the form renders bare strings with no per-row metadata, and the
   /// array's order *is* the display order.
   urls              String[]
+  /// From `/dashboard/settings/account`. A **date**, not a timestamp
+  /// (`@db.Date`): a birthday has no time and no zone, and storing it as a
+  /// `timestamp` makes it shift a day either side of UTC. `lib/account.ts`
+  /// moves it across the wire as a `yyyy-MM-dd` string for the same reason.
+  dateOfBirth       DateTime?      @db.Date
+  /// Preferred dashboard language, as a BCP-47 tag from `lib/config/locale.ts`
+  /// ("en", "pt-BR", …). Stored but not yet acted on — there is no i18n layer,
+  /// so this is the preference a future one reads.
+  language          String?
+  /// IANA time-zone id ("Europe/London"). Will drive course deadlines and live
+  /// session times; nothing formats against it yet.
+  timeZone          String?
   sessions          Session[]
   accounts          Account[]
   // Populated once this user actually starts teaching — see `Instructor`.

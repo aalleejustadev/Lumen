@@ -16,6 +16,12 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
+import {
+  SETTINGS_CONTROL,
+  SETTINGS_DESCRIPTION,
+  SETTINGS_LABEL,
+  SETTINGS_SUBMIT,
+} from "@/components/dashboard/settings/settings-controls"
 import { updateProfile, type ProfileFieldErrors } from "@/lib/actions/profile"
 import {
   MAX_BIO_LENGTH,
@@ -31,15 +37,15 @@ import { cn } from "@/lib/utils"
  * `ui-design/light/dashboard/student/setting-profile-page.png`.
  *
  * Measured off that export at DPR 2: a 922px card on 30px padding
- * (`--card-spacing`), 46px controls (`h-11.5` — the same control height the
- * auth screens use, not the dashboard's usual 40px, because these are text
- * fields rather than buttons), 15px labels and values over 13px help text,
- * and a 78px bio box. The URL rows sit on a 10px rhythm with "Add URL" 12px
- * under them and the submit 28px under that.
+ * (`--card-spacing`) and a 78px bio box; the URL rows sit on a 10px rhythm
+ * with "Add URL" 12px under them. Everything else is the shared settings
+ * vocabulary — see `settings-controls.ts`.
  *
  * `Field` gives the label → control → description stack for free and its
  * default `gap-2` is exactly the 8px the export draws, so only the URLs block
  * — label and description pressed together *above* a list — overrides it.
+ * The control/label/description classes come from `settings-controls.ts`,
+ * shared with the account form because both exports draw the same geometry.
  *
  * The whole form is one client component because the URL list is add/remove
  * state. Submitting posts real `FormData` to `updateProfile`, which
@@ -47,9 +53,6 @@ import { cn } from "@/lib/utils"
  * per-field messages below are whatever it hands back, not a second copy of
  * those rules.
  */
-
-/** 15px value + 46px box, per the export. `md:` beats `Input`'s own `md:text-sm`. */
-const CONTROL = "h-11.5 bg-background px-3.5 text-[15px] md:text-[15px]"
 
 function ProfileForm({ profile }: { profile: Profile }) {
   // Controlled, and lowercased as it is typed. The action stores the handle
@@ -84,7 +87,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
     <form onSubmit={onSubmit}>
       <FieldGroup>
         <Field data-invalid={errors.username ? true : undefined}>
-          <FieldLabel htmlFor="username" className="text-[15px] font-semibold">
+          <FieldLabel htmlFor="username" className={SETTINGS_LABEL}>
             Username
           </FieldLabel>
           <Input
@@ -98,12 +101,14 @@ function ProfileForm({ profile }: { profile: Profile }) {
             autoComplete="username"
             spellCheck={false}
             aria-invalid={errors.username ? true : undefined}
-            className={CONTROL}
+            className={SETTINGS_CONTROL}
           />
           {errors.username ? (
-            <FieldError className="text-[13px]">{errors.username}</FieldError>
+            <FieldError className={SETTINGS_DESCRIPTION}>
+              {errors.username}
+            </FieldError>
           ) : (
-            <FieldDescription className="text-[13px]">
+            <FieldDescription className={SETTINGS_DESCRIPTION}>
               This is your public display name. It can be your real name or a
               pseudonym. You can only change this once every{" "}
               {USERNAME_CHANGE_DAYS} days.
@@ -133,7 +138,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
             The `<select disabled>` plus `aria-describedby` already say why it
             can't be edited. */}
         <Field>
-          <FieldLabel htmlFor="email" className="text-[15px] font-semibold">
+          <FieldLabel htmlFor="email" className={SETTINGS_LABEL}>
             Email
           </FieldLabel>
           {/* `NativeSelect` hands `className` to its *wrapper*, and the
@@ -146,7 +151,11 @@ function ProfileForm({ profile }: { profile: Profile }) {
           <NativeSelect
             className={cn(
               "w-full has-[select:disabled]:opacity-100",
-              "[&_select]:h-11.5 [&_select]:bg-background [&_select]:pl-3.5 [&_select]:text-[15px] [&_select]:text-muted-foreground",
+              // `bg-background!` is the one `!` here: the select's own
+              // `dark:bg-input/30` is (0,2,0) and a `[&_select]:` descendant
+              // override is only (0,1,1), so it cannot win on specificity and
+              // tailwind-merge can't drop it either (different variants).
+              "[&_select]:h-11.5 [&_select]:bg-background! [&_select]:pl-3.5 [&_select]:text-[15px] [&_select]:text-muted-foreground",
               "[&_[data-slot=native-select-icon]]:right-3.5"
             )}
             disabled
@@ -157,13 +166,16 @@ function ProfileForm({ profile }: { profile: Profile }) {
               {profile.email}
             </NativeSelectOption>
           </NativeSelect>
-          <FieldDescription id="email-description" className="text-[13px]">
+          <FieldDescription
+            id="email-description"
+            className={SETTINGS_DESCRIPTION}
+          >
             You can manage verified email addresses in your email settings.
           </FieldDescription>
         </Field>
 
         <Field data-invalid={errors.bio ? true : undefined}>
-          <FieldLabel htmlFor="bio" className="text-[15px] font-semibold">
+          <FieldLabel htmlFor="bio" className={SETTINGS_LABEL}>
             Bio
           </FieldLabel>
           <Textarea
@@ -173,12 +185,14 @@ function ProfileForm({ profile }: { profile: Profile }) {
             maxLength={MAX_BIO_LENGTH}
             placeholder="Learning design and front-end craft, one lesson at a time."
             aria-invalid={errors.bio ? true : undefined}
-            className="min-h-[78px] bg-background px-3.5 py-2.5 text-[15px] md:text-[15px]"
+            className="min-h-[78px] bg-background px-3.5 py-2.5 text-[15px] md:text-[15px] dark:bg-background"
           />
           {errors.bio ? (
-            <FieldError className="text-[13px]">{errors.bio}</FieldError>
+            <FieldError className={SETTINGS_DESCRIPTION}>
+              {errors.bio}
+            </FieldError>
           ) : (
-            <FieldDescription className="text-[13px]">
+            <FieldDescription className={SETTINGS_DESCRIPTION}>
               You can @mention other learners and instructors to link to them.
             </FieldDescription>
           )}
@@ -187,10 +201,10 @@ function ProfileForm({ profile }: { profile: Profile }) {
         {/* The one field whose description sits above its controls, so the
             `Field` gap is dropped and each piece carries its own margin. */}
         <Field className="gap-0">
-          <FieldLabel htmlFor="url-0" className="text-[15px] font-semibold">
+          <FieldLabel htmlFor="url-0" className={SETTINGS_LABEL}>
             URLs
           </FieldLabel>
-          <FieldDescription className="mt-0.5 text-[13px]">
+          <FieldDescription className={cn("mt-0.5", SETTINGS_DESCRIPTION)}>
             Add links to your website, blog, or social media profiles.
           </FieldDescription>
 
@@ -219,7 +233,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
                     placeholder="https://example.com"
                     spellCheck={false}
                     aria-invalid={errors.urls?.[index] ? true : undefined}
-                    className={cn(CONTROL, "pr-11")}
+                    className={cn(SETTINGS_CONTROL, "pr-11")}
                   />
                   {/* The export puts a control in this slot at the trailing
                       edge of every URL row; a removal is the one a
@@ -245,7 +259,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
                   </Button>
                 </div>
                 {errors.urls?.[index] ? (
-                  <FieldError className="mt-1.5 text-[13px]">
+                  <FieldError className={cn("mt-1.5", SETTINGS_DESCRIPTION)}>
                     {errors.urls[index]}
                   </FieldError>
                 ) : null}
@@ -269,7 +283,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
         </Field>
       </FieldGroup>
 
-      <Button type="submit" disabled={pending} className="mt-7 h-11 px-6">
+      <Button type="submit" disabled={pending} className={SETTINGS_SUBMIT}>
         {pending ? <Spinner data-icon="inline-start" /> : null}
         {pending ? "Saving…" : "Update profile"}
       </Button>
