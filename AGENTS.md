@@ -550,9 +550,9 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   and the enrolled-course/quiz pages are the ones built that way.
   `lib/config/settings.ts` owns the four sections and **`lib/config/dashboard.ts`
   derives the sidebar's Settings children from it**, so the card and the
-  sidebar can't drift. Profile and Account are built: `settingsNav`'s `built`
-  flag makes the other two render as inert rows rather than links onto a 404 —
-  flip it as each route lands. That list's "Notifications" is notification
+  sidebar can't drift. Profile, Account and Billing are built: `settingsNav`'s
+  `built` flag makes Notifications render as an inert row rather than a link
+  onto a 404 — flip it when that route lands. That list's "Notifications" is notification
   *preferences*, a different page from the `/dashboard/notifications` feed in
   the sidebar's General group (the exports draw both).
   `settings-controls.ts` holds the class vocabulary the forms share
@@ -602,9 +602,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   disagree across a DST boundary. Language and time zone are stored
   preferences that **nothing acts on yet** — there is no i18n layer and no
   surface formats against the zone.
-- **These two pages are the first surfaces that write to `User`.**
+- **The settings pages are the first surfaces that write to `User`.**
   `prisma/schema.prisma` gained `username` (unique), `usernameChangedAt`,
-  `bio`, `urls`, `dateOfBirth`, `language` and `timeZone`.
+  `bio`, `urls`, `dateOfBirth`, `language`, `timeZone` and
+  `stripeCustomerId` (unique).
   `dateOfBirth` is `@db.Date`, not a timestamp: a birthday has no time and no
   zone, and it moves across every boundary as a `yyyy-MM-dd` string
   (`lib/account.ts`) so it can't slide a day. Worth knowing when debugging it
@@ -628,6 +629,70 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   sidebar, app bar and account menu render from the *session*, which has a
   5-minute cookie cache, so a bare `db.user.update` would leave the old name
   or picture in the chrome for up to five minutes.
+- `/dashboard/settings/billing`, from `settings-billing-page.png`:
+  `settings-billing.tsx` composes three blocks — `billing-plan-header.tsx`,
+  `billing-payment-methods.tsx`, `billing-transactions.tsx` — with
+  `billing-actions.tsx` and `add-payment-method-dialog.tsx` as the only client
+  pieces. `lib/billing.ts` reads, `lib/actions/billing.ts` writes.
+  **Nothing on it is demo data**, which is the whole point: saved cards and the
+  plan come from the user's Stripe customer, the table comes from our own
+  `order` rows, and an account with none of those gets empty states rather
+  than invented rows.
+  It is the one settings card that can't use `CardContent` — the rule under
+  the plan header is **full-bleed**, so each block carries its own padding and
+  a `Separator` sits between them as a direct child of `Card`. That card needs
+  **`[--card-spacing:0px]`, not `py-0 gap-0`**: `Card` sets
+  `py-(--card-spacing)`/`gap-(--card-spacing)`, and tailwind-merge does *not*
+  treat an arbitrary CSS-variable shorthand as the same utility group, so the
+  plain overrides left both in place (16px of stray padding, verified in the
+  rendered HTML). Zero the variable instead. The export draws a divider under
+  the *final* table row, which `TableBody`'s `[&_tr:last-child]:border-0`
+  removes — it is drawn as a `border-b` on the `Table` rather than by
+  re-declaring the arbitrary variant, which would only win on Tailwind's
+  emission order. Status pills use `bg-*/10 text-*` on the semantic tokens
+  rather than the export's literal hexes so dark mode follows (its amber sits
+  between `--warning` and `--star`). The export's six table rows are its
+  sample size, not a designed cap — there is no pager on it — so
+  `TRANSACTIONS_LIMIT` is set well above that rather than truncating real
+  history at six.
+- **Checkout now uses a real Stripe `Customer`.** `lib/actions/checkout.ts`
+  passed a bare `customer_email`, which makes Stripe mint a throwaway guest
+  customer per session — nothing could be saved for next time and the billing
+  page had no customer to list cards from. It now passes `customer` (from
+  `getOrCreateStripeCustomer`, stored on `User.stripeCustomerId`) plus
+  `saved_payment_method_options: { payment_method_save: "enabled" }`, which
+  shows Stripe's own opt-in "save this card" checkbox. That is a third
+  session-shaping option, so it gets a third reuse guard — `savesToCustomer`
+  beside `ELEMENTS_UI_MODES` and `sameExclusions`; see the note above about
+  why every one of those is needed.
+- Saving a card is a **SetupIntent**, per Stripe's own guidance (Sources and
+  Tokens are deprecated for it), created when the dialog *opens* rather than
+  on page load so a visitor who never clicks doesn't mint Stripe objects. It
+  reuses `checkout-appearance.ts` so the two Stripe surfaces can't drift.
+  Every action re-checks that a `pm_…` id belongs to the caller's own customer
+  before touching it (`ownsPaymentMethod`) — those ids reach the browser, so
+  an action that trusted the one it was handed would let one account detach
+  another's card. Verified against a real payment method belonging to a
+  different customer in the same test account.
+- **Lumen has no subscription product**, so the header's plan line is `null`
+  for every real account and renders "No active plan · you pay per course".
+  It is still read from Stripe (`subscriptions.list`) rather than stubbed, so
+  the day a plan exists it renders the export's line with the interval and
+  amount from the price. The export's own
+  `Billing monthly · Next payment on 02/09/2026 for $59.90` is deliberately
+  **not** reproduced — inventing a plan nobody is on would be a lie on a
+  billing screen. "Change plan" opens Stripe's **Customer Portal**, the only
+  real destination available; it needs a default configuration in the Stripe
+  Dashboard and degrades to a message saying so.
+  Also worth knowing: the Stripe **test** account is shared with other
+  projects, so its products, subscriptions and customers ("Docsy", "Replit
+  Pro") are not Lumen's. Don't read anything in that Dashboard as this app's
+  data.
+- **`/dashboard/settings/billing` loads Stripe.js and has no CSP.** The policy
+  in `next.config.ts` is scoped to `/checkout*`; extending it here needs its
+  own pass, because `default-src 'self'` would block the avatar images served
+  from the Neon storage host and whatever else the dashboard shell pulls.
+  Worth doing, not bolted on.
 - `lib/storage.ts` — Neon Object Storage, the `lumen-avatars` bucket behind
   the profile page's "Upload image". `server-only` and returns `null` when the
   credentials are blank, the same posture as `lib/stripe.ts`; the client-safe

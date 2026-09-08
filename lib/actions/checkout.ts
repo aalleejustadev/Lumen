@@ -3,6 +3,7 @@
 import type Stripe from "stripe"
 
 import { getSession } from "@/lib/auth"
+import { getOrCreateStripeCustomer } from "@/lib/billing"
 import { getCart } from "@/lib/cart"
 import { db } from "@/lib/db"
 import { getStripe } from "@/lib/stripe"
@@ -107,6 +108,30 @@ function sameExclusions(session: Stripe.Checkout.Session) {
  */
 const ELEMENTS_UI_MODES = new Set(["elements", "custom"])
 
+/**
+ * Whether a session was opened against a real Customer with card saving on.
+ *
+ * The third guard on the reuse path, added for the reason the other two
+ * document: sessions stay open for 24h, so after this changed shape an older
+ * session — created with a bare `customer_email` and no
+ * `saved_payment_method_options` — still matched on cart and recency and
+ * would have been handed back, quietly losing the "save this card" option and
+ * attaching the payment to a throwaway guest customer instead of the one
+ * `/dashboard/settings/billing` reads. Add a guard alongside these whenever a
+ * new option starts shaping the session.
+ */
+function savesToCustomer(session: Stripe.Checkout.Session) {
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : (session.customer?.id ?? null)
+
+  return (
+    customerId !== null &&
+    session.saved_payment_method_options?.payment_method_save === "enabled"
+  )
+}
+
 export async function createCheckoutSession(): Promise<string> {
   const session = await getSession()
   if (!session) {
@@ -121,6 +146,11 @@ export async function createCheckoutSession(): Promise<string> {
   const cart = await getCart()
   if (cart.lines.length === 0) {
     throw new Error("Your cart is empty.")
+  }
+
+  const customerId = await getOrCreateStripeCustomer()
+  if (!customerId) {
+    throw new Error("Checkout is not configured.")
   }
 
   const origin = process.env.BETTER_AUTH_URL
@@ -173,7 +203,8 @@ export async function createCheckoutSession(): Promise<string> {
         reopened?.status === "open" &&
         reopened.client_secret &&
         ELEMENTS_UI_MODES.has(String(reopened.ui_mode)) &&
-        sameExclusions(reopened)
+        sameExclusions(reopened) &&
+        savesToCustomer(reopened)
       ) {
         return reopened.client_secret
       }
@@ -186,7 +217,17 @@ export async function createCheckoutSession(): Promise<string> {
     integration_identifier: INTEGRATION_IDENTIFIER,
     // `{CHECKOUT_SESSION_ID}` is a literal Stripe substitutes on redirect.
     return_url: `${origin}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
-    customer_email: session.user.email,
+    // A real Customer, not the `customer_email` shortcut this used to pass.
+    // That shortcut makes Stripe mint a throwaway guest customer per session,
+    // so nothing could ever be saved for next time and
+    // `/dashboard/settings/billing` had no customer to list cards from. With a
+    // durable customer, past payments and saved cards collect in one place.
+    customer: customerId,
+    // Shows Stripe's own "save this card for next time" checkbox in the
+    // Payment Element. Opt-in by the customer — `enabled` offers the choice,
+    // it does not save silently, which is both the honest behaviour and what
+    // several jurisdictions require.
+    saved_payment_method_options: { payment_method_save: "enabled" },
     // No `payment_method_types` on purpose. Omitting it turns on dynamic
     // payment methods, so what a given customer is offered is decided by
     // Stripe (and the Dashboard's payment-method settings) rather than

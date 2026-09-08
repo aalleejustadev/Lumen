@@ -77,6 +77,19 @@ model User {
   /// IANA time-zone id ("Europe/London"). Will drive course deadlines and live
   /// session times; nothing formats against it yet.
   timeZone          String?
+  /// The Stripe Customer this account's payments and saved cards hang off.
+  ///
+  /// Checkout used to pass a bare `customer_email`, which meant Stripe made a
+  /// throwaway guest customer per session and nothing could be saved for next
+  /// time. `/dashboard/settings/billing` needs the opposite: a stable customer
+  /// whose payment methods can be listed, defaulted and detached. Created
+  /// lazily by `getOrCreateStripeCustomer` — an account that has never opened
+  /// checkout or the billing page has none, and that is a valid state.
+  ///
+  /// Unique, so two rows can never claim the same Stripe customer, and
+  /// nullable because it is *Stripe's* id: a blank `STRIPE_SECRET_KEY` (or a
+  /// key rotation to a different account) must not stop the app booting.
+  stripeCustomerId  String?        @unique
   sessions          Session[]
   accounts          Account[]
   // Populated once this user actually starts teaching — see `Instructor`.

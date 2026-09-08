@@ -27,10 +27,10 @@ export type SettingsNavItem = {
  * cannot drift — the same reason `lib/config/site.ts` owns the marketing nav
  * instead of the header component.
  *
- * Profile and Account are built. Billing and Notifications have exports of
- * their own (`settings-{billing,notifications}-page.png`) and are listed here
- * so their place in the information architecture is settled; flip `built` to
- * `true` as each route lands.
+ * Profile, Account and Billing are built. Notifications has an export of its
+ * own (`settings-notifications-page.png`) and is listed here so its place in
+ * the information architecture is settled; flip `built` to `true` when the
+ * route lands.
  */
 export const settingsNav: SettingsNavItem[] = [
   {
@@ -49,7 +49,7 @@ export const settingsNav: SettingsNavItem[] = [
     title: "Billing",
     href: "/dashboard/settings/billing",
     icon: CreditCardIcon,
-    built: false,
+    built: true,
   },
   {
     // Notification *preferences*, which is a different page from the
