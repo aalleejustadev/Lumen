@@ -35,7 +35,7 @@ import type {
  * in the account menu — so a workspace toggle in this sidebar would offer a
  * third, contradictory way out of it.
  *
- * Dashboard, Reports, Audit Log and Users exist today. Every other row
+ * Dashboard, Reports, Audit Log, Users and Courses exist today. Every other row
  * carries `built: false`, which makes `NavRow` render it as inert text instead
  * of a link onto a 404 — the same flag `settingsNav` and `attentionQueues`
  * use. Flip each one as its page lands. The hrefs are already the ones
@@ -84,7 +84,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Courses",
         href: "/dashboard/admin/courses",
         icon: BookOpenTextIcon,
-        built: false,
+        built: true,
       },
       {
         title: "Categories",

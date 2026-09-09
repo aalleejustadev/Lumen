@@ -824,9 +824,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   - An attention row **renders inert, with no chevron**, until its destination
     exists — the same treatment `settings-nav.tsx` gives a section whose route
     hasn't landed. `AttentionQueue.built` is the flag; flip it per row as each
-    queue page ships. Two of the four lead somewhere today: failed payouts to
-    the Reports page's payout-runs table, and instructor applications to
-    `/dashboard/admin/users?tab=pending-instructors`. That second one is a
+    queue page ships. Three of the four lead somewhere today: failed payouts to
+    the Reports page's payout-runs table, instructor applications to
+    `/dashboard/admin/users?tab=pending-instructors`, and courses awaiting
+    review to `/dashboard/admin/courses?tab=in-review`. That second one is a
     **filtered view of an existing page**, not a queue page of its own — the
     Users table's Pending instructors tab is already that list, and a second
     surface showing the same rows would be one more thing to keep in step. Its
@@ -1132,6 +1133,89 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     token: an address with a PENDING invitation gets `sendInvitationEmail`,
     everyone else the ordinary reset copy. Telling somebody to *reset* a
     password they were never given reads as mail meant for another person.
+- `components/dashboard/admin/courses/` — `/dashboard/admin/courses`, from
+  `courses-page__admin.png`: `courses-list.tsx` (client — the filter row, the
+  cards, the pager and the dialog's open state, since the pending flag belongs
+  to all of them), `course-art.tsx`, `request-changes-dialog.tsx`,
+  `courses-format.ts`, composed by `courses-page.tsx`. `lib/admin/courses.ts`
+  reads, `lib/config/admin-courses.ts` is the copy, `lib/actions/admin-courses.ts`
+  is the three decisions. **Nothing on it is demo data** — `Course`,
+  `CourseSubmission` and `CourseSubmissionCheck` were already shaped for these
+  exports, docstrings and all. Measured at DPR 2: full content width, 102px
+  cards on 14px padding and a 20px gap, a 120 x 74 thumbnail 16px from an
+  18px/700 title, a 22px status pill, and right-aligned 40px actions on a 10px
+  gap (the export draws 38px; the `40px controls` baseline wins).
+  - **Ordering is `submittedAt desc`, nulls last, across every status.** That
+    is exactly the export's own sequence (yesterday, 2 days, 3 days, 1 week, 3
+    weeks, 1 month) over a mix of In review / Needs changes / Published /
+    Rejected, so no "queue first" rule is needed or wanted. **DRAFT is
+    excluded**: a draft was never submitted to anybody, and the page's lead
+    describes neither approving it nor selling it. ARCHIVED stays.
+  - **The filter row is an addition the export does not draw.** Its six rows
+    are a sample; the real list is 26 courses and grows, and the page's first
+    job — the one the sidebar badge points at — is "what is waiting on me?".
+    Same reasoning as the audit log's tab counts, in the Users page's
+    vocabulary.
+  - **Only an `IN_REVIEW` row carries Approve and Request changes**, exactly as
+    drawn. Everything else gets View alone: the decision has been made, and the
+    way to revisit it is to open the course.
+  - **The three actions are one function with three outcomes.** `decide()`
+    writes the decision onto the *submission*, moves `Course.status` to match,
+    and writes the audit entry, in one transaction — `CourseSubmission` holds
+    the history and `Course.status` only the latest outcome, and letting them
+    disagree would give the queue and the instructor different ideas about the
+    same course. It **refuses anything not currently `IN_REVIEW`**, which is
+    not paranoia: two admins working the queue is the ordinary case, and a
+    stale tab would otherwise silently overwrite a colleague's decision.
+    Verified with two tabs open on one course. `publishedAt` is written only on
+    approval, because the catalog's "new this month" and the Reports chart
+    count from it.
+  - Row art is the per-category gradient + icon (`course-art.tsx`), keyed off
+    `Category.accentColor`, not the export's photographs — `lumen-course-card-art`.
+    `Course.thumbnailUrl` is honoured when set, which it will be once
+    instructor image upload exists.
+- `/dashboard/admin/courses/[slug]`, from `course-view-page__admin.png` — where
+  the queue's **View** goes, and the only place **Reject** lives. Measured at
+  DPR 2: an **880px** card, left aligned rather than centred or full width,
+  with a full-bleed 4:1 banner over 26px padding, a 24px/700 title, 16px/700
+  section headings, 48px checklist rows on a 10px gap, 40px curriculum rows on
+  an 8px gap, and 44px decision buttons. Reject is red *text* on a plain
+  surface, not a filled destructive button — the right weight for the one
+  decision that cannot be resubmitted against.
+  - **The checklist comes from the latest submission, not the course.** Its
+    rows are the verdict recorded for that trip through review, which is why
+    `CourseSubmissionCheck` stores them rather than recomputing — one of the
+    four ("audio is clear") is a human judgement. A course that has never been
+    submitted shows the empty state rather than four invented passes.
+  - Three things the export could not draw, because it draws one In-review
+    course: the decision strip is **hidden for anything else** (the action
+    refuses it server-side too — hiding the buttons is not the guard); a course
+    that was sent back or turned down **shows why**, from the reasons and note
+    already on the submission; and both lists have empty states.
+  - `top-courses-card.tsx`'s rows now point here rather than at the student
+    sale page, which is what its own note was waiting for.
+- **The Request changes dialog drops the export's "Cancel".** `DialogContent`
+  already draws a close X, so a second control whose only job is to dismiss is
+  the redundancy the payout-run dialog had removed — the standing rule. The
+  footer keeps the one button that does something. Both fields are optional, as
+  the export allows: a note with nothing ticked is an ordinary request.
+  `sm:max-w-[520px]` repeats the variant on purpose — `DialogContent` carries
+  `sm:max-w-sm` (384px), which a plain `max-w-*` loses to above the breakpoint.
+- **The seed now generates a curriculum for the review queue.**
+  `pendingCourseSeeds` gave a lesson *count* and no lessons, which was fine
+  until the course view drew a **Curriculum preview** — an empty syllabus on
+  every course awaiting review makes the review page useless. `queueCurriculum`
+  builds one from the export's own generic titles ("Introduction & course
+  overview", "Setting up your workspace", "Core concepts, part 1", "Knowledge
+  check"), which is presumably why the designer chose them. It keeps two things
+  true, because the card and the checklist read them off `Course`: the rows
+  total exactly `lessonCount`, and their minutes total `durationHours * 60`.
+  The three named lessons hold the export's own lengths (6, 14, 8 min) and only
+  the generated "part N" rows are scaled to make up the difference; there is no
+  upper cap on those, because capping them would leave the syllabus adding up
+  to less than the duration the card advertises. A course sent back for a
+  **missing quiz** gets no quiz lesson, so its syllabus agrees with the
+  `closes_with_quiz` check that failed it.
 - `lib/config/countries.ts` — the codes behind the Country column and the Add
   new user select. `User.country` stores ISO-3166 alpha-2 and the English names
   are **computed** through `Intl.DisplayNames`, the call `locale.ts` makes for

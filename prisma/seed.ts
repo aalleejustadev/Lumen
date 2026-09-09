@@ -34,6 +34,7 @@ import {
 } from "@/lib/config/browse-courses"
 import {
   getCourseDetail,
+  type CourseLesson as DetailLesson,
   type CourseSection as DetailSection,
 } from "@/lib/config/course-details"
 import {
@@ -404,6 +405,132 @@ async function seedPublishedCourses(
   return rows
 }
 
+/**
+ * A curriculum for a course in the review queue.
+ *
+ * `pendingCourseSeeds` gives a lesson *count* and no lessons, which was fine
+ * while nothing rendered them — but the admin course view
+ * (`course-view-page__admin.png`) draws a **Curriculum preview**, and a review
+ * page that shows an empty syllabus for every course awaiting review is a
+ * review page that cannot do its job. So the rows are generated here rather
+ * than hand-authored ten times over: the export's own preview titles
+ * ("Introduction & course overview", "Setting up your workspace", "Core
+ * concepts, part 1", "Knowledge check") are generic scaffolding that reads
+ * plausibly under any subject, which is presumably why the designer chose
+ * them.
+ *
+ * Two things it has to keep true, because the card and the checklist both read
+ * them off `Course`: the lesson rows total exactly `lessonCount`, and their
+ * minutes total roughly `durationHours * 60`. A course sent back for a
+ * **missing quiz** gets no quiz lesson, so the syllabus agrees with the
+ * `closes_with_quiz` check that failed it.
+ */
+function queueCurriculum(
+  lessonCount: number,
+  durationHours: number,
+  withQuizzes: boolean
+): DetailSection[] {
+  const sectionTitles = [
+    "Getting started",
+    "Core concepts",
+    "Putting it to work",
+    "Going further",
+    "Wrapping up",
+  ]
+  // Roughly six lessons a section, capped at the five titles above.
+  const sectionCount = Math.max(1, Math.min(5, Math.round(lessonCount / 6)))
+  const perSection = Math.floor(lessonCount / sectionCount)
+  const remainder = lessonCount % sectionCount
+
+  const sections: DetailSection[] = []
+  let taken = 0
+
+  for (let index = 0; index < sectionCount; index++) {
+    const size = perSection + (index < remainder ? 1 : 0)
+    const lessons: DetailLesson[] = []
+
+    for (let position = 0; position < size; position++) {
+      const isLast = index === sectionCount - 1 && position === size - 1
+      // One knowledge check at the end of every section but the first, and
+      // never on a course whose whole problem is that it has no quiz.
+      const isQuiz =
+        withQuizzes && index > 0 && position === size - 1 && !isLast
+
+      if (isQuiz) {
+        lessons.push({ title: "Knowledge check", type: "quiz", questions: 5 })
+      } else if (taken === 0) {
+        lessons.push({
+          title: "Introduction & course overview",
+          type: "video",
+          minutes: 6,
+        })
+      } else if (taken === 1) {
+        lessons.push({
+          title: "Setting up your workspace",
+          type: "video",
+          minutes: 14,
+        })
+      } else if (isLast) {
+        lessons.push({ title: "Where to go next", type: "video", minutes: 8 })
+      } else {
+        lessons.push({
+          title: `${sectionTitles[index]}, part ${position + 1}`,
+          type: "video",
+          // Deterministic, from the one seeded PRNG, so two runs produce the
+          // same syllabus and a figure in a screenshot stays put.
+          minutes: 12 + Math.floor(rng() * 13),
+        })
+      }
+      taken += 1
+    }
+
+    sections.push({
+      title: sectionTitles[index]!,
+      lessonsLabel: `${lessons.length} lessons`,
+      durationLabel: "",
+      lessons,
+    })
+  }
+
+  // Scale the video minutes so the syllabus adds up to the duration the card
+  // and the catalog already advertise, rather than to whatever the random
+  // draws happened to make.
+  //
+  // **Only the generated "part N" lessons are scaled.** The three named ones
+  // are the export's own rows at the export's own lengths — an introduction is
+  // six minutes because that is what an introduction is, not because of how
+  // long the rest of the course runs — so they are held fixed and the
+  // remainder is spread across the others.
+  //
+  // There is no upper cap on the rest: a course whose `durationHours` and
+  // `lessonCount` imply 70-minute lessons gets 70-minute lessons. Capping them
+  // would be tidier per row and would leave the syllabus adding up to less
+  // than the duration the card advertises, which is the inconsistency that
+  // actually shows.
+  const scalable = sections.flatMap((section) =>
+    section.lessons.filter(
+      (lesson) => lesson.type === "video" && lesson.title.includes(", part ")
+    )
+  )
+  const fixed = sections
+    .flatMap((section) => section.lessons)
+    .filter((lesson) => !scalable.includes(lesson))
+    .reduce((sum, lesson) => sum + (lesson.minutes ?? 0), 0)
+
+  const drawn = scalable.reduce((sum, lesson) => sum + (lesson.minutes ?? 0), 0)
+  const target = durationHours * 60 - fixed
+  if (drawn > 0 && target > 0) {
+    for (const lesson of scalable) {
+      lesson.minutes = Math.max(
+        4,
+        Math.round(((lesson.minutes ?? 0) * target) / drawn)
+      )
+    }
+  }
+
+  return sections
+}
+
 async function seedCurriculum(courseId: string, sections: DetailSection[]) {
   const lessons: Prisma.CourseLessonCreateManyInput[] = []
 
@@ -509,6 +636,17 @@ async function seedPendingCourses(
         noteToInstructor: seed.noteToInstructor ?? null,
       },
     })
+
+    // The syllabus the admin course view previews. Generated rather than
+    // hand-authored — see `queueCurriculum`.
+    await seedCurriculum(
+      id,
+      queueCurriculum(
+        seed.lessonCount,
+        seed.durationHours,
+        seed.status !== "NEEDS_CHANGES"
+      )
+    )
 
     // The submission checklist from the admin course view: three rows computed
     // off the curriculum, and the audio verdict, which is a human one.

@@ -146,8 +146,10 @@ export const attentionQueues: AttentionQueue[] = [
     key: "coursesAwaitingReview",
     icon: BookOpenTextIcon,
     tone: "info",
-    href: "/dashboard/admin/courses",
-    built: false,
+    // The review queue's own tab, for the reason the instructor-applications
+    // row gives: the Courses page's "In review" filter is already this list.
+    href: "/dashboard/admin/courses?tab=in-review",
+    built: true,
     describe: ({ coursesAwaitingReview: queue }, format) => ({
       count: queue.count,
       title: `${queue.count} ${

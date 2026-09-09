@@ -29,9 +29,10 @@ import { cn } from "@/lib/utils"
  * treat those as the same utility group as a plain override, so both
  * declarations would stand.
  *
- * Rows link to the course's **sale** page, which exists. The admin course view
- * (`course-view-page__admin.png`) is where they belong — re-point them at
- * `/dashboard/admin/courses/[slug]` when that route lands.
+ * Rows link to the admin course view, which is where a course opened from
+ * inside the console belongs — an admin clicking a row here is asking about
+ * the course, not shopping for it. They pointed at the student sale page until
+ * `/dashboard/admin/courses/[slug]` existed.
  */
 function TopCoursesCard({ courses }: { courses: TopCourse[] }) {
   if (courses.length === 0) {
@@ -57,7 +58,7 @@ function TopCoursesCard({ courses }: { courses: TopCourse[] }) {
         return (
           <Link
             key={course.slug}
-            href={`/dashboard/courses/${course.slug}`}
+            href={`/dashboard/admin/courses/${course.slug}`}
             className="flex h-15 items-center gap-4 px-4.5 no-underline transition-colors hover:bg-hover/60"
           >
             <div
