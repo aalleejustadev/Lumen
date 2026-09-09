@@ -1,16 +1,16 @@
-import { format, formatDistanceToNowStrict } from "date-fns"
-
-import type {
-  PlatformStatFormat,
-  SubtitleFormatters,
-} from "@/lib/config/admin-overview"
+import type { PlatformStatFormat } from "@/lib/config/admin-overview"
 
 /**
- * How `/dashboard/admin`'s figures are written out. Kept beside the
- * components rather than in `lib/`, the same way
+ * How the admin console's figures are written out. Kept beside the components
+ * rather than in `lib/`, the same way
  * `components/dashboard/settings/settings-controls.ts` keeps that section's
- * shared class vocabulary: this is presentation, and both stat cards and the
- * top-courses table draw on it.
+ * shared class vocabulary: this is presentation, and Platform Overview's cards
+ * and table, the Reports page's cards and its revenue chart all draw on it.
+ *
+ * It deliberately holds **no date formatting**: `date-fns` lives in
+ * `attention-list.tsx`, the one place that needs it, so this module stays
+ * importable from a Client Component (`revenue-chart-card.tsx` is one) without
+ * pulling a date library into that bundle.
  */
 
 const counts = new Intl.NumberFormat("en-US")
@@ -65,10 +65,4 @@ export function formatDelta(delta: number | null): string | null {
 export function deltaToneClass(delta: number | null): string {
   if (delta === null || delta === 0) return "text-muted-foreground"
   return delta > 0 ? "text-success" : "text-destructive"
-}
-
-/** The two shapes `attentionQueues`' `subtitle` formatters ask for. */
-export const subtitleFormatters: SubtitleFormatters = {
-  relative: (date) => formatDistanceToNowStrict(date, { addSuffix: true }),
-  shortDate: (date) => format(date, "dd MMM"),
 }

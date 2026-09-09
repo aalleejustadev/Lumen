@@ -68,6 +68,15 @@ const NOW = new Date()
 
 /** Platform revenue share in basis points — `PlatformSetting`'s own default. */
 const REVENUE_SHARE_BPS = 7000
+
+/**
+ * How many paid orders get refunded. The admin Reports card draws 2.1% and
+ * `Refund`'s own schema note names that figure, so this is the rate the seed
+ * has to produce for that card to have anything to say. The marketing site's
+ * 30-day guarantee is the window they land in.
+ */
+const REFUND_RATE = 0.021
+const REFUND_WINDOW_DAYS = 30
 /** Demo learner accounts, on top of the featured eight from the export. */
 const LEARNER_COUNT = 500
 /** How far back the oldest demo signup sits. */
@@ -145,6 +154,7 @@ async function clearSeededRows() {
 
   await db.contentReport.deleteMany({ where: seeded })
   await db.auditLog.deleteMany({ where: seeded })
+  await db.refund.deleteMany({ where: seeded })
   await db.instructorEarning.deleteMany({ where: seeded })
   await db.payout.deleteMany({ where: seeded })
   await db.payoutRun.deleteMany({ where: seeded })
@@ -773,9 +783,60 @@ async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
     }
   }
 
+  // -- Refunds -------------------------------------------------------------
+  //
+  // A refund is a `Refund` row and a REVERSED earning; the order itself stays
+  // PAID. That is deliberate: "gross revenue" on both admin pages means gross,
+  // i.e. before refunds, and flipping the order would quietly move a figure
+  // whose label says it shouldn't move. What a refund does move is the
+  // platform's share — that fee went back to the customer with the money — and
+  // the instructor's payout pool below.
+  const refunds: Prisma.RefundCreateManyInput[] = []
+  const reversedItems = new Set<string>()
+
+  for (const order of orders) {
+    if (rng() >= REFUND_RATE) continue
+
+    // Inside the 30-day guarantee, and never in the future.
+    const paidAt = order.paidAt as Date
+    const createdAt = new Date(
+      paidAt.getTime() + Math.floor(rng() * REFUND_WINDOW_DAYS * DAY)
+    )
+    if (createdAt > NOW) continue
+
+    refunds.push({
+      id: `${SEED}rf_${pad(refunds.length, 5)}`,
+      orderId: order.id as string,
+      stripeRefundId: `re_test_${order.id}`,
+      amountCents: order.amountTotal,
+      reason: pick([
+        "requested_by_customer",
+        "course_not_as_described",
+        "duplicate_purchase",
+      ] as const),
+      createdAt,
+    })
+
+    for (const item of items) {
+      if (item.orderId === order.id) reversedItems.add(item.id as string)
+    }
+  }
+
+  for (const earning of earnings) {
+    if (!reversedItems.has(earning.orderItemId as string)) continue
+    earning.status = "REVERSED"
+    // A reversed sale never reaches a payout run, so take it back out of the
+    // pool the runs below divide up.
+    netByInstructor.set(
+      earning.instructorId,
+      (netByInstructor.get(earning.instructorId) ?? 0) - earning.netCents
+    )
+  }
+
   await db.order.createMany({ data: orders })
   await db.orderItem.createMany({ data: items })
   await db.instructorEarning.createMany({ data: earnings })
+  await db.refund.createMany({ data: refunds })
 
   await db.enrollment.createMany({
     data: enrollments.map(({ id, userId, courseId, orderId, paidAt }) => {
@@ -797,7 +858,12 @@ async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
     }),
   })
 
-  return { enrollments, netByInstructor, orderCount: orders.length }
+  return {
+    enrollments,
+    netByInstructor,
+    orderCount: orders.length,
+    refundCount: refunds.length,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,11 +1245,9 @@ async function main() {
   await seedPendingCourses(categories, instructors, reviewerId)
   console.log(`queued courses    ${pendingCourseSeeds.length}`)
 
-  const { enrollments, netByInstructor, orderCount } = await seedPurchases(
-    learners,
-    courses
-  )
-  console.log(`orders            ${orderCount}`)
+  const { enrollments, netByInstructor, orderCount, refundCount } =
+    await seedPurchases(learners, courses)
+  console.log(`orders            ${orderCount} (${refundCount} refunded)`)
   console.log(`enrolments        ${enrollments.length}`)
 
   const reviews = await seedReviews(enrollments, courses, instructors)

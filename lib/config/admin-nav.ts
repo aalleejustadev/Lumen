@@ -56,7 +56,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Reports",
         href: "/dashboard/admin/reports",
         icon: ChartLineIcon,
-        built: false,
+        built: true,
       },
       {
         title: "Audit Log",

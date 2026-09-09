@@ -208,7 +208,9 @@ export const attentionQueues: AttentionQueue[] = [
     icon: WalletIcon,
     tone: "danger",
     href: "/dashboard/admin/reports",
-    built: false,
+    // The Reports page ships, so this queue's chevron leads somewhere real —
+    // its payout-runs table is where a failed transfer is actually inspected.
+    built: true,
     describe: ({ failedPayouts: queue }, format) => ({
       count: queue.count,
       title: `${queue.count} failed payout${queue.count === 1 ? "" : "s"}`,

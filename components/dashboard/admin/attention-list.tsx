@@ -1,8 +1,20 @@
 import Link from "next/link"
+import { format, formatDistanceToNowStrict } from "date-fns"
 import { ChevronRightIcon } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
-import { subtitleFormatters } from "@/components/dashboard/admin/platform-format"
+import type { SubtitleFormatters } from "@/lib/config/admin-overview"
+
+/**
+ * The two shapes `attentionQueues`' `subtitle` formatters ask for. They live
+ * here, next to their only caller, rather than in `platform-format.ts` — that
+ * module is imported by a Client Component and this is the only thing in the
+ * console that needs `date-fns`.
+ */
+const subtitleFormatters: SubtitleFormatters = {
+  relative: (date) => formatDistanceToNowStrict(date, { addSuffix: true }),
+  shortDate: (date) => format(date, "dd MMM"),
+}
 import {
   adminOverviewCopy,
   attentionQueues,

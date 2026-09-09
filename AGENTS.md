@@ -915,6 +915,68 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `app/(dashboard)/layout.tsx` rather than querying itself, and the admin
   header never renders the link at all. `access-admin-console__admin.png` does
   draw it for an admin — a deliberate divergence, per the same brief.
+- `components/dashboard/admin/reports/` — `/dashboard/admin/reports`, from
+  `reports-page__admin.png`: `reports-stats.tsx` (the four-up KPI row),
+  `revenue-chart-card.tsx` (client — recharts), `payout-runs-card.tsx` (client
+  — owns the dialog's open state) and `payout-run-dialog.tsx`, composed by
+  `reports-page.tsx`. `lib/admin/reports.ts` reads,
+  `lib/config/admin-reports.ts` is every word the page says, and
+  `lib/actions/admin-reports.ts` is the one write-shaped endpoint (it only
+  reads, but it is a Server Action so it re-checks the admin role — the
+  console's layout guard covers the page, not an action).
+  **Nothing on it is demo data.** Console pages nest one directory per page
+  from here on; Platform Overview's files stay flat where they are.
+  The KPI tile is now shared: `admin-stat-card.tsx` holds the geometry both
+  exports draw, and `platform-stats.tsx` is a thin map over it. Reports passes
+  `arrow` (its export draws a ↑/↓ before each delta; Platform Overview's does
+  not). `platform-format.ts` was emptied of `date-fns` for this — the date
+  formatters moved into `attention-list.tsx`, their only caller — because a
+  Client Component now imports that module and shouldn't drag a date library
+  into its bundle.
+  Six definitions decide what this page means, and the export's mock numbers
+  settle none of them:
+  - **"Gross revenue" means gross, i.e. before refunds**, and is the identical
+    all-time figure Platform Overview draws, read the identical way. Two admin
+    pages must not show two numbers under one label. It follows that seeding
+    refunds does not move it.
+  - **"Platform share" excludes REVERSED earnings.** It sums
+    `InstructorEarning.platformFeeCents`; a refunded sale's fee went back with
+    the money, so it was never the platform's. This is the one card refunds
+    move.
+  - **"New signups" is a period figure**, so its delta is the one comparison of
+    two periods' *activity* anywhere in the console — trailing 30 days against
+    the 30 before. The running-total rule the other cards follow would be
+    meaningless on a rate.
+  - **The refund rate is a rate over rows** (refunds ÷ paid orders in the
+    window), which is what `Refund`'s own schema note calls for, and its delta
+    is in percentage *points*, like uptime's.
+  - **The chart draws the last six *complete* months.** This is the important
+    one: the export's columns run Mar–Aug while its own payout table puts
+    "today" in September, and on real data the partial current month came in at
+    a fifth of August and turned the trend pill into −76.8% — a fact about the
+    calendar, not the platform. It is a `$queryRaw` with `date_trunc` because
+    Prisma cannot group by a date truncation, and the series is built from
+    computed month boundaries and *filled* from the result so a month with no
+    orders draws a zero bar instead of vanishing and leaving five columns.
+    **Bars are plotted from zero**, which the export's own are not — its $820k
+    bar is 47% of its $1.24M one where the numbers say 66%, so they were placed
+    by eye.
+  - **Payout runs are ordered most-recent-first.** The export's four are in no
+    order at all (RUN-08, RUN-07, RUN-09, RUN-06). `failedCount` — what the
+    "1 failed" pill counts — is a grouped count over `payout`, not a column on
+    the run.
+  A run's **recipients load when the dialog opens**, not with the table: the
+  list draws none of them and most visits never open one. A SCHEDULED run has a
+  `recipientCount` but no `payout` rows yet, so its average payout is `null`
+  (not "$0.00", which would read as a run that paid nobody) and its recipient
+  list says the run hasn't been processed. Export CSV is a real client-side
+  Blob download of the loaded rows.
+- **The seed now writes refunds.** `Refund`'s schema note names the Reports
+  card's 2.1% rate, so `REFUND_RATE` produces it: a refund is a `Refund` row
+  plus a REVERSED `InstructorEarning`, and the order **stays PAID** — gross
+  means gross, and flipping the order would quietly move a figure whose label
+  says it shouldn't. A reversed sale is also taken back out of `netByInstructor`
+  so it never reaches a payout run.
 - **`UptimeSample` is the one model this page needed.** Availability is the
   only figure on Platform Overview no other table can answer — it is a property
   of the infrastructure, not of the catalog, the ledger or the accounts — and
