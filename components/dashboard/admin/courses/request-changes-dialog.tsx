@@ -130,7 +130,7 @@ function RequestChangesDialog({
         <div className="mt-7">
           <Button
             type="button"
-            disabled={pending}
+            loading={pending}
             onClick={() => onSubmit({ reasons, note })}
             className="h-11 gap-2 px-5"
           >

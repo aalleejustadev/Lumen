@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
 import { AuthSocialButtons } from "@/components/auth/auth-social-buttons"
 import { AuthDivider } from "@/components/auth/auth-divider"
 import { PasswordInput } from "@/components/auth/password-input"
@@ -111,12 +110,11 @@ function LoginForm() {
 
         <Button
           type="submit"
-          disabled={pending}
+          loading={pending}
           className="mt-5 h-12 gap-2 text-[15px] font-semibold"
         >
-          {pending ? <Spinner /> : null}
           Sign in
-          {pending ? null : <ArrowRightIcon data-icon="inline-end" />}
+          <ArrowRightIcon data-icon="inline-end" />
         </Button>
       </form>
 

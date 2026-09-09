@@ -20,70 +20,19 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * The six top-level categories from `categories-page__admin.png`, in the order
- * it lists them, plus Finance.
+ * **The seed no longer authors categories.** It used to create its own six
+ * (plus Finance) with `seed_`-prefixed ids, which made them undeletable in the
+ * console — `Course.category` is RESTRICT, so every row it wrote was pinned by
+ * the courses it also wrote — and re-running the seed would overwrite whatever
+ * an admin had since done to the taxonomy.
  *
- * Finance is a **child of Business** rather than a seventh top-level row: the
- * admin export draws exactly six, and the student catalog
- * (`browseCourseCategories`) offers a Finance pill the admin list has no home
- * for. `Category.parentId` exists for precisely this — see the model's note —
- * so the console still shows its six and a Finance course still rolls up under
- * one of them. The reverse mismatch is the catalog's "Web Dev", which is the
- * same category the console calls "Development"; the console's name wins,
- * because it is the one the admin surfaces render.
+ * Categories are now **owned by the admin**, created through
+ * `/dashboard/admin/categories`, and the seed only *resolves* them: it looks
+ * each required slug up in the database and stops with a useful message if one
+ * is missing. `requiredCategorySlugs` below is what it checks, derived from
+ * the two places a seeded course names its category rather than written out
+ * again, so the list cannot drift from what the seed actually needs.
  */
-export const categorySeeds: {
-  slug: string
-  name: string
-  accentColor: string
-  parentSlug?: string
-  description: string
-}[] = [
-  {
-    slug: "development",
-    name: "Development",
-    accentColor: "blue",
-    description:
-      "Languages, frameworks, and everything that ships to a server.",
-  },
-  {
-    slug: "design",
-    name: "Design",
-    accentColor: "violet",
-    description: "Interface, illustration, type, and the craft behind them.",
-  },
-  {
-    slug: "data-ai",
-    name: "Data & AI",
-    accentColor: "cyan",
-    description: "Analysis, modelling, and putting machine learning to work.",
-  },
-  {
-    slug: "business",
-    name: "Business",
-    accentColor: "green",
-    description: "Strategy, operations, and running the thing you built.",
-  },
-  {
-    slug: "marketing",
-    name: "Marketing",
-    accentColor: "amber",
-    description: "Demand, positioning, and the channels that carry them.",
-  },
-  {
-    slug: "personal-development",
-    name: "Personal Development",
-    accentColor: "red",
-    description: "Focus, habits, communication, and career craft.",
-  },
-  {
-    slug: "finance",
-    name: "Finance",
-    accentColor: "green",
-    parentSlug: "business",
-    description: "Modelling, markets, and reading a set of accounts.",
-  },
-]
 
 /** Which category row each `BrowseCourse.category` pill resolves to. */
 export const categorySlugByBrowseCategory: Record<
@@ -95,7 +44,28 @@ export const categorySlugByBrowseCategory: Record<
   "Data & AI": "data-ai",
   Business: "business",
   Marketing: "marketing",
-  Finance: "finance",
+  // **Finance resolves to Business.** The seed used to file Finance courses
+  // under a hidden Finance child of Business; the console's own list is
+  // top-level only and already rolled its numbers up into Business, so the
+  // distinction was invisible everywhere it mattered. There is no Finance row
+  // to point at any more.
+  Finance: "business",
+}
+
+/**
+ * Every `Category.slug` a seeded course needs to exist before the seed can
+ * run, derived from the two places one is named rather than written out again.
+ * `prisma/seed.ts` checks this set and stops with the missing slugs listed, so
+ * a fresh database says "create these in the console" instead of failing on a
+ * null relation halfway through.
+ */
+export function requiredCategorySlugs(): string[] {
+  return [
+    ...new Set([
+      ...Object.values(categorySlugByBrowseCategory),
+      ...pendingCourseSeeds.map((seed) => seed.categorySlug),
+    ]),
+  ].sort()
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +143,7 @@ export const pendingCourseSeeds: {
   title: string
   subtitle: string
   instructorSlug: string
-  /** A `categorySeeds` slug, not a `BrowseCourseCategory`: the queue reaches
+  /** A `Category.slug`, not a `BrowseCourseCategory`: the queue reaches
    *  categories the student catalog has no pill for (Personal Development). */
   categorySlug: string
   level: CourseLevel

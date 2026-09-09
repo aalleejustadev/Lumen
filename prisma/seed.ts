@@ -42,7 +42,6 @@ import {
   instructorSlug,
 } from "@/lib/config/instructor-profiles"
 import {
-  categorySeeds,
   categorySlugByBrowseCategory,
   countryWeights,
   extraInstructorSeeds,
@@ -52,6 +51,7 @@ import {
   lastNames,
   pendingCourseSeeds,
   reportedReviewSeeds,
+  requiredCategorySlugs,
 } from "./seed-data"
 
 const db = new PrismaClient({
@@ -163,7 +163,9 @@ async function clearSeededRows() {
   await db.user.deleteMany({ where: seeded })
   await db.course.deleteMany({ where: seeded })
   await db.instructor.deleteMany({ where: seeded })
-  await db.category.deleteMany({ where: seeded })
+  // **Categories are deliberately not cleared.** They are no longer seeded —
+  // an admin owns them, through `/dashboard/admin/categories` — so a re-run
+  // must leave the taxonomy exactly as it found it. See `resolveCategories`.
   await db.uptimeSample.deleteMany({})
 }
 
@@ -180,29 +182,35 @@ async function seedPlatformSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// 2 · Categories
+// 2 · Categories — resolved, never written
 // ---------------------------------------------------------------------------
 
-/** Returns slug -> row id. Parents come before children by list order. */
-async function seedCategories() {
-  const ids = new Map<string, string>()
+/**
+ * Returns slug -> row id for the categories the seeded courses need.
+ *
+ * **This reads; it does not write.** The seed used to author its own six
+ * categories with `seed_`-prefixed ids, and that was a mistake in two ways:
+ * `Course.category` is RESTRICT, so every category it created was pinned by
+ * the courses it created alongside them and could never be deleted from the
+ * console; and a re-run would silently replace whatever an admin had since
+ * changed about the taxonomy. Categories are now owned by the admin — see
+ * `seed-data.ts`' note — so the seed's job is to find them.
+ *
+ * A missing slug stops the run **before anything is written**, listing what to
+ * create, rather than failing on a null relation somewhere in the middle of
+ * `seedPublishedCourses`.
+ */
+async function resolveCategories() {
+  const rows = await db.category.findMany({ select: { id: true, slug: true } })
+  const ids = new Map(rows.map((row) => [row.slug, row.id]))
 
-  for (const [index, seed] of categorySeeds.entries()) {
-    const id = `${SEED}cat_${seed.slug}`
-    await db.category.create({
-      data: {
-        id,
-        slug: seed.slug,
-        name: seed.name,
-        description: seed.description,
-        accentColor: seed.accentColor,
-        // Only top-level categories are offered in the browse menu.
-        showInNav: !seed.parentSlug,
-        order: index,
-        parentId: seed.parentSlug ? (ids.get(seed.parentSlug) ?? null) : null,
-      },
-    })
-    ids.set(seed.slug, id)
+  const missing = requiredCategorySlugs().filter((slug) => !ids.has(slug))
+  if (missing.length > 0) {
+    throw new Error(
+      `The seed needs these categories to exist first: ${missing.join(", ")}.\n` +
+        `Create them at /dashboard/admin/categories — the slug is derived from ` +
+        `the name, so "Data & AI" gives "data-ai" — then run the seed again.`
+    )
   }
 
   return ids
@@ -1710,13 +1718,17 @@ async function seedAuditLog(
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // **Resolved before anything is cleared.** The seed no longer creates
+  // categories, so a database missing one has to be told that *before* the
+  // previous run's rows are deleted — otherwise a mistake here would leave the
+  // catalog empty and the run half-done.
+  const categories = await resolveCategories()
+  console.log(`categories        ${categories.size} (resolved, not seeded)`)
+
   console.log("clearing previously seeded rows…")
   await clearSeededRows()
 
   await seedPlatformSettings()
-
-  const categories = await seedCategories()
-  console.log(`categories        ${categories.size}`)
 
   const instructors = await seedInstructors()
   console.log(`instructors       ${instructors.size}`)

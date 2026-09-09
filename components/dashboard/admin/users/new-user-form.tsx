@@ -251,14 +251,14 @@ function NewUserForm({ countries }: { countries: CountryOption[] }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending} className="h-11 gap-2 px-6">
+        <Button type="submit" loading={pending} className="h-11 gap-2 px-6">
           <CheckIcon className="size-4" />
           {newUserCopy.submit}
         </Button>
         <Button
           type="button"
           variant="outline"
-          disabled={pending}
+          loading={pending}
           onClick={() => router.push("/dashboard/admin/users")}
           className="h-11 bg-card px-6 shadow-sm"
         >

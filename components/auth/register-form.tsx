@@ -13,7 +13,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
 import { AuthDivider } from "@/components/auth/auth-divider"
 import { AuthSocialButtons } from "@/components/auth/auth-social-buttons"
 import { PasswordInput } from "@/components/auth/password-input"
@@ -201,12 +200,11 @@ function RegisterForm() {
 
         <Button
           type="submit"
-          disabled={pending}
+          loading={pending}
           className="mt-[var(--auth-cta)] h-12 gap-2 text-[15px] font-semibold"
         >
-          {pending ? <Spinner /> : null}
           Create account
-          {pending ? null : <ArrowRightIcon data-icon="inline-end" />}
+          <ArrowRightIcon data-icon="inline-end" />
         </Button>
       </form>
 

@@ -49,7 +49,8 @@ function ChangePlanButton({ disabled }: { disabled?: boolean }) {
   return (
     <Button
       type="button"
-      disabled={disabled || pending}
+      loading={pending}
+      disabled={disabled}
       onClick={() =>
         startTransition(async () => {
           const result = await createBillingPortalSession()
@@ -62,7 +63,6 @@ function ChangePlanButton({ disabled }: { disabled?: boolean }) {
       }
       className="h-10 shrink-0 px-4.5"
     >
-      {pending ? <Spinner data-icon="inline-start" /> : null}
       {pending ? "Opening…" : "Change plan"}
     </Button>
   )

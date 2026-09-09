@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { HeartIcon, Share2Icon, ShoppingCartIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { addToCart } from "@/lib/actions/cart"
 import { toggleWishlist } from "@/lib/actions/wishlist"
@@ -76,23 +75,20 @@ function CourseBuyButtons({ slug }: { slug: string }) {
     <>
       <Button
         onClick={() => run("add")}
+        loading={pendingAction === "add"}
         disabled={pending}
         className="mt-4.5 h-11 w-full gap-2 text-sm font-semibold shadow-sm"
       >
-        {pendingAction === "add" ? (
-          <Spinner data-icon="inline-start" />
-        ) : (
-          <ShoppingCartIcon data-icon="inline-start" />
-        )}
+        <ShoppingCartIcon data-icon="inline-start" />
         Add to cart
       </Button>
       <Button
         variant="outline"
         onClick={() => run("buy")}
+        loading={pendingAction === "buy"}
         disabled={pending}
         className="mt-2.5 h-11 w-full bg-card text-sm font-semibold shadow-sm"
       >
-        {pendingAction === "buy" ? <Spinner data-icon="inline-start" /> : null}
         Buy now
       </Button>
     </>
@@ -151,7 +147,7 @@ function CourseSaveButtons({
       <Button
         variant="outline"
         onClick={onWishlist}
-        disabled={pending}
+        loading={pending}
         aria-pressed={wishlisted}
         className="h-10 flex-1 gap-1.5 bg-card shadow-sm"
       >

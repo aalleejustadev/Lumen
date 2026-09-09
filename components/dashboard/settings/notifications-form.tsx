@@ -5,7 +5,6 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/toast"
 import { SETTINGS_SUBMIT } from "@/components/dashboard/settings/settings-controls"
@@ -199,8 +198,7 @@ function NotificationsForm({ settings }: { settings: NotificationSettings }) {
         ))}
       </div>
 
-      <Button type="submit" disabled={pending} className={SETTINGS_SUBMIT}>
-        {pending ? <Spinner data-icon="inline-start" /> : null}
+      <Button type="submit" loading={pending} className={SETTINGS_SUBMIT}>
         {pending ? "Saving…" : "Update notifications"}
       </Button>
     </form>

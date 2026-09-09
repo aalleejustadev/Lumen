@@ -4,7 +4,6 @@ import * as React from "react"
 import { DownloadIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { exportAuditLog } from "@/lib/actions/admin-audit"
 import { adminAuditCopy } from "@/lib/config/admin-audit"
@@ -64,14 +63,10 @@ function AuditExportButton({ tab, query }: { tab: AuditTab; query: string }) {
     <Button
       variant="outline"
       onClick={run}
-      disabled={pending}
+      loading={pending}
       className="h-10 gap-2 bg-card px-4 shadow-sm"
     >
-      {pending ? (
-        <Spinner className="size-4" />
-      ) : (
-        <DownloadIcon className="size-4" />
-      )}
+      <DownloadIcon className="size-4" />
       {adminAuditCopy.exportLabel}
     </Button>
   )

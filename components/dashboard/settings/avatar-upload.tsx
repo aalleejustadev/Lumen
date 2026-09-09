@@ -84,11 +84,10 @@ function AvatarUpload({ image, name }: { image: string | null; name: string }) {
       />
       <Button
         type="button"
-        disabled={pending}
+        loading={pending}
         onClick={() => inputRef.current?.click()}
         className="h-10 px-5"
       >
-        {pending ? <Spinner data-icon="inline-start" /> : null}
         {pending ? "Uploading…" : "Upload image"}
       </Button>
     </div>

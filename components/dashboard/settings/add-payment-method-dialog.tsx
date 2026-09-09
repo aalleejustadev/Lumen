@@ -187,10 +187,10 @@ function SetupForm({ onDone }: { onDone: () => void }) {
       {error ? <p className="text-[13px] text-destructive">{error}</p> : null}
       <Button
         type="submit"
-        disabled={submitting || !stripe}
+        loading={submitting}
+        disabled={!stripe}
         className="h-11 w-full"
       >
-        {submitting ? <Spinner data-icon="inline-start" /> : null}
         {submitting ? "Saving…" : "Save card"}
       </Button>
     </form>

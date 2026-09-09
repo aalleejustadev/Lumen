@@ -3,7 +3,6 @@
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { authClient } from "@/lib/auth-client"
 import { cn } from "@/lib/utils"
 
@@ -84,11 +83,12 @@ function AuthSocialButtons({
           key={id}
           type="button"
           variant="outline"
+          loading={pending === id}
           disabled={pending !== null}
           onClick={() => handle(id)}
           className="h-11.5 cursor-pointer gap-2.5 bg-card text-[15px] font-semibold shadow-sm dark:bg-card [@media(max-height:870px)]:h-11"
         >
-          {pending === id ? <Spinner /> : <Mark />}
+          <Mark />
           {label}
         </Button>
       ))}

@@ -26,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import {
   SETTINGS_CONTROL,
@@ -303,8 +302,7 @@ function AccountForm({
         </Field>
       </FieldGroup>
 
-      <Button type="submit" disabled={pending} className={SETTINGS_SUBMIT}>
-        {pending ? <Spinner data-icon="inline-start" /> : null}
+      <Button type="submit" loading={pending} className={SETTINGS_SUBMIT}>
         {pending ? "Saving…" : "Update account"}
       </Button>
     </form>

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { HeartIcon, ShoppingCartIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { addToCart, addWishlistToCart } from "@/lib/actions/cart"
 import { removeFromWishlist } from "@/lib/actions/wishlist"
@@ -44,7 +43,7 @@ function RemoveFromWishlistButton({
       variant="outline"
       size="icon"
       aria-label={`Remove ${title} from your wishlist`}
-      disabled={pending}
+      loading={pending}
       onClick={() =>
         startTransition(async () => {
           const result = await removeFromWishlist(slug)
@@ -56,11 +55,7 @@ function RemoveFromWishlistButton({
       }
       className="size-10 bg-card"
     >
-      {pending ? (
-        <Spinner className="size-4.5" />
-      ) : (
-        <HeartIcon className="size-4.5 text-destructive" />
-      )}
+      <HeartIcon className="size-4.5 text-destructive" />
     </Button>
   )
 }
@@ -82,7 +77,7 @@ function EnrollNowButton({ slug }: { slug: string }) {
 
   return (
     <Button
-      disabled={pending}
+      loading={pending}
       onClick={() =>
         startTransition(async () => {
           const result = await addToCart(slug)
@@ -95,7 +90,6 @@ function EnrollNowButton({ slug }: { slug: string }) {
       }
       className="h-10 gap-2 px-4.5 text-sm font-semibold"
     >
-      {pending ? <Spinner className="size-4" /> : null}
       Enroll now
     </Button>
   )
@@ -111,7 +105,7 @@ function AddAllToCartButton() {
 
   return (
     <Button
-      disabled={pending}
+      loading={pending}
       onClick={() =>
         startTransition(async () => {
           const result = await addWishlistToCart()
@@ -123,11 +117,7 @@ function AddAllToCartButton() {
       }
       className="h-10 gap-2 px-4.5 text-sm font-semibold"
     >
-      {pending ? (
-        <Spinner className="size-4" />
-      ) : (
-        <ShoppingCartIcon className="size-4" />
-      )}
+      <ShoppingCartIcon className="size-4" />
       Add all to cart
     </Button>
   )

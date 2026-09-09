@@ -123,6 +123,13 @@ function UsersTable({
     React.useState<Record<ToggleableColumn, boolean>>(ALL_COLUMNS)
   const [selected, setSelected] = React.useState<string[]>([])
   const [saving, startSaving] = React.useTransition()
+  // Which *bulk* button was pressed. The bar's three buttons share one
+  // transition, so a bare `loading={saving}` would spin Reactivate and Suspend
+  // together and say the console was doing both to the same selection. Only
+  // the pressed one spins; the others are disabled. A row's own `⋯` menu needs
+  // none of this — the menu closes on click, so the row dimming below is where
+  // that progress shows.
+  const [bulk, setBulk] = React.useState<"ACTIVE" | "SUSPENDED" | null>(null)
 
   // A selection is only meaningful for rows that are on screen: the filter or
   // the page can change under it, and acting on an id the admin can no longer
@@ -151,7 +158,14 @@ function UsersTable({
         type: result.ok ? "success" : "error",
       })
       if (result.ok) setSelected([])
+      setBulk(null)
     })
+  }
+
+  /** `run`, plus a note of which bulk button is the one spinning. */
+  function runBulk(userIds: string[], status: "ACTIVE" | "SUSPENDED") {
+    setBulk(status)
+    run(userIds, status)
   }
 
   const allChecked = rows.length > 0 && visible.length === rows.length
@@ -179,16 +193,18 @@ function UsersTable({
             <div className="ml-auto flex items-center gap-2">
               <Button
                 variant="outline"
+                loading={bulk === "ACTIVE"}
                 disabled={saving}
-                onClick={() => run(visible, "ACTIVE")}
+                onClick={() => runBulk(visible, "ACTIVE")}
                 className="h-9 bg-card shadow-sm"
               >
                 {adminUsersCopy.bulkReactivate}
               </Button>
               <Button
                 variant="destructive"
+                loading={bulk === "SUSPENDED"}
                 disabled={saving}
-                onClick={() => run(visible, "SUSPENDED")}
+                onClick={() => runBulk(visible, "SUSPENDED")}
                 className="h-9"
               >
                 {adminUsersCopy.bulkSuspend}

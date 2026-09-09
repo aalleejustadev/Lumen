@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
 import { PasswordInput } from "@/components/auth/password-input"
 import {
   MIN_PASSWORD_LENGTH,
@@ -107,11 +106,10 @@ function ResetPasswordForm({
         </p>
         <Button
           variant="outline"
-          disabled={pending}
+          loading={pending}
           onClick={() => sendLink(email)}
           className="mt-6 h-12 gap-2 bg-card text-[15px] font-semibold"
         >
-          {pending ? <Spinner /> : null}
           Send it again
         </Button>
         <BackToSignIn />
@@ -198,12 +196,11 @@ function ResetPasswordForm({
 
           <Button
             type="submit"
-            disabled={pending}
+            loading={pending}
             className="mt-5 h-12 gap-2 text-[15px] font-semibold"
           >
-            {pending ? <Spinner /> : null}
             Reset password
-            {pending ? null : <ArrowRightIcon data-icon="inline-end" />}
+            <ArrowRightIcon data-icon="inline-end" />
           </Button>
         </form>
         <BackToSignIn />
@@ -216,7 +213,7 @@ function ResetPasswordForm({
       <h1 className="text-[32px] leading-tight">Reset your password</h1>
       {/* `text-wrap` overrides the global `pretty`, which would rebalance the
           two lines away from the export's greedy break. */}
-      <p className="mt-2 text-[15px] text-muted-foreground [text-wrap:wrap]">
+      <p className="mt-2 text-[15px] [text-wrap:wrap] text-muted-foreground">
         Enter the email on your account and we&rsquo;ll send a link to reset
         your password.
       </p>
@@ -243,12 +240,11 @@ function ResetPasswordForm({
 
         <Button
           type="submit"
-          disabled={pending}
+          loading={pending}
           className="mt-5 h-12 gap-2 text-[15px] font-semibold"
         >
-          {pending ? <Spinner /> : null}
           Send reset link
-          {pending ? null : <ArrowRightIcon data-icon="inline-end" />}
+          <ArrowRightIcon data-icon="inline-end" />
         </Button>
       </form>
 

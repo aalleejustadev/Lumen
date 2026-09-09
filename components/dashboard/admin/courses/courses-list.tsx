@@ -85,6 +85,11 @@ function CoursesList({
   // Which row's dialog is open. The id rather than a boolean, so the dialog
   // can name the course and the instructor in its own sentence.
   const [requesting, setRequesting] = React.useState<CourseListRow | null>(null)
+  // Which row's Approve was pressed. One transition covers the whole list, so
+  // a bare `loading={saving}` would spin Approve on every course awaiting
+  // review; only the one you pressed should. "Request changes" opens a dialog
+  // and spins on that dialog's own submit instead.
+  const [approving, setApproving] = React.useState<string | null>(null)
 
   const pending = isPending || saving
 
@@ -115,12 +120,14 @@ function CoursesList({
   }
 
   function approve(row: CourseListRow) {
+    setApproving(row.id)
     startSaving(async () => {
       const result = await approveCourse(row.id)
       toast.add({
         title: result.message,
         type: result.ok ? "success" : "error",
       })
+      setApproving(null)
     })
   }
 
@@ -244,6 +251,7 @@ function CoursesList({
                   {decidable ? (
                     <>
                       <Button
+                        loading={approving === row.id}
                         disabled={saving}
                         onClick={() => approve(row)}
                         className="h-10 gap-2 px-4"

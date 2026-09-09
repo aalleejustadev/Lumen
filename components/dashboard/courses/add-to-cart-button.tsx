@@ -4,7 +4,6 @@ import * as React from "react"
 import { ShoppingCartIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { addToCart } from "@/lib/actions/cart"
 
@@ -31,11 +30,7 @@ function AddToCartButton({ slug }: { slug: string }) {
       }
       className="h-9 gap-1.5 px-3.5! font-semibold"
     >
-      {pending ? (
-        <Spinner data-icon="inline-start" className="size-4" />
-      ) : (
-        <ShoppingCartIcon data-icon="inline-start" className="size-4" />
-      )}
+      <ShoppingCartIcon data-icon="inline-start" className="size-4" />
       Add
     </Button>
   )

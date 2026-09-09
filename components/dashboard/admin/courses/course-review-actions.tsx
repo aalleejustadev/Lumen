@@ -45,8 +45,20 @@ function CourseReviewActions({
   const router = useRouter()
   const [pending, startTransition] = React.useTransition()
   const [requesting, setRequesting] = React.useState(false)
+  // **Which** decision is in flight, not just whether one is. All three
+  // buttons share one transition, so a bare `loading={pending}` would spin
+  // every one of them and claim the platform was approving *and* rejecting the
+  // same course at once. Each button spins only for its own verdict; the other
+  // two are merely disabled, which is what `loading` and `disabled` are for.
+  const [decision, setDecision] = React.useState<
+    "approve" | "changes" | "reject" | null
+  >(null)
 
-  function run(action: () => Promise<{ ok: boolean; message: string }>) {
+  function run(
+    which: "approve" | "changes" | "reject",
+    action: () => Promise<{ ok: boolean; message: string }>
+  ) {
+    setDecision(which)
     startTransition(async () => {
       const result = await action()
       toast.add({
@@ -57,6 +69,7 @@ function CourseReviewActions({
         setRequesting(false)
         router.refresh()
       }
+      setDecision(null)
     })
   }
 
@@ -64,8 +77,9 @@ function CourseReviewActions({
     <>
       <div className="mt-7 flex flex-wrap items-center gap-2.5">
         <Button
+          loading={decision === "approve"}
           disabled={pending}
-          onClick={() => run(() => approveCourse(courseId))}
+          onClick={() => run("approve", () => approveCourse(courseId))}
           className="h-11 gap-2 px-5"
         >
           <CheckIcon className="size-4" />
@@ -83,8 +97,9 @@ function CourseReviewActions({
 
         <Button
           variant="ghost"
+          loading={decision === "reject"}
           disabled={pending}
-          onClick={() => run(() => rejectCourse(courseId))}
+          onClick={() => run("reject", () => rejectCourse(courseId))}
           className="h-11 px-5 text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           {courseViewCopy.reject}
@@ -97,7 +112,9 @@ function CourseReviewActions({
         courseTitle={courseTitle}
         instructorName={instructorName}
         pending={pending}
-        onSubmit={(input) => run(() => requestCourseChanges(courseId, input))}
+        onSubmit={(input) =>
+          run("changes", () => requestCourseChanges(courseId, input))
+        }
       />
     </>
   )

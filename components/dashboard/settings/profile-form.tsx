@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import {
@@ -283,8 +282,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
         </Field>
       </FieldGroup>
 
-      <Button type="submit" disabled={pending} className={SETTINGS_SUBMIT}>
-        {pending ? <Spinner data-icon="inline-start" /> : null}
+      <Button type="submit" loading={pending} className={SETTINGS_SUBMIT}>
         {pending ? "Saving…" : "Update profile"}
       </Button>
     </form>
