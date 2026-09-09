@@ -3,45 +3,26 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronDownIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-  useSidebar,
 } from "@/components/ui/sidebar"
+import {
+  NavRow,
+  NavRowWithChildren,
+  RowTooltip,
+} from "@/components/dashboard/sidebar-nav"
 import { SidebarUser } from "@/components/dashboard/sidebar-user"
 import { Logo } from "@/components/shared/logo"
 import { type MenuUser } from "@/lib/user"
 import {
   dashboardNav,
   workspaceModes,
-  type DashboardNavItem,
   type WorkspaceMode,
 } from "@/lib/config/dashboard"
 import { plans } from "@/lib/config/pricing"
@@ -50,194 +31,6 @@ import { cn } from "@/lib/utils"
 
 /** Figures come from the pricing config so the two can't drift apart. */
 const business = plans.find((plan) => plan.id === "lumen-business")
-
-/**
- * Rows are 36px on a 37px pitch, 18px icons at a 12px inset, 14px labels —
- * all measured off `ui-design/light/dashboard/dashboard-sidebar.png`. The
- * active row is a white card with a shadow rather than a tint.
- */
-const rowClass =
-  "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm transition-colors group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
-
-/**
- * On the rail the label is gone, so the tooltip is the only thing naming the
- * row — it's the affordance that makes an icon-only sidebar usable, not a
- * decoration. Expanded, it would just repeat the visible text, so it's off.
- */
-function RowTooltip({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactElement
-}) {
-  const { state, isMobile } = useSidebar()
-
-  if (state !== "collapsed" || isMobile) return children
-
-  return (
-    <Tooltip>
-      <TooltipTrigger render={children} />
-      <TooltipContent side="right" sideOffset={8}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
-/**
- * `badge` is passed in rather than read off `item` so a row can carry a real
- * count (Wishlist) alongside the placeholders still baked into
- * `lib/config/dashboard.ts` — see `navCounts` on `DashboardSidebar`.
- */
-function NavRow({
-  item,
-  active,
-  badge,
-}: {
-  item: DashboardNavItem
-  active: boolean
-  badge?: number
-}) {
-  return (
-    <RowTooltip label={item.title}>
-      <Link
-        href={item.href}
-        className={cn(
-          rowClass,
-          active
-            ? "bg-card font-medium text-foreground shadow-sm"
-            : "text-muted-foreground hover:bg-hover hover:text-foreground"
-        )}
-      >
-        <item.icon className="size-4.5 shrink-0" />
-        <span className="truncate group-data-[collapsible=icon]:hidden">
-          {item.title}
-        </span>
-        {badge ? (
-          <span className="ml-auto text-[13px] text-subtle-foreground tabular-nums group-data-[collapsible=icon]:hidden">
-            {badge}
-          </span>
-        ) : null}
-      </Link>
-    </RowTooltip>
-  )
-}
-
-/**
- * Settings is the one row with children, hence the chevron in the export.
- * Expanded, that's a normal inline `Collapsible`. On the rail there's no room
- * to expand inline, so the same row instead opens its sub-items as a flyout
- * menu to the right — and still carries a tooltip, like every other rail
- * icon. (`RowTooltip` can't be reused as-is here: it hands its child straight
- * to `TooltipTrigger`'s `render`, which needs a single Base UI–composable
- * element, and a `DropdownMenuTrigger` has to be *that* element too — so the
- * two are nested by hand instead of stacking two independent wrappers.)
- */
-function NavRowWithChildren({
-  item,
-  pathname,
-}: {
-  item: DashboardNavItem
-  pathname: string
-}) {
-  const { state, isMobile } = useSidebar()
-  const childActive = item.items?.some((child) => pathname === child.href)
-  const active = pathname === item.href || childActive
-  const [open, setOpen] = React.useState(Boolean(childActive))
-
-  if (state === "collapsed" && !isMobile) {
-    return (
-      <Tooltip>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    className={cn(
-                      rowClass,
-                      "cursor-pointer",
-                      active
-                        ? "bg-card font-medium text-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-hover hover:text-foreground"
-                    )}
-                  />
-                }
-              />
-            }
-          >
-            <item.icon className="size-4.5 shrink-0" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            side="right"
-            align="start"
-            sideOffset={12}
-            className="w-48"
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>{item.title}</DropdownMenuLabel>
-              {item.items?.map((child) => (
-                <DropdownMenuItem
-                  key={child.href}
-                  render={<Link href={child.href} />}
-                  data-active={pathname === child.href}
-                  className="cursor-pointer data-[active=true]:bg-hover data-[active=true]:font-medium data-[active=true]:text-foreground"
-                >
-                  {child.title}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <TooltipContent side="right" sideOffset={8}>
-          {item.title}
-        </TooltipContent>
-      </Tooltip>
-    )
-  }
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger
-        className={cn(
-          rowClass,
-          "cursor-pointer",
-          active
-            ? "bg-card font-medium text-foreground shadow-sm"
-            : "text-muted-foreground hover:bg-hover hover:text-foreground"
-        )}
-      >
-        <item.icon className="size-4.5 shrink-0" />
-        <span className="truncate group-data-[collapsible=icon]:hidden">
-          {item.title}
-        </span>
-        <ChevronDownIcon
-          className={cn(
-            "ml-auto size-4 shrink-0 text-subtle-foreground transition-transform group-data-[collapsible=icon]:hidden",
-            open && "rotate-180"
-          )}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
-        <SidebarMenuSub className="mt-px mr-0 gap-px border-border pr-0">
-          {item.items?.map((child) => (
-            <SidebarMenuSubItem key={child.href}>
-              <SidebarMenuSubButton
-                isActive={pathname === child.href}
-                render={<Link href={child.href} />}
-                className="h-8 text-sm text-muted-foreground data-[active=true]:bg-card data-[active=true]:text-foreground data-[active=true]:shadow-sm"
-              >
-                {child.title}
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
-        </SidebarMenuSub>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-}
 
 /**
  * Student / Instructor. Local state until instructor surfaces exist.

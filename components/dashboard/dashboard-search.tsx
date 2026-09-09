@@ -16,6 +16,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { CourseFeedbackDialog } from "@/components/dashboard/learning/course/course-feedback-dialog"
 import { browseCourses } from "@/lib/config/browse-courses"
+import { adminCommandPaletteGroups } from "@/lib/config/admin-nav"
 import { commandPaletteGroups } from "@/lib/config/dashboard"
 
 /**
@@ -31,8 +32,24 @@ import { commandPaletteGroups } from "@/lib/config/dashboard"
  * real, so until then it hangs here. Delete this group — and the two pieces of
  * state and the `browseCourses` import feeding it — when the prompt becomes
  * automatic.
+ *
+ * `variant` picks which navigation the palette offers: the admin console gets
+ * its own, since a palette that jumps to My Learning from inside the console
+ * would quietly drop you out of admin mode, and rating a course has nothing to
+ * do with the console either. It is a **string**, not the group list itself —
+ * both headers are Server Components, and every item in those lists carries a
+ * `LucideIcon`, which is a function and cannot cross the server-client
+ * boundary. So the lists are picked here, inside the client module, exactly as
+ * `instructor-profile-page.tsx` strips its icons for the same reason.
  */
-function DashboardSearch() {
+function DashboardSearch({
+  variant = "student",
+}: {
+  variant?: "student" | "admin"
+} = {}) {
+  const admin = variant === "admin"
+  const groups = admin ? adminCommandPaletteGroups : commandPaletteGroups
+  const preview = !admin
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
@@ -85,7 +102,7 @@ function DashboardSearch() {
           <CommandInput placeholder="Type a command or search..." />
           <CommandList>
             <CommandEmpty>Nothing matches that yet.</CommandEmpty>
-            {commandPaletteGroups.map((group) => (
+            {groups.map((group) => (
               <CommandGroup key={group.title} heading={group.title}>
                 {group.items.map((item) => (
                   <CommandItem
@@ -101,31 +118,35 @@ function DashboardSearch() {
               </CommandGroup>
             ))}
 
-            <CommandGroup heading="Preview">
-              <CommandItem
-                value="Rate this course"
-                onSelect={() => {
-                  setOpen(false)
-                  setFeedbackOpen(true)
-                }}
-                className="cursor-pointer"
-              >
-                <StarIcon />
-                Rate this course
-              </CommandItem>
-            </CommandGroup>
+            {preview ? (
+              <CommandGroup heading="Preview">
+                <CommandItem
+                  value="Rate this course"
+                  onSelect={() => {
+                    setOpen(false)
+                    setFeedbackOpen(true)
+                  }}
+                  className="cursor-pointer"
+                >
+                  <StarIcon />
+                  Rate this course
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
           </CommandList>
         </Command>
       </CommandDialog>
 
-      <CourseFeedbackDialog
-        open={feedbackOpen}
-        onOpenChange={setFeedbackOpen}
-        courseTitle={course.title}
-        instructorFirstName={
-          course.instructor.split(" ")[0] ?? "the instructor"
-        }
-      />
+      {preview ? (
+        <CourseFeedbackDialog
+          open={feedbackOpen}
+          onOpenChange={setFeedbackOpen}
+          courseTitle={course.title}
+          instructorFirstName={
+            course.instructor.split(" ")[0] ?? "the instructor"
+          }
+        />
+      ) : null}
     </>
   )
 }

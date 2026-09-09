@@ -21,15 +21,22 @@ import { initialsOf, type MenuUser } from "@/lib/user"
  * current because the cart actions in `lib/actions/cart.ts` revalidate, which
  * makes Next re-render this layout as part of the action's response; see the
  * note there.
+ *
+ * `showInstructorCta` is decided in the layout by `canBecomeInstructor`, not
+ * here: "Become an Instructor" is an invitation, so it is only shown to a
+ * learner who hasn't taken it up. Admins and accounts that already have a
+ * teaching profile never see it.
  */
 function DashboardHeader({
   user,
   isAdmin,
   cartCount = 0,
+  showInstructorCta = false,
 }: {
   user: MenuUser
   isAdmin?: boolean
   cartCount?: number
+  showInstructorCta?: boolean
 }) {
   return (
     <header className="sticky top-0 z-40 flex h-[70px] shrink-0 items-center gap-3 border-b bg-background px-4 sm:gap-4 sm:px-6">
@@ -39,13 +46,16 @@ function DashboardHeader({
 
       <div className="ml-auto flex items-center gap-3">
         {/* The one coloured thing in the bar, so it reads as the invitation it
-            is rather than another icon. */}
-        <Link
-          href="/teach"
-          className="text-gradient hidden text-sm font-semibold transition-opacity hover:opacity-80 lg:block"
-        >
-          Become an Instructor
-        </Link>
+            is rather than another icon — and only for someone it is still an
+            invitation to. */}
+        {showInstructorCta ? (
+          <Link
+            href="/teach"
+            className="text-gradient hidden text-sm font-semibold transition-opacity hover:opacity-80 lg:block"
+          >
+            Become an Instructor
+          </Link>
+        ) : null}
 
         <Button
           variant="ghost"

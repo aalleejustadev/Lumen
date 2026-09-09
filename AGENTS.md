@@ -851,14 +851,70 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     `Category.accentColor` and the category slug rather than a position in a
     list, so a new category gets a sensible tile instead of a blank one. The
     export draws photographs — see `lumen-course-card-art`.
-  The route guard lives in `app/(dashboard)/dashboard/admin/page.tsx`, not the
-  group layout, which only checks for *a* session; it is `notFound()` rather
-  than a redirect, so a signed-in learner who guesses the URL can't tell "you
-  may not see this" from "there is nothing here". The **admin shell is still to
-  build**: `access-admin-console__admin.png` / `exit-admin-mode__admin.png`
-  draw an admin *mode* with its own sidebar nav, a cart-less header and a
-  reduced account menu, and today the page renders inside the student shell.
-  `account-menu.tsx` already links here for admins.
+- **The admin console is its own shell, in `app/(admin)/`.** The exports draw
+  an admin *mode* — its own sidebar nav, a cart-less header and a shorter
+  account menu — so it is a route group of its own rather than a layout nested
+  under `(dashboard)`: a nested layout is drawn *inside* its parent's chrome,
+  which would have wrapped the student sidebar and app bar around the console.
+  A route group contributes nothing to the path, so `/dashboard/admin` is
+  unchanged and every existing link to it still works. **The role guard moved
+  with it**, from the page to `app/(admin)/layout.tsx` — it has to cover every
+  console route, not just the landing page — and it is still `notFound()`
+  rather than a redirect, so a signed-in learner who guesses the URL can't tell
+  "you may not see this" from "there is nothing here"; the session check runs
+  first, so someone signed out is sent to sign in instead.
+  `admin-sidebar.tsx` is the panel from `admin-sidebar.png` and
+  `admin-header.tsx` the bar from the right-hand crop of
+  `exit-admin-mode__admin.png`. `lib/config/admin-nav.ts` owns the navigation.
+  Four things about it are deliberate:
+  - **The export's Student / Instructor switch is not reproduced.** It draws
+    one under the logo, but the console is a mode you leave through "Exit admin
+    mode" in the account menu; a second, contradictory way out directly above
+    the navigation would be worse than none. There is no upgrade card either —
+    that promo sells a *learner* plan.
+  - **Only Dashboard is a link.** Every other row carries `built: false` and
+    renders as inert text, the same flag and treatment `settingsNav` and
+    `attentionQueues` use. The export draws all nine as links; nine 404s would
+    be worse. Platform Settings keeps its chevron and expands to the four
+    sections `platform-settings.png` draws, all four inert for the same reason.
+    Flip each flag as its page lands — `adminCommandPaletteGroups` is derived
+    from the same list and grows on its own.
+  - **The sidebar's 4 / 6 / 3 badges are the Platform Overview queue sizes**,
+    not totals — 4 instructor applications, 6 courses awaiting review, 3
+    reported reviews, which is exactly what the export draws. So they are work
+    waiting on an admin; 482,140 users would not fit that slot and would tell
+    nobody anything. `getAttentionFacts` is wrapped in React `cache` because
+    the layout and the page underneath both read it.
+  - **The row vocabulary is shared, in `components/dashboard/sidebar-nav.tsx`.**
+    Both shells draw the same 36px rows, the same active white card and the
+    same collapsed rail over different navigation, so `NavRow`,
+    `NavRowWithChildren` and `RowTooltip` live in one module — a change to the
+    rail's behaviour has to land on both at once. The two sidebars share the
+    `sidebar_state` cookie too, so a collapse preference follows you across
+    them.
+- **`account-menu.tsx` has two forms, picked by `adminMode`.** In the student
+  shell it is the five learner rows plus "Admin console" for an account with
+  the role (`access-admin-console__admin.png`); inside the console it is the
+  shorter list from `exit-admin-mode__admin.png` — Billing, Notifications and
+  Help Center are learner surfaces — ending in **"Exit admin mode"**, tinted
+  `--role-admin` like the Platform Overview pill and landing on `/dashboard`.
+  `isAdmin` is only consulted in the student form: inside the console the role
+  is already established by the layout's guard, so an "Admin console" row there
+  would link the page to itself. Profile and Account point at
+  `/dashboard/settings/*` until `/dashboard/admin/settings/*` is built.
+  The export also draws a **Credits** block under Log out; there is no credits
+  system, so it is not reproduced.
+- **"Become an Instructor" in the app bar is gated by `lib/instructor.ts`.**
+  It is an invitation, so it only shows to someone who hasn't accepted it:
+  `canBecomeInstructor` excludes admins, accounts carrying the `instructor`
+  role, and accounts with an `Instructor` row pointing at them — that row is
+  what the sale and profile pages render, so its existence, not the role
+  string, is what "is an instructor" really means. A *pending* application is
+  deliberately **not** excluded: they have applied, not arrived. The header
+  takes the answer as a `showInstructorCta` prop from
+  `app/(dashboard)/layout.tsx` rather than querying itself, and the admin
+  header never renders the link at all. `access-admin-console__admin.png` does
+  draw it for an admin — a deliberate divergence, per the same brief.
 - **`UptimeSample` is the one model this page needed.** Availability is the
   only figure on Platform Overview no other table can answer — it is a property
   of the infrastructure, not of the catalog, the ledger or the accounts — and
@@ -910,7 +966,10 @@ Import via the `@/*` alias (`@/components/ui/button`, `@/lib/utils`), never rela
 
 Split, as of the auth screens: `app/(marketing)/` owns the header and footer in
 its own layout, `app/(auth)/` brings the two-up auth shell, `app/(dashboard)/`
-guards its subtree with a session check in the layout, and `app/(checkout)/`
+guards its subtree with a session check in the layout, `app/(admin)/` is the
+admin console's own shell (the same session guard plus a role check, and a
+sidebar and app bar of its own — see the note above for why it isn't nested
+under the dashboard), and `app/(checkout)/`
 is a deliberately chrome-free shell (no sidebar, no app bar) with the same
 session guard repeated — a route group's layout only covers its own subtree,
 so it can't inherit the dashboard's. The root layout is now just `<html>`,

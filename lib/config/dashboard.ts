@@ -27,6 +27,13 @@ export type DashboardNavItem = {
    *  counts them and passes the number down through `navCounts`. */
   badge?: number
   items?: { title: string; href: string }[]
+  /**
+   * False when `href` has no route yet. `NavRow` renders such a row as inert
+   * text rather than a link, the same treatment `settingsNav`'s own flag gives
+   * an unbuilt settings section. Absent means built — every row in the student
+   * sidebar is, so only `lib/config/admin-nav.ts` sets it today.
+   */
+  built?: boolean
 }
 
 export type DashboardNavGroup = {

@@ -1,3 +1,5 @@
+import { cache } from "react"
+
 import { db } from "@/lib/db"
 
 /**
@@ -183,74 +185,82 @@ async function getUptime(cutoff: Date) {
 // Needs your attention
 // ---------------------------------------------------------------------------
 
-export async function getAttentionFacts(): Promise<AttentionFacts> {
-  const weekAgo = new Date(Date.now() - 7 * DAY)
+/**
+ * Wrapped in React `cache` because two things ask for it per request: the
+ * console's layout, for the sidebar's Users / Courses / Reviews counts, and
+ * this page's "Needs your attention" list. They are the same six queries and
+ * must show the same numbers, so they share one read.
+ */
+export const getAttentionFacts = cache(
+  async function getAttentionFacts(): Promise<AttentionFacts> {
+    const weekAgo = new Date(Date.now() - 7 * DAY)
 
-  const [
-    submissions,
-    applications,
-    reports,
-    reportsByInstructors,
-    failedPayouts,
-    nextRun,
-  ] = await Promise.all([
-    // `Course.status` holds the latest outcome, so the queue is a count of
-    // courses in review rather than of `CourseSubmission` rows — a course
-    // that was sent back and resubmitted has several of those.
-    db.course.aggregate({
-      where: { status: "IN_REVIEW" },
-      _count: true,
-      _min: { submittedAt: true },
-    }),
-    db.instructorApplication.aggregate({
-      where: { status: "PENDING" },
-      _count: true,
-      _min: { createdAt: true },
-    }),
-    db.contentReport.count({
-      where: { status: "OPEN", targetType: "REVIEW" },
-    }),
-    db.contentReport.count({
-      where: {
-        status: "OPEN",
-        targetType: "REVIEW",
-        reporter: { role: "instructor" },
+    const [
+      submissions,
+      applications,
+      reports,
+      reportsByInstructors,
+      failedPayouts,
+      nextRun,
+    ] = await Promise.all([
+      // `Course.status` holds the latest outcome, so the queue is a count of
+      // courses in review rather than of `CourseSubmission` rows — a course
+      // that was sent back and resubmitted has several of those.
+      db.course.aggregate({
+        where: { status: "IN_REVIEW" },
+        _count: true,
+        _min: { submittedAt: true },
+      }),
+      db.instructorApplication.aggregate({
+        where: { status: "PENDING" },
+        _count: true,
+        _min: { createdAt: true },
+      }),
+      db.contentReport.count({
+        where: { status: "OPEN", targetType: "REVIEW" },
+      }),
+      db.contentReport.count({
+        where: {
+          status: "OPEN",
+          targetType: "REVIEW",
+          reporter: { role: "instructor" },
+        },
+      }),
+      db.payout.count({ where: { status: "FAILED" } }),
+      db.payoutRun.findFirst({
+        where: { status: "SCHEDULED", scheduledFor: { gte: new Date() } },
+        orderBy: { scheduledFor: "asc" },
+        select: { scheduledFor: true },
+      }),
+    ])
+
+    const oldestApplication = applications._min.createdAt
+
+    return {
+      coursesAwaitingReview: {
+        count: submissions._count,
+        oldestSubmittedAt: submissions._min.submittedAt,
       },
-    }),
-    db.payout.count({ where: { status: "FAILED" } }),
-    db.payoutRun.findFirst({
-      where: { status: "SCHEDULED", scheduledFor: { gte: new Date() } },
-      orderBy: { scheduledFor: "asc" },
-      select: { scheduledFor: true },
-    }),
-  ])
-
-  const oldestApplication = applications._min.createdAt
-
-  return {
-    coursesAwaitingReview: {
-      count: submissions._count,
-      oldestSubmittedAt: submissions._min.submittedAt,
-    },
-    instructorApplications: {
-      count: applications._count,
-      oldestCreatedAt: oldestApplication,
-      allThisWeek:
-        applications._count > 0 &&
-        oldestApplication !== null &&
-        oldestApplication >= weekAgo,
-    },
-    reportedReviews: {
-      count: reports,
-      byInstructors: reportsByInstructors,
-      byOthers: reports - reportsByInstructors,
-    },
-    failedPayouts: {
-      count: failedPayouts,
-      retryScheduledFor: nextRun?.scheduledFor ?? null,
-    },
+      instructorApplications: {
+        count: applications._count,
+        oldestCreatedAt: oldestApplication,
+        allThisWeek:
+          applications._count > 0 &&
+          oldestApplication !== null &&
+          oldestApplication >= weekAgo,
+      },
+      reportedReviews: {
+        count: reports,
+        byInstructors: reportsByInstructors,
+        byOthers: reports - reportsByInstructors,
+      },
+      failedPayouts: {
+        count: failedPayouts,
+        retryScheduledFor: nextRun?.scheduledFor ?? null,
+      },
+    }
   }
-}
+)
 
 // ---------------------------------------------------------------------------
 // Top courses platform-wide

@@ -14,7 +14,16 @@ import { initialsOf, type MenuUser } from "@/lib/user"
  * account menu from `user-menu__sidebar.png`. The whole row is the trigger —
  * a 38px target in the corner would be needlessly fiddly.
  */
-function SidebarUser({ user, isAdmin }: { user: MenuUser; isAdmin?: boolean }) {
+function SidebarUser({
+  user,
+  isAdmin,
+  adminMode,
+}: {
+  user: MenuUser
+  isAdmin?: boolean
+  /** Passed straight through — see `AccountMenu`'s two forms. */
+  adminMode?: boolean
+}) {
   const { isMobile } = useSidebar()
   const [signingOut, setSigningOut] = React.useState(false)
 
@@ -22,6 +31,7 @@ function SidebarUser({ user, isAdmin }: { user: MenuUser; isAdmin?: boolean }) {
     <AccountMenu
       user={user}
       isAdmin={isAdmin}
+      adminMode={adminMode}
       signingOut={signingOut}
       onSignOutStart={() => setSigningOut(true)}
       // Out to the right of the sidebar, bottom-aligned with the row that

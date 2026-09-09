@@ -6,6 +6,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { getSession } from "@/lib/auth"
 import { getCartCount, getWishlistCount } from "@/lib/cart"
+import { canBecomeInstructor } from "@/lib/instructor"
 
 /**
  * Everything under this group requires a session — the guard lives here rather
@@ -21,6 +22,10 @@ import { getCartCount, getWishlistCount } from "@/lib/cart"
  * underneath. `navCounts` is keyed by href so the layout — not the sidebar —
  * owns which rows carry a real number; anything unlisted keeps the
  * placeholder from `lib/config/dashboard.ts`.
+ *
+ * The admin console is **not** under this group — it has its own shell in
+ * `app/(admin)/`, for the reason that layout explains — so nothing here needs
+ * to know about admin mode beyond the account menu's "Admin console" row.
  */
 export default async function DashboardLayout({
   children,
@@ -34,9 +39,10 @@ export default async function DashboardLayout({
   // shadcn's provider writes `sidebar_state` on every toggle; reading it here
   // is what makes the rail survive a reload.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
-  const [cartCount, wishlistCount] = await Promise.all([
+  const [cartCount, wishlistCount, showInstructorCta] = await Promise.all([
     getCartCount(),
     getWishlistCount(),
+    canBecomeInstructor(user),
   ])
 
   return (
@@ -60,6 +66,7 @@ export default async function DashboardLayout({
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin={user.role === "admin"}
           cartCount={cartCount}
+          showInstructorCta={showInstructorCta}
         />
         {children}
       </SidebarInset>
