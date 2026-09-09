@@ -1,4 +1,5 @@
 import type { AuditCategory, AuditTab } from "@/lib/admin/audit-log"
+import { userRoleBadge } from "@/lib/config/admin-users"
 
 /**
  * Everything `/dashboard/admin/audit-log` *says*, and nothing it counts — the
@@ -54,32 +55,27 @@ export const auditCategoryLabels: Record<AuditCategory, string> = {
 }
 
 /**
- * The small pill under the actor's name. `--role-admin` / `--role-instructor`
- * / `--role-student` already exist for exactly this, and the System actor —
- * an entry with no `actorId` — gets the neutral tint, since "System" is not a
+ * The small pill under the actor's name.
+ *
+ * The four role cases are `userRoleBadge`'s, delegated rather than repeated:
+ * the admin Users table draws the same pill for the same word, and two console
+ * tables tinting "Student" two different colours is exactly the drift the
+ * console's other shared pieces exist to prevent. (That is also where Student
+ * became neutral rather than `--role-student` blue — `users-page__admin.png`
+ * is the only export that draws one.)
+ *
+ * The **System** actor stays here, because it is this table's own idea: an
+ * entry with no `actorId` was written by the platform, and "System" is not a
  * role anybody holds.
  */
 export function auditRoleBadge(actorRole: string | null): {
   label: string
   className: string
 } {
-  switch (actorRole) {
-    case "admin":
-      return { label: "Admin", className: "bg-role-admin/10 text-role-admin" }
-    case "instructor":
-      return {
-        label: "Instructor",
-        className: "bg-role-instructor/10 text-role-instructor",
-      }
-    case "user":
-    case "student":
-      return {
-        label: "Student",
-        className: "bg-role-student/10 text-role-student",
-      }
-    default:
-      return { label: "System", className: "bg-hover text-muted-foreground" }
+  if (actorRole === null) {
+    return { label: "System", className: "bg-hover text-muted-foreground" }
   }
+  return userRoleBadge(actorRole)
 }
 
 /** How the expanded row names each `targetType`. */

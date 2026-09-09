@@ -821,11 +821,18 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   taller, which is the type being scaled up — see the design note below; don't
   shrink the type to close it.
   Six things worth knowing before changing any of it:
-  - The four attention rows **render inert, with no chevron**, because none of
-    their destination pages exist yet — the same treatment `settings-nav.tsx`
-    gives a section whose route hasn't landed. `AttentionQueue.built` is the
-    flag; flip it per row as each queue page ships. The export draws chevrons,
-    so this is a deliberate divergence, not an oversight.
+  - An attention row **renders inert, with no chevron**, until its destination
+    exists — the same treatment `settings-nav.tsx` gives a section whose route
+    hasn't landed. `AttentionQueue.built` is the flag; flip it per row as each
+    queue page ships. Two of the four lead somewhere today: failed payouts to
+    the Reports page's payout-runs table, and instructor applications to
+    `/dashboard/admin/users?tab=pending-instructors`. That second one is a
+    **filtered view of an existing page**, not a queue page of its own — the
+    Users table's Pending instructors tab is already that list, and a second
+    surface showing the same rows would be one more thing to keep in step. Its
+    tab value has to match `UsersTab` exactly, since `parseUsersQuery` falls
+    back to "all" for anything it doesn't recognise and would land the chevron
+    on an unfiltered table.
   - **An empty queue is dropped rather than drawn as a zero.** "0 reported
     reviews" under a heading that says something needs attention is noise. The
     export only draws a full queue, so the empty states are invented.
@@ -1029,6 +1036,109 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   exist is the one kind of demo data that reads as broken. Each actor keeps a
   stable IP the way the export draws it; System rows use RFC 5737
   documentation addresses.
+- `components/dashboard/admin/users/` — `/dashboard/admin/users`, from
+  `users-page__admin.png`: `users-stats.tsx` (the four-up KPI row),
+  `users-toolbar.tsx` (search, the five tabs, the Filters popover and the
+  Columns menu), `users-table.tsx` (client — the table, the selection and the
+  pager, since the pending flag, the visible-column set and the selection all
+  belong to the three of them at once) and `user-row-actions.tsx`, composed by
+  `users-page.tsx`. `lib/admin/users.ts` reads, `lib/config/admin-users.ts` is
+  the copy, `lib/actions/admin-users.ts` is the two writes. **Nothing on it is
+  demo data.** Measured off the export at DPR 2: the console's usual 32px page
+  inset, a 44px-tile KPI row 16px under the lead, a zero-padding card whose
+  toolbar band is `px-5 py-4` on 40px controls, a 42px table header and 61px
+  rows on 20px cell padding, 36px avatars and 22px pills.
+  - **The KPI tile is not `admin-stat-card.tsx`.** That one is Platform
+    Overview's and Reports' — icon beside a label, figure and delta below — and
+    this export draws a 44px tile beside the figure with no delta. It is the
+    same anatomy as the *student* `learning-stat-card.tsx`, reached from a
+    different export; the two are deliberately not shared, because an admin
+    page reaching into `components/dashboard/learning/` would tie this header
+    to a redesign of a learner surface.
+  - **The search, the tabs and Filters write to the URL; Columns does not.**
+    The first three change which rows exist, which happens in SQL, so they have
+    to reach the server — and a narrowed view then becomes a link. Columns only
+    changes which cells of the rows you already have are drawn, so it is local
+    state. `parseUsersQuery` is the gate on all of it, and accepts `?status=`
+    both repeated and comma-separated. The Pending instructors tab is spelled
+    **`pending-instructors`**, not `pending`, because the short form collides
+    in a reader's head with `?status=PENDING` — a different filter — and
+    because that is the value Platform Overview's attention card links at.
+  - **The Role pill's Student is neutral, not `--role-student` blue.** Read off
+    this export, which is the only one that draws a Student pill — colouring
+    the majority of rows in a table says nothing. `auditRoleBadge` now
+    delegates to `userRoleBadge` so the two console tables cannot tint the same
+    word two ways; it keeps only its own **System** case. Inactive and
+    Suspended share the destructive red and are told apart by the word: a
+    second red one shade off would read as a rendering bug.
+  - **"Active this week" is read off `Session`.** Better Auth refreshes a live
+    session's `updatedAt` daily, so that table is the only real liveness signal
+    the platform has — a `distinct` count over `userId` inside seven days, with
+    expired sessions excluded. `seedSessions` stands in for the traffic the way
+    `seedUptime` stands in for a health monitor. "Instructors" counts
+    `role = "instructor"`, the same definition the Instructors *tab* filters
+    on, so the tile and the tab can never disagree; that is deliberately not
+    `canBecomeInstructor`'s test.
+  - **The checkboxes do something.** The export draws them and draws no bulk
+    bar, but a checkbox column that only ticks is worse than none, so selecting
+    rows reveals a bar running the same `setUserStatus` the row menu calls. The
+    header checkbox's indeterminate state is drawn as a dash from the consumer
+    (`INDETERMINATE` in `users-table.tsx`): Base UI sets `data-indeterminate`
+    correctly but the generated `Checkbox` only knows how to draw a tick, which
+    would say a half-selected page is fully selected. The dash is a `::before`,
+    because the root already uses `::after` as an invisible hit-target
+    expansion. Selected rows also override `data-[state=selected]:bg-muted` to
+    `bg-soft` — the generated tint resolves to `--hover`, the same fill the
+    neutral Student pill uses, so selecting a learner made their role pill
+    vanish.
+  - **The row menu's three items each needed a decision.** View profile links
+    to `/dashboard/instructors/[slug]` when the account has a teaching profile
+    and is drawn *disabled* otherwise, because a learner has no public page;
+    Message is a `mailto:`, since the models exist but no messaging surface
+    does; Suspend is real and flips to Reactivate. `setUserStatus` writes
+    `User.status` **and** Better Auth's `banned` together — the enum is what
+    this console renders and queries, `banned` is what the plugin's session
+    checks read — and refuses to suspend you or the last active admin.
+  - `USERS_PAGE_SIZE` and `isUsersFiltered` live in the **config** module, not
+    `lib/admin/users.ts`, even though the latter is what acts on them: the
+    table is a Client Component and needs both, and importing any *value* from
+    that file drags `lib/db` and the Postgres driver into the browser bundle.
+    The build catches it; types are safe because they are erased.
+- `/dashboard/admin/users/new`, from `add-new-user__admin.png` — where the
+  table's **Add New User** goes, built because a page's primary action should
+  not be a 404. A page rather than a dialog because the export draws one, with
+  its own "Back to users". Measured at DPR 2: a **720px** card, the one console
+  surface that is not full width, on 30px padding with a two-column field grid,
+  44px controls, three 212px role cards on a 12px gap and a 70px invitation
+  row. Text fields reuse `settings-controls.ts`' vocabulary; the role cards are
+  native radios (`sr-only`) inside their labels, the way the quiz page's option
+  rows are.
+  - **`createUser` writes both a `User` and a `UserInvitation`.** The account
+    is `status = PENDING`, which is exactly what that enum value means, so it
+    appears in the table at once; the invitation records what was sent, to whom
+    and whether an email went out (`sendEmail` is stored for the reason the
+    model gives). It goes through `auth.api.createUser` rather than
+    `db.user.create` — Better Auth owns that table and the credential account
+    beside it — with a random password nobody is ever shown, and then
+    `requestPasswordReset` sends the link. The role is applied in the
+    `db.user.update` afterwards: the plugin types `role` as its own two
+    built-ins, and widening that means configuring `admin({ roles })` with a
+    full access-control model this app does not have.
+  - **Nothing consumes the invitation token yet.** There is no `/invite/[token]`
+    route and no export for one, so redemption is implicit — the invitee sets a
+    password and signs in. `acceptedUserId` and `expiresAt` are what a real
+    redemption route will use.
+  - `lib/auth.ts`'s `sendResetPassword` now picks between two messages on one
+    token: an address with a PENDING invitation gets `sendInvitationEmail`,
+    everyone else the ordinary reset copy. Telling somebody to *reset* a
+    password they were never given reads as mail meant for another person.
+- `lib/config/countries.ts` — the codes behind the Country column and the Add
+  new user select. `User.country` stores ISO-3166 alpha-2 and the English names
+  are **computed** through `Intl.DisplayNames`, the call `locale.ts` makes for
+  the `(GMT±HH:MM)` half of a time-zone label. That reads the runtime's own ICU
+  data, so every name is resolved on the **server** and crosses as a string —
+  deriving it on both sides of the boundary is a hydration mismatch waiting for
+  the one country Node and the browser disagree about.
 - **The payout-run dialog has no footer at all.** The export draws "Export CSV"
   and "Close" along the bottom; both were built and removed at the user's
   request, because `DialogContent` already draws a close X in its corner and a

@@ -119,10 +119,10 @@ export type AttentionQueue = {
   /** Where the row's chevron goes. */
   href: string
   /**
-   * Whether `href` exists yet. The queue pages are still to be built, and a
+   * Whether `href` exists yet. Some queue pages are still to be built, and a
    * chevron onto a 404 is worse than no chevron — so an unbuilt row renders
-   * inert, exactly as `settingsNav`'s own `built` flag makes the Notifications
-   * row inert. Flip it when the route lands.
+   * inert, exactly as `settingsNav`'s own `built` flag makes an unbuilt
+   * settings section inert. Flip it when the route lands.
    */
   built: boolean
   /**
@@ -163,8 +163,15 @@ export const attentionQueues: AttentionQueue[] = [
     key: "instructorApplications",
     icon: PresentationIcon,
     tone: "violet",
+    // A *filtered* view of a page rather than a queue page of its own: the
+    // Users table's Pending instructors tab is already the list of people
+    // waiting on a decision, so a second surface showing the same rows would
+    // be one to keep in step for no gain. The tab value has to match
+    // `UsersTab` exactly — `parseUsersQuery` falls back to "all" for anything
+    // it doesn't recognise, which would land the chevron on an unfiltered
+    // table and quietly lose the point of the link.
     href: "/dashboard/admin/users?tab=pending-instructors",
-    built: false,
+    built: true,
     describe: ({ instructorApplications: queue }, format) => ({
       count: queue.count,
       title: `${queue.count} instructor application${

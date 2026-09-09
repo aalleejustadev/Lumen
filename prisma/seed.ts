@@ -549,7 +549,14 @@ async function seedPendingCourses(
 // 6 · Accounts
 // ---------------------------------------------------------------------------
 
-type LearnerRow = { id: string; name: string; email: string; createdAt: Date }
+type LearnerRow = {
+  id: string
+  name: string
+  email: string
+  createdAt: Date
+  /** Whether this account could have a session — see `seedSessions`. */
+  signedIn: boolean
+}
 
 /**
  * Signups ramp from ~0.4/day to ~1.8/day across the window, which is what
@@ -606,7 +613,13 @@ async function seedLearners() {
     if (seed.role === "admin") admins.push(id)
     if (seed.plan === "business")
       business.push({ userId: id, since: createdAt })
-    learners.push({ id, name: seed.name, email: seed.email, createdAt })
+    learners.push({
+      id,
+      name: seed.name,
+      email: seed.email,
+      createdAt,
+      signedIn: seed.status === "ACTIVE",
+    })
   }
 
   for (let index = 0; index < LEARNER_COUNT; index++) {
@@ -643,7 +656,7 @@ async function seedLearners() {
     })
 
     if (rng() < 0.18) business.push({ userId: id, since: createdAt })
-    learners.push({ id, name, email, createdAt })
+    learners.push({ id, name, email, createdAt, signedIn: status === "ACTIVE" })
   }
 
   await db.user.createMany({ data: users })
@@ -662,6 +675,60 @@ async function seedLearners() {
   })
 
   return { learners, admins }
+}
+
+// ---------------------------------------------------------------------------
+// 6b · Sessions, so "Active this week" is a real number
+// ---------------------------------------------------------------------------
+
+/**
+ * The **Active this week** tile on `/dashboard/admin/users` is
+ * `count(distinct session.userId)` over the last seven days — Better Auth
+ * refreshes a live session's `updatedAt` once a day (`session.updateAge`), so
+ * that table is the only place on the platform that knows who is still
+ * around. Without any rows the tile reads 0, which is not "no data", it is a
+ * platform nobody uses.
+ *
+ * So the seed stands in for the traffic, the way `seedUptime` stands in for a
+ * health monitor. Roughly a fifth of accounts were seen in the last week and
+ * another slice earlier in the month, which is the shape of a real weekly
+ * active count against a total.
+ *
+ * The tokens are random and belong to nobody: a session row is only usable by
+ * whoever holds its cookie, and nothing here ever printed one. Suspended and
+ * invited accounts get none — a PENDING account has by definition never signed
+ * in, which is what that status means.
+ */
+async function seedSessions(learners: LearnerRow[]) {
+  const rows: Prisma.SessionCreateManyInput[] = []
+
+  for (const [index, learner] of learners.entries()) {
+    if (!learner.signedIn) continue
+
+    // 22% seen inside the last week, another 20% earlier in the month, the
+    // rest not for a while — a session older than its 30-day expiry is simply
+    // not written, because Better Auth would have dropped it.
+    const bucket = rng()
+    if (bucket > 0.42) continue
+    const daysAgo = bucket <= 0.22 ? rng() * 7 : 7 + rng() * 21
+
+    const seen = ago(daysAgo * DAY)
+    rows.push({
+      id: `${SEED}sess_${pad(index, 4)}`,
+      userId: learner.id,
+      token: `${SEED}tok_${pad(index, 4)}_${Math.floor(rng() * 1e12).toString(36)}`,
+      // 30 days from when it was created, matching `session.expiresIn`.
+      createdAt: seen,
+      updatedAt: seen,
+      expiresAt: new Date(seen.getTime() + 30 * DAY),
+      ipAddress: null,
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/141.0 Safari/537.36",
+    })
+  }
+
+  await db.session.createMany({ data: rows })
+  return rows.length
 }
 
 // ---------------------------------------------------------------------------
@@ -1527,6 +1594,9 @@ async function main() {
     .filter((learner) => admins.includes(learner.id))
     .map(({ id, name }) => ({ id, name }))
   console.log(`accounts          ${learners.length} (${admins.length} admin)`)
+
+  const sessions = await seedSessions(learners)
+  console.log(`sessions          ${sessions}`)
 
   await seedPendingCourses(categories, instructors, reviewerId)
   console.log(`queued courses    ${pendingCourseSeeds.length}`)

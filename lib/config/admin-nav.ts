@@ -35,10 +35,10 @@ import type {
  * in the account menu — so a workspace toggle in this sidebar would offer a
  * third, contradictory way out of it.
  *
- * Only `/dashboard/admin` exists today. Every other row carries
- * `built: false`, which makes `NavRow` render it as inert text instead of a
- * link onto a 404 — the same flag `settingsNav` and `attentionQueues` use.
- * Flip each one as its page lands. The hrefs are already the ones
+ * Dashboard, Reports, Audit Log and Users exist today. Every other row
+ * carries `built: false`, which makes `NavRow` render it as inert text instead
+ * of a link onto a 404 — the same flag `settingsNav` and `attentionQueues`
+ * use. Flip each one as its page lands. The hrefs are already the ones
  * `attentionQueues` points its chevrons at, so the two can't invent different
  * spellings for the same page.
  */
@@ -73,7 +73,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Users",
         href: "/dashboard/admin/users",
         icon: UsersRoundIcon,
-        built: false,
+        built: true,
       },
     ],
   },

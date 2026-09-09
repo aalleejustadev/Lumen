@@ -50,6 +50,21 @@ function sendVerificationEmail(to: string, url: string) {
   })
 }
 
+/**
+ * The mail an admin-created account gets. Same link as a password reset —
+ * Better Auth mints one token for "prove this address is yours and choose a
+ * password", and that is precisely what an invitee needs — but not the same
+ * words: telling someone to *reset* a password they were never given reads as
+ * a message meant for somebody else. `lib/auth.ts` picks between the two.
+ */
+function sendInvitationEmail(to: string, url: string) {
+  return sendMail({
+    to,
+    subject: `You have been added to ${siteConfig.name}`,
+    text: `An account has been created for you on ${siteConfig.name}.\n\nChoose a password to finish setting it up:\n\n${url}\n\nIf you weren't expecting this, ignore the message — the account can't be used until a password is set.`,
+  })
+}
+
 function sendPasswordResetEmail(to: string, url: string) {
   return sendMail({
     to,
@@ -58,4 +73,9 @@ function sendPasswordResetEmail(to: string, url: string) {
   })
 }
 
-export { sendMail, sendPasswordResetEmail, sendVerificationEmail }
+export {
+  sendInvitationEmail,
+  sendMail,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+}

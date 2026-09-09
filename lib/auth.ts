@@ -7,7 +7,11 @@ import { admin } from "better-auth/plugins/admin"
 
 import { siteConfig } from "@/lib/config/site"
 import { db } from "@/lib/db"
-import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email"
+import {
+  sendInvitationEmail,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from "@/lib/email"
 
 /**
  * A provider is only registered once both of its keys are present, so the app
@@ -52,8 +56,22 @@ export const auth = betterAuth({
     // verification mail is still sent on sign-up, so flipping this to true
     // once the Resend domain is verified needs no other change.
     requireEmailVerification: false,
-    sendResetPassword: ({ user, url }) =>
-      sendPasswordResetEmail(user.email, url),
+    // One token, two messages. `lib/actions/admin-users.ts` creates an
+    // account and immediately asks for a reset link, because that is the only
+    // built flow that lets somebody choose their first password — so the
+    // wording has to follow who is receiving it, or an invitee is told to
+    // reset a password they have never had. A pending invitation for the
+    // address is what distinguishes them; the lookup is one indexed query on a
+    // path nobody walks often.
+    sendResetPassword: async ({ user, url }) => {
+      const invited = await db.userInvitation.findFirst({
+        where: { email: user.email, status: "PENDING" },
+        select: { id: true },
+      })
+      return invited
+        ? sendInvitationEmail(user.email, url)
+        : sendPasswordResetEmail(user.email, url)
+    },
   },
 
   emailVerification: {

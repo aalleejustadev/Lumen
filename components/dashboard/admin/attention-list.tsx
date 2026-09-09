@@ -37,10 +37,10 @@ import { cn } from "@/lib/utils"
  *    reviews" under a heading that says something needs attention is noise,
  *    and a clear queue is exactly the thing an admin wants to see nothing
  *    about.
- *  - **The chevron only appears on a row that can be followed.** None of the
- *    four destinations exist yet, so those rows render inert — the same
- *    treatment `settings-nav.tsx` gives a section whose route hasn't landed.
- *    See `AttentionQueue`'s `built` flag.
+ *  - **The chevron only appears on a row that can be followed.** A queue whose
+ *    page hasn't landed renders inert — the same treatment `settings-nav.tsx`
+ *    gives a section whose route doesn't exist. See `AttentionQueue`'s `built`
+ *    flag; two of the four lead somewhere today.
  *
  * `Card`'s padding is set through `--card-spacing` with a matching `px-*`, and
  * the row owns its own gap, for the tailwind-merge reason `platform-stats.tsx`
