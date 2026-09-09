@@ -971,6 +971,73 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   (not "$0.00", which would read as a run that paid nobody) and its recipient
   list says the run hasn't been processed. Export CSV is a real client-side
   Blob download of the loaded rows.
+- `components/dashboard/admin/audit-log/` — `/dashboard/admin/audit-log`, from
+  `audit-log-page__admin.png`: `audit-log-browser.tsx` (client — the filter
+  row, the table and the pager, since the pending flag belongs to all three),
+  `audit-log-filters.tsx`, `audit-export-button.tsx` and `audit-format.ts`,
+  composed by `audit-log-page.tsx`. `lib/admin/audit-log.ts` reads,
+  `lib/config/admin-audit.ts` is the copy, `lib/actions/admin-audit.ts` builds
+  the CSV. Nothing on it is demo data.
+  - **Filtering, searching and paging happen in SQL, driven by the URL**
+    (`?tab=&q=&page=`), not in the browser. `AuditLog` is append-only with a
+    24-month retention, so "all of it" is the one size it will never be safe to
+    ship to a client — and the query string buys three things `useState`
+    cannot: every view is a link you can paste into an incident thread, the
+    back button walks the filters, and a reload keeps them.
+    `parseAuditQuery` is the gate: it clamps the page, caps the search at 100
+    characters and falls back to `all` for an unknown tab, so a hand-edited
+    query string never reaches Prisma.
+  - **Tab counts respect the search but not the tab.** A tab has to be able to
+    say how many rows it *would* show; counting under the current tab would
+    make every other one read zero. The export draws no counts — they are
+    added because knowing a category is empty before opening it is the point
+    of a filter row on a log.
+  - **The relative timestamp is formatted on the server** and crosses as a
+    string, measured against the single `AuditPage.generatedAt` clock the read
+    returns. Two reasons: it keeps `date-fns` out of the client bundle, and a
+    relative time computed in both places is a hydration mismatch waiting for a
+    row to sit on a minute boundary. Reading the clock in the read rather than
+    the component is also what keeps the render pure — `Date.now()` in a
+    component body is a `react-hooks/purity` error.
+  - **`actorName`/`actorRole` are snapshots but the avatar is live.** The model
+    snapshots the first two so history can't be rewritten; a picture is not a
+    fact about the action, and storing a copy of every avatar the log has seen
+    to keep it "accurate" would be absurd.
+  - **Rows expand in place** — exact instant, target type, IP and user agent.
+    The export has no room to draw it and it is what a log is actually opened
+    for. The row is a real keyboard-reachable control with `aria-expanded`, and
+    the only hint added to the export's six columns is a chevron tucked inside
+    the IP cell rather than a seventh column.
+  - **Export log exports what is on screen**, not the whole table — the filter
+    row exists to narrow an investigation. The action re-checks the admin role
+    (a Server Action is a public endpoint, and this one hands back the most
+    sensitive table in the app) and re-parses the filter rather than trusting
+    it. Rows are capped at `AUDIT_EXPORT_LIMIT` and the toast says so when the
+    cap bit, because a silently truncated audit export is worse than none. The
+    CSV carries ISO timestamps, not the table's "2 days ago", which says
+    nothing in a file that outlives the moment it was saved.
+  - The search field resets from the URL by **adjusting state during render**
+    (`lastQuery`), not in an effect — React's own pattern for "a prop changed,
+    reset some state", and the one the hooks lint rule accepts. Keying the
+    component on the query would work and would throw away focus mid-typing.
+- **The audit-log seed writes 160 entries, not six.** The page filters,
+  searches and pages, so a handful of rows leaves every control with nothing to
+  do. `auditTemplates` is weighted across the four categories and three actor
+  kinds — admins, instructors acting on their own courses, and a **System**
+  actor with no `actorId` — and targets are drawn from real courses,
+  instructors and learner addresses, because an audit log whose targets don't
+  exist is the one kind of demo data that reads as broken. Each actor keeps a
+  stable IP the way the export draws it; System rows use RFC 5737
+  documentation addresses.
+- **The payout-run dialog has no footer at all.** The export draws "Export CSV"
+  and "Close" along the bottom; both were built and removed at the user's
+  request, because `DialogContent` already draws a close X in its corner and a
+  dialog with nothing to do but dismiss itself needs no second control saying
+  so. **This is the rule for dialogs here, not a one-off** — keep a
+  `DialogFooter` only when it holds a control that does something, and drop the
+  element entirely rather than leaving an empty one, which still paints its
+  tinted bar and separator. Its loader also carries a `.catch()`: without one a
+  rejected action left the recipient list spinning forever with nothing to say.
 - **The seed now writes refunds.** `Refund`'s schema note names the Reports
   card's 2.1% rate, so `REFUND_RATE` produces it: a refund is a `Refund` row
   plus a REVERSED `InstructorEarning`, and the order **stays PAID** — gross

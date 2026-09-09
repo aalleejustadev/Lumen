@@ -1,16 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon } from "lucide-react"
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -40,16 +35,20 @@ const longDate = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 })
 
-/** One CSV cell, quoted so a name containing a comma can't split the row. */
-function csvCell(value: string | number) {
-  return `"${String(value).replaceAll('"', '""')}"`
-}
-
 /**
  * The run detail dialog from
  * `ui-design/light/dashboard/admin/payout-run__dialog_admin.png`: the
- * reference with its status pill, a disbursed/recipients/average tile row, the
- * recipient list, and Export CSV / Close.
+ * reference with its status pill, a disbursed/recipients/average tile row and
+ * the recipient list.
+ *
+ * **It has no footer.** The export draws an "Export CSV" and a "Close" button
+ * along the bottom; both were built and then removed at the user's request,
+ * because `DialogContent` already draws a close X in its corner and a dialog
+ * with nothing to do but dismiss itself does not need a second control saying
+ * so. Dropping the whole `DialogFooter` rather than emptying it matters — an
+ * empty one still paints its tinted bar and separator. If the CSV ever comes
+ * back, the shape it used is the one `lib/actions/admin-audit.ts` still writes
+ * for the audit log.
  *
  * Measured off that export at DPR 2: a 618px panel on 32px padding, 22px/700
  * reference over a 14px muted line, three tinted tiles on a 12px gap, and 68px
@@ -83,39 +82,21 @@ function PayoutRunDialog({
   // hooks lint rule rightly rejects).
   React.useEffect(() => {
     let active = true
-    loadPayoutRun(run.id).then((result) => {
-      if (!active) return
-      if (result.ok) setDetail(result.run)
-      else setError(result.message)
-    })
+    loadPayoutRun(run.id)
+      .then((result) => {
+        if (!active) return
+        if (result.ok) setDetail(result.run)
+        else setError(result.message)
+      })
+      // Without this a rejected action (a dropped connection, a redeploy
+      // mid-request) leaves the list spinning forever with nothing to say.
+      .catch(() => {
+        if (active) setError("Those recipients could not be loaded.")
+      })
     return () => {
       active = false
     }
   }, [run.id])
-
-  function exportCsv() {
-    if (!detail) return
-
-    const rows = [
-      ["Instructor", "Destination", "Amount", "Status"],
-      ...detail.recipients.map((recipient) => [
-        recipient.name,
-        payoutMethodLine(recipient) ?? "",
-        (recipient.amountCents / 100).toFixed(2),
-        payoutStatusLabels[recipient.status],
-      ]),
-    ]
-
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n")
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: "text/csv;charset=utf-8" })
-    )
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `${run.reference}-recipients.csv`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
 
   const scheduled = run.status === "SCHEDULED"
 
@@ -170,7 +151,7 @@ function PayoutRunDialog({
 
         <h3 className="mt-6 mb-3 text-base font-bold">Recipients</h3>
 
-        <div className="flex max-h-[296px] flex-col gap-3 overflow-y-auto">
+        <div className="flex max-h-[336px] flex-col gap-3 overflow-y-auto pb-1">
           {error ? (
             <p className="py-8 text-center text-sm text-destructive">{error}</p>
           ) : !detail ? (
@@ -229,25 +210,6 @@ function PayoutRunDialog({
             })
           )}
         </div>
-
-        <DialogFooter className="mt-7 sm:justify-start">
-          <Button
-            variant="outline"
-            onClick={exportCsv}
-            disabled={!detail || detail.recipients.length === 0}
-            className="h-10 gap-2 bg-card shadow-sm"
-          >
-            <DownloadIcon className="size-4" />
-            Export CSV
-          </Button>
-          <DialogClose
-            render={
-              <Button className="h-10 px-6 focus-visible:ring-3 focus-visible:ring-ring/50">
-                Close
-              </Button>
-            }
-          />
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

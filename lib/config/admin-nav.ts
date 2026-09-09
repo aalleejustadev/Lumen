@@ -62,7 +62,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Audit Log",
         href: "/dashboard/admin/audit-log",
         icon: ChartNoAxesColumnIncreasingIcon,
-        built: false,
+        built: true,
       },
     ],
   },

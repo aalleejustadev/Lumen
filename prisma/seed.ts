@@ -1161,62 +1161,343 @@ async function seedUptime() {
 // 12 · Audit log
 // ---------------------------------------------------------------------------
 
-async function seedAuditLog(actorId: string | null, actorName: string) {
-  const entries = [
-    {
-      action: "Approved instructor application",
-      category: "MEMBERS" as const,
-      targetLabel: "Technical writing for engineers",
-      hoursAgo: 568,
-    },
-    {
-      action: "Rejected course submission",
-      category: "COURSES" as const,
-      targetLabel: "Writing That Converts",
-      hoursAgo: 700,
-    },
-    {
-      action: "Requested changes on submission",
-      category: "COURSES" as const,
-      targetLabel: "Brand Identity Workshop",
-      hoursAgo: 54,
-    },
-    {
-      action: "Suspended account after 5 failed sign-ins",
-      category: "SECURITY" as const,
-      targetLabel: "sasha.petrov@example.com",
-      hoursAgo: 30,
-      system: true,
-    },
-    {
-      action: "Retried failed payout",
-      category: "BILLING" as const,
-      targetLabel: "PO-202609-10430",
-      hoursAgo: 22,
-    },
-    {
-      action: "Removed reported review",
-      category: "MEMBERS" as const,
-      targetLabel: "Review on Design Systems in Figma",
-      hoursAgo: 96,
-    },
-  ]
+/**
+ * The rows behind `/dashboard/admin/audit-log`.
+ *
+ * The page filters by category, searches across member/action/target/IP and
+ * pages through the result, so a handful of rows would leave every one of
+ * those controls with nothing to do. This writes `AUDIT_ENTRY_COUNT` entries
+ * spread over the retention window instead, drawn from real actors, real
+ * courses and real learner addresses — an audit log whose targets don't exist
+ * is the one kind of demo data that reads as broken.
+ *
+ * Three actor kinds appear, which is what the export's three role pills draw:
+ * the admin accounts, instructors acting on their own courses, and a **System**
+ * actor with no `actorId` for the automatic entries. `actorName`/`actorRole`
+ * are snapshots on every row, per the model's own note.
+ */
+const AUDIT_ENTRY_COUNT = 160
+/** How far back entries run. Retention is 24 months; this is the active slice. */
+const AUDIT_WINDOW_DAYS = 120
 
-  await db.auditLog.createMany({
-    data: entries.map((entry, index) => ({
-      id: `${SEED}audit_${pad(index, 3)}`,
-      // Nullable on purpose — the export draws a **System** actor for the
-      // automatic entries.
-      actorId: entry.system ? null : actorId,
-      actorName: entry.system ? "System" : actorName,
-      actorRole: entry.system ? null : "admin",
-      action: entry.action,
-      targetLabel: entry.targetLabel,
-      category: entry.category,
-      ipAddress: entry.system ? null : "203.0.113.24",
-      createdAt: ago(entry.hoursAgo * HOUR),
-    })),
-  })
+type AuditActorKind = "admin" | "instructor" | "system"
+
+type AuditTemplate = {
+  action: string
+  category: "MEMBERS" | "COURSES" | "BILLING" | "SECURITY"
+  actor: AuditActorKind
+  /** Which pool the target label is drawn from. */
+  target: "course" | "learner" | "instructor" | "payout" | "promotion" | "self"
+  weight: number
+}
+
+const auditTemplates: AuditTemplate[] = [
+  // Members
+  {
+    action: "Approved instructor application",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "learner",
+    weight: 8,
+  },
+  {
+    action: "Rejected instructor application",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "learner",
+    weight: 3,
+  },
+  {
+    action: "Changed role to Instructor",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "learner",
+    weight: 6,
+  },
+  {
+    action: "Deactivated member",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "learner",
+    weight: 4,
+  },
+  {
+    action: "Reinstated member",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "learner",
+    weight: 2,
+  },
+  {
+    action: "Removed reported review",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "course",
+    weight: 5,
+  },
+  {
+    action: "Invited a new admin",
+    category: "MEMBERS",
+    actor: "admin",
+    target: "learner",
+    weight: 1,
+  },
+
+  // Courses
+  {
+    action: "Published course",
+    category: "COURSES",
+    actor: "admin",
+    target: "course",
+    weight: 8,
+  },
+  {
+    action: "Rejected course submission",
+    category: "COURSES",
+    actor: "admin",
+    target: "course",
+    weight: 4,
+  },
+  {
+    action: "Requested changes on submission",
+    category: "COURSES",
+    actor: "admin",
+    target: "course",
+    weight: 5,
+  },
+  {
+    action: "Unpublished course",
+    category: "COURSES",
+    actor: "admin",
+    target: "course",
+    weight: 2,
+  },
+  {
+    action: "Submitted course for review",
+    category: "COURSES",
+    actor: "instructor",
+    target: "course",
+    weight: 7,
+  },
+  {
+    action: "Updated course curriculum",
+    category: "COURSES",
+    actor: "instructor",
+    target: "course",
+    weight: 6,
+  },
+  {
+    action: "Created a new category",
+    category: "COURSES",
+    actor: "admin",
+    target: "course",
+    weight: 1,
+  },
+
+  // Billing
+  {
+    action: "Updated course pricing",
+    category: "BILLING",
+    actor: "instructor",
+    target: "course",
+    weight: 7,
+  },
+  {
+    action: "Launched platform promotion",
+    category: "BILLING",
+    actor: "admin",
+    target: "promotion",
+    weight: 3,
+  },
+  {
+    action: "Ended platform promotion",
+    category: "BILLING",
+    actor: "admin",
+    target: "promotion",
+    weight: 2,
+  },
+  {
+    action: "Retried failed payout",
+    category: "BILLING",
+    actor: "admin",
+    target: "payout",
+    weight: 4,
+  },
+  {
+    action: "Approved payout run",
+    category: "BILLING",
+    actor: "admin",
+    target: "payout",
+    weight: 4,
+  },
+  {
+    action: "Issued a refund",
+    category: "BILLING",
+    actor: "admin",
+    target: "learner",
+    weight: 5,
+  },
+  {
+    action: "Changed default revenue share",
+    category: "BILLING",
+    actor: "admin",
+    target: "self",
+    weight: 1,
+  },
+
+  // Security
+  {
+    action: "Suspended account after 5 failed sign-ins",
+    category: "SECURITY",
+    actor: "system",
+    target: "learner",
+    weight: 6,
+  },
+  {
+    action: "Blocked sign-in from a new location",
+    category: "SECURITY",
+    actor: "system",
+    target: "learner",
+    weight: 4,
+  },
+  {
+    action: "Enabled two-factor authentication",
+    category: "SECURITY",
+    actor: "admin",
+    target: "self",
+    weight: 3,
+  },
+  {
+    action: "Reset a member password",
+    category: "SECURITY",
+    actor: "admin",
+    target: "learner",
+    weight: 4,
+  },
+  {
+    action: "Revoked all active sessions",
+    category: "SECURITY",
+    actor: "admin",
+    target: "learner",
+    weight: 2,
+  },
+  {
+    action: "Rotated API credentials",
+    category: "SECURITY",
+    actor: "admin",
+    target: "self",
+    weight: 1,
+  },
+  {
+    action: "Turned on maintenance mode",
+    category: "SECURITY",
+    actor: "admin",
+    target: "self",
+    weight: 1,
+  },
+]
+
+const promotionLabels = [
+  "Back to Skills Sale · 70% off",
+  "New Year Kickstart · 60% off",
+  "Summer Learning · 50% off",
+  "Black Friday · 80% off",
+]
+
+/**
+ * A stable IP per actor, so the same person shows the same address across
+ * their entries the way the export draws it — and a documentation-range
+ * address for the System rows (RFC 5737, never routable).
+ */
+function auditIp(key: string, index: number) {
+  if (key === "system") return `203.0.113.${7 + (index % 40)}`
+  let hash = 0
+  for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) % 100000
+  return `81.132.${hash % 200}.${(hash >> 3) % 250}`
+}
+
+async function seedAuditLog(
+  admins: { id: string; name: string }[],
+  instructors: InstructorRow[],
+  learners: LearnerRow[],
+  courses: CourseRow[]
+) {
+  if (admins.length === 0) return 0
+
+  const weighted: AuditTemplate[] = auditTemplates.flatMap((template) =>
+    Array.from({ length: template.weight }, () => template)
+  )
+
+  const rows: Prisma.AuditLogCreateManyInput[] = Array.from(
+    { length: AUDIT_ENTRY_COUNT },
+    (_, index) => {
+      const template = pick(weighted)
+      const course = pick(courses)
+      const learner = pick(learners)
+      const instructor = pick(instructors)
+
+      const actor =
+        template.actor === "system"
+          ? { id: null, name: "System", role: null, key: "system" }
+          : template.actor === "instructor"
+            ? {
+                id: instructor.userId,
+                name: instructor.name,
+                role: "instructor",
+                key: instructor.slug,
+              }
+            : (() => {
+                const admin = pick(admins)
+                return {
+                  id: admin.id,
+                  name: admin.name,
+                  role: "admin",
+                  key: admin.id,
+                }
+              })()
+
+      const targetLabel = {
+        course: course.title,
+        learner: learner.email,
+        instructor: instructor.name,
+        payout: `PO-2026${pad(1 + (index % 9), 2)}-${10428 + (index % 40)}`,
+        promotion: pick(promotionLabels),
+        self: "Own account",
+      }[template.target]
+
+      const targetType = {
+        course: "course",
+        learner: "user",
+        instructor: "instructor",
+        payout: "payout",
+        promotion: "promotion",
+        self: "user",
+      }[template.target]
+
+      return {
+        id: `${SEED}audit_${pad(index, 4)}`,
+        actorId: actor.id,
+        actorName: actor.name,
+        actorRole: actor.role,
+        action: template.action,
+        targetType,
+        targetId: template.target === "course" ? course.id : null,
+        targetLabel,
+        category: template.category,
+        ipAddress: auditIp(actor.key, index),
+        userAgent:
+          template.actor === "system"
+            ? null
+            : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/141.0 Safari/537.36",
+        createdAt: ago(
+          Math.floor(rng() * AUDIT_WINDOW_DAYS * DAY * 0.999) + 6 * 60 * 1000
+        ),
+      }
+    }
+  )
+
+  await db.auditLog.createMany({ data: rows })
+  return rows.length
 }
 
 // ---------------------------------------------------------------------------
@@ -1240,6 +1521,11 @@ async function main() {
 
   const { learners, admins } = await seedLearners()
   const reviewerId = admins[0] ?? null
+  // `seedLearners` hands back admin *ids*; the audit log needs their names too,
+  // because it snapshots the actor's name on every row.
+  const adminAccounts = learners
+    .filter((learner) => admins.includes(learner.id))
+    .map(({ id, name }) => ({ id, name }))
   console.log(`accounts          ${learners.length} (${admins.length} admin)`)
 
   await seedPendingCourses(categories, instructors, reviewerId)
@@ -1256,10 +1542,13 @@ async function main() {
   await seedApplications(learners, reviewerId)
   await seedPayouts(instructors, netByInstructor)
   await seedUptime()
-  await seedAuditLog(
-    reviewerId,
-    featuredLearnerSeeds.find((seed) => seed.role === "admin")?.name ?? "System"
+  const auditEntries = await seedAuditLog(
+    adminAccounts,
+    [...instructors.values()],
+    learners,
+    courses
   )
+  console.log(`audit entries     ${auditEntries}`)
 
   console.log("done")
 }
