@@ -4,11 +4,16 @@ import { revalidatePath } from "next/cache"
 
 import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { adminFeedCategories } from "@/lib/config/admin-notification-feed"
+import { feedCategories } from "@/lib/config/notification-feed"
+import type { NotificationAudience } from "@/lib/generated/prisma/client"
 
 /**
- * The writes behind `/dashboard/admin/notifications`. Reads live in
- * `lib/admin/notification-feed.ts`.
+ * The writes behind the notification feed, in **every** mode. Reads live in
+ * `lib/notification-feed.ts`.
+ *
+ * Each takes the `audience` it is acting within, so a learner marking their
+ * feed read cannot touch their own admin rows and vice versa — the two are
+ * one person's notifications and still two separate inboxes.
  *
  * **Every one is scoped to the caller's own rows**, and that is the whole
  * security model here: a notification id reaches the browser, so an action
@@ -17,12 +22,13 @@ import { adminFeedCategories } from "@/lib/config/admin-notification-feed"
  * `userId` alongside the id rather than looking the row up and checking
  * afterwards, so the scoping cannot be forgotten in a later edit.
  *
- * They do **not** re-check the admin role, unlike the rest of
- * `lib/actions/admin-*`. There is nothing administrative about marking your
- * own notification read; the row belongs to the caller either way, and the
- * audience filter means a learner has no ADMIN rows to touch. What the other
- * console actions are guarding is the ability to act on *other people's*
- * data, which none of these can do.
+ * They do **not** check a role. There is nothing administrative about
+ * marking your own notification read, and these are shared by all three
+ * modes; the row belongs to the caller either way. What the console's other
+ * actions guard is the ability to act on *other people's* data, which none
+ * of these can do. Note the corollary: the `audience` argument is a scope,
+ * **not** a permission — passing "ADMIN" grants nothing, because a learner
+ * simply has no ADMIN rows of their own to match.
  *
  * Nothing is logged to the audit trail for the same reason: reading your own
  * notifications is not an act on the platform.
@@ -30,29 +36,41 @@ import { adminFeedCategories } from "@/lib/config/admin-notification-feed"
 
 export type FeedActionResult = { ok: boolean; message: string }
 
-const ADMIN_CATEGORIES = adminFeedCategories.map((category) => category.value)
-
-/** The feed lives under the console layout, and the header's bell badge reads
- *  the same count — so the layout is what has to re-render, not this route. */
-function revalidateConsole() {
-  revalidatePath("/dashboard/admin", "layout")
+function categoriesFor(audience: NotificationAudience) {
+  return feedCategories[audience].map((entry) => entry.value)
 }
 
-export async function markAllNotificationsRead(): Promise<FeedActionResult> {
+/**
+ * The feed sits under a shell whose header bell and sidebar row read the same
+ * unread count, so the **layout** is what has to re-render, not the route.
+ *
+ * `/dashboard` covers both shells: the admin console lives at
+ * `/dashboard/admin/*`, and a route group contributes nothing to the path —
+ * so one call invalidates the learner shell, the console, and whichever feed
+ * is open. Narrower calls per audience were the other option and would have
+ * been a second thing to keep right for no gain.
+ */
+function revalidateShells() {
+  revalidatePath("/dashboard", "layout")
+}
+
+export async function markAllNotificationsRead(
+  audience: NotificationAudience
+): Promise<FeedActionResult> {
   const session = await getSession()
   if (!session) return { ok: false, message: "Sign in to continue." }
 
   const { count } = await db.notification.updateMany({
     where: {
       userId: session.user.id,
-      audience: "ADMIN",
-      category: { in: ADMIN_CATEGORIES },
+      audience,
+      category: { in: categoriesFor(audience) },
       readAt: null,
     },
     data: { readAt: new Date() },
   })
 
-  revalidateConsole()
+  revalidateShells()
   return {
     ok: true,
     message:
@@ -76,6 +94,7 @@ export async function markAllNotificationsRead(): Promise<FeedActionResult> {
  * was first read.
  */
 export async function setNotificationRead(
+  audience: NotificationAudience,
   notificationId: string,
   read: boolean
 ): Promise<FeedActionResult> {
@@ -86,7 +105,7 @@ export async function setNotificationRead(
     where: {
       id: notificationId,
       userId: session.user.id,
-      audience: "ADMIN",
+      audience,
       ...(read ? { readAt: null } : { NOT: { readAt: null } }),
     },
     data: { readAt: read ? new Date() : null },
@@ -105,7 +124,7 @@ export async function setNotificationRead(
     }
   }
 
-  revalidateConsole()
+  revalidateShells()
   return { ok: true, message: read ? "Marked as read." : "Marked as unread." }
 }
 
@@ -123,6 +142,7 @@ export async function setNotificationRead(
  * afterwards would keep it in the unread count for work already done.
  */
 export async function resolveNotificationAction(
+  audience: NotificationAudience,
   notificationId: string,
   accept: boolean
 ): Promise<FeedActionResult> {
@@ -130,7 +150,7 @@ export async function resolveNotificationAction(
   if (!session) return { ok: false, message: "Sign in to continue." }
 
   const notification = await db.notification.findFirst({
-    where: { id: notificationId, userId: session.user.id, audience: "ADMIN" },
+    where: { id: notificationId, userId: session.user.id, audience },
     select: { id: true, action: { select: { id: true, state: true } } },
   })
   if (!notification?.action) {
@@ -158,6 +178,6 @@ export async function resolveNotificationAction(
     }),
   ])
 
-  revalidateConsole()
+  revalidateShells()
   return { ok: true, message: accept ? "Accepted." : "Declined." }
 }

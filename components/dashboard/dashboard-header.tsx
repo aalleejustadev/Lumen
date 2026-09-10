@@ -31,11 +31,14 @@ function DashboardHeader({
   user,
   isAdmin,
   cartCount = 0,
+  unreadNotifications = 0,
   showInstructorCta = false,
 }: {
   user: MenuUser
   isAdmin?: boolean
   cartCount?: number
+  /** Unread rows in the learner's feed, counted in `app/(dashboard)/layout.tsx`. */
+  unreadNotifications?: number
   showInstructorCta?: boolean
 }) {
   return (
@@ -87,14 +90,23 @@ function DashboardHeader({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Notifications"
+          aria-label={
+            unreadNotifications > 0
+              ? `Notifications — ${unreadNotifications} unread`
+              : "Notifications"
+          }
           nativeButton={false}
           className="relative hidden size-9.5 cursor-pointer sm:inline-flex"
           render={<Link href="/dashboard/notifications" />}
         >
           <BellIcon />
-          {/* Unread marker. Static until notifications have a source. */}
-          <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
+          {/* Real now that the feed exists: the layout counts the learner's
+              unread rows. Drawn only when there is something unread, so a
+              clear feed shows a clean bell rather than a marker that never
+              goes out. */}
+          {unreadNotifications > 0 ? (
+            <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
+          ) : null}
         </Button>
 
         <ThemeToggle variant="ghost" />

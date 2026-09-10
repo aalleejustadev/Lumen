@@ -1310,10 +1310,12 @@ model Announcement {
 /// COMMUNITY, BILLING) mean different things to each audience — "a course" is
 /// a lesson you can take or a submission you must review. Without this column
 /// an admin who is also enrolled in something would see "New lesson unlocked"
-/// in their console feed. Each page filters to its own audience, so the two
-/// can never bleed.
+/// in their console feed. Each page filters to its own audience, so the
+/// three can never bleed — and one account can legitimately hold all three,
+/// since being an admin does not stop you taking a course or teaching one.
 enum NotificationAudience {
   LEARNER
+  INSTRUCTOR
   ADMIN
 }
 

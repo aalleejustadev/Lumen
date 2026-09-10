@@ -24,31 +24,40 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { toast } from "@/components/ui/toast"
-import { NotificationRow } from "@/components/dashboard/admin/notifications/notification-row"
+import { NotificationRow } from "@/components/dashboard/notifications/notification-row"
 import {
   markAllNotificationsRead,
   resolveNotificationAction,
   setNotificationRead,
-} from "@/lib/actions/admin-notification-feed"
+} from "@/lib/actions/notification-feed"
 import {
   ALL_TYPES_ICON,
-  adminFeedCategories,
-  adminFeedCopy,
-  adminFeedStatuses,
-} from "@/lib/config/admin-notification-feed"
-import type { AdminFeedPage } from "@/lib/admin/notification-feed"
+  feedCategories,
+  feedCopy,
+  feedEmpty,
+  feedLead,
+  feedSettingsHref,
+  feedStatuses,
+} from "@/lib/config/notification-feed"
+import type { FeedPage } from "@/lib/notification-feed"
+import type { NotificationAudience } from "@/lib/generated/prisma/client"
 import { cn } from "@/lib/utils"
 
 /**
- * `/dashboard/admin/notifications`, built to
+ * The notification feed, shared by **every mode** — the learner's
+ * `/dashboard/notifications` and the console's
+ * `/dashboard/admin/notifications` are this component with a different
+ * `audience`. Built to
  * `ui-design/light/dashboard/instructor/notifications-page.png`.
  *
  * **The UI is that export, followed as drawn**, at the user's instruction —
  * the title with its unread pill, Mark All as Read beside a gear button, the
  * search field with a status select and a view toggle, the CATEGORIES card,
  * the flush list and the "Showing N of M" footer. Only the *content* is the
- * admin's: the categories are the console's work queues rather than a
- * learner's courses and certificates. See `lib/config/admin-notification-feed.ts`.
+ * mode's: each audience gets its own five categories and its own lead line,
+ * and nothing else about the page changes. That registry is
+ * `lib/config/notification-feed.ts`, and mounting the feed for a new mode is
+ * one entry in it rather than a second copy of this file.
  *
  * Measured off that export at DPR 2 and verified against the render: a
  * **1000px content column, centred** (this page is capped rather than
@@ -85,7 +94,14 @@ type Busy =
   | { kind: "open" | "accept" | "decline" | "toggle"; id: string }
   | null
 
-function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
+function NotificationsFeed({
+  audience,
+  feed,
+}: {
+  audience: NotificationAudience
+  feed: FeedPage
+}) {
+  const categories = feedCategories[audience]
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -194,16 +210,16 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
                 and the dashboard exports draw 700 — the note `CLAUDE.md`
                 gives. */}
             <h1 className="text-[32px] leading-none font-bold">
-              {adminFeedCopy.title}
+              {feedCopy.title}
             </h1>
             {feed.unread > 0 ? (
               <span className="inline-flex items-center rounded-full bg-primary px-2.5 py-1 text-[13px] font-semibold text-primary-foreground">
-                {adminFeedCopy.unread(feed.unread)}
+                {feedCopy.unread(feed.unread)}
               </span>
             ) : null}
           </div>
           <p className="mt-2.5 text-[15px] text-muted-foreground">
-            {adminFeedCopy.description}
+            {feedLead[audience]}
           </p>
         </div>
 
@@ -212,11 +228,13 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
             type="button"
             loading={busy?.kind === "markAll"}
             disabled={feed.unread === 0}
-            onClick={() => run({ kind: "markAll" }, markAllNotificationsRead)}
+            onClick={() =>
+              run({ kind: "markAll" }, () => markAllNotificationsRead(audience))
+            }
             className="h-10 gap-2 px-4"
           >
             <CheckIcon className="size-4" />
-            {adminFeedCopy.markAllRead}
+            {feedCopy.markAllRead}
           </Button>
           {/* The export's gear. It goes to the admin's own notification
               *preferences* — the only thing a settings affordance on a feed
@@ -225,9 +243,9 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
             variant="outline"
             size="icon"
             nativeButton={false}
-            aria-label={adminFeedCopy.settings}
+            aria-label={feedCopy.settings}
             className="size-10 bg-card shadow-sm"
-            render={<Link href="/dashboard/admin/settings/notifications" />}
+            render={<Link href={feedSettingsHref[audience]} />}
           >
             <SettingsIcon className="size-4.5" />
           </Button>
@@ -242,8 +260,8 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={adminFeedCopy.searchPlaceholder}
-            aria-label={adminFeedCopy.searchPlaceholder}
+            placeholder={feedCopy.searchPlaceholder}
+            aria-label={feedCopy.searchPlaceholder}
             // This field sits on the page rather than inside a card, so the
             // export fills it white — the reading the audit log's own search
             // settled. The `dark:` twin is spelled out because `Input` carries
@@ -270,7 +288,7 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
             "[&_[data-slot=native-select-icon]]:right-3.5"
           )}
         >
-          {adminFeedStatuses.map((status) => (
+          {feedStatuses.map((status) => (
             <NativeSelectOption key={status.value} value={status.value}>
               {status.label}
             </NativeSelectOption>
@@ -282,9 +300,7 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
           variant="outline"
           size="icon"
           aria-pressed={view === "grid"}
-          aria-label={
-            view === "list" ? adminFeedCopy.gridView : adminFeedCopy.listView
-          }
+          aria-label={view === "list" ? feedCopy.gridView : feedCopy.listView}
           onClick={() => setView(view === "list" ? "grid" : "list")}
           className={cn(CONTROL, "size-12 bg-card shadow-sm")}
         >
@@ -301,18 +317,18 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
         <Card className="h-fit [--card-spacing:--spacing(2.5)] lg:self-start">
           <div className="flex flex-col gap-1">
             <p className="px-3.5 pt-1 pb-2 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-              {adminFeedCopy.categoriesHeading}
+              {feedCopy.categoriesHeading}
             </p>
 
             <CategoryRow
-              label={adminFeedCopy.allTypes}
+              label={feedCopy.allTypes}
               icon={ALL_TYPES_ICON}
               count={feed.unread}
               active={feed.query.category === null}
               disabled={isPending}
               onSelect={() => push({ cat: null })}
             />
-            {adminFeedCategories.map((category) => (
+            {categories.map((category) => (
               <CategoryRow
                 key={category.value}
                 label={category.label}
@@ -333,14 +349,12 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
           {feed.rows.length === 0 ? (
             <Card className="items-center gap-3 px-6 py-20 text-center ring-border">
               <p className="text-base font-bold">
-                {filtered
-                  ? adminFeedCopy.filteredEmptyTitle
-                  : adminFeedCopy.emptyTitle}
+                {filtered ? feedCopy.filteredEmptyTitle : feedCopy.emptyTitle}
               </p>
               <p className="max-w-sm text-sm text-muted-foreground">
                 {filtered
-                  ? adminFeedCopy.filteredEmptyDescription
-                  : adminFeedCopy.emptyDescription}
+                  ? feedCopy.filteredEmptyDescription
+                  : feedEmpty[audience]}
               </p>
             </Card>
           ) : view === "list" ? (
@@ -351,21 +365,22 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
                 {feed.rows.map((row) => (
                   <NotificationRow
                     key={row.id}
+                    audience={audience}
                     row={row}
                     busy={rowBusy(row.id)}
                     onOpen={(id) =>
                       run({ kind: "open", id }, () =>
-                        setNotificationRead(id, true)
+                        setNotificationRead(audience, id, true)
                       )
                     }
                     onToggleRead={(id, read) =>
                       run({ kind: "toggle", id }, () =>
-                        setNotificationRead(id, read)
+                        setNotificationRead(audience, id, read)
                       )
                     }
                     onResolve={(id, accept) =>
                       run({ kind: accept ? "accept" : "decline", id }, () =>
-                        resolveNotificationAction(id, accept)
+                        resolveNotificationAction(audience, id, accept)
                       )
                     }
                   />
@@ -377,22 +392,23 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
               {feed.rows.map((row) => (
                 <NotificationRow
                   key={row.id}
+                  audience={audience}
                   row={row}
                   variant="grid"
                   busy={rowBusy(row.id)}
                   onOpen={(id) =>
                     run({ kind: "open", id }, () =>
-                      setNotificationRead(id, true)
+                      setNotificationRead(audience, id, true)
                     )
                   }
                   onToggleRead={(id, read) =>
                     run({ kind: "toggle", id }, () =>
-                      setNotificationRead(id, read)
+                      setNotificationRead(audience, id, read)
                     )
                   }
                   onResolve={(id, accept) =>
                     run({ kind: accept ? "accept" : "decline", id }, () =>
-                      resolveNotificationAction(id, accept)
+                      resolveNotificationAction(audience, id, accept)
                     )
                   }
                 />
@@ -403,7 +419,7 @@ function NotificationsFeed({ feed }: { feed: AdminFeedPage }) {
           {feed.rows.length > 0 ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
               <p className="text-[13px] text-muted-foreground">
-                {adminFeedCopy.showing(from + feed.rows.length, feed.total)}
+                {feedCopy.showing(from + feed.rows.length, feed.total)}
               </p>
               {feed.pageCount > 1 ? (
                 <Pagination className="mx-0 w-auto">

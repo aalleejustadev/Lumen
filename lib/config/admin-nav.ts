@@ -166,7 +166,7 @@ export const adminNav: DashboardNavGroup[] = [
  */
 export function adminNavCounts(
   facts: AttentionFacts,
-  /** Unread rows in the admin's own feed — see `getAdminUnreadCount`. */
+  /** Unread rows in the admin's own feed — see `getUnreadCount`. */
   unreadNotifications = 0
 ): Record<string, number> {
   return {

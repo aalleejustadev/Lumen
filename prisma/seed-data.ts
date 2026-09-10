@@ -1229,3 +1229,110 @@ export const adminNotificationSeeds: {
     unread: false,
   },
 ]
+
+/**
+ * The **learner** notification feed, behind `/dashboard/notifications`.
+ *
+ * These are the export's own ten rows, kept close to verbatim — that drawing
+ * is a learner/instructor feed, so its content already says the right things
+ * for this audience, unlike the admin set which had to be rewritten. The
+ * categories are the export's too (Course, Message, Community, Certificate,
+ * Billing), and `4 unread` is its own header pill.
+ *
+ * `{course}` and `{instructor}` resolve against real rows at seed time, for
+ * the reason `auditTemplates` gives, and the cadence is offsets from the run
+ * so "5 minutes ago" stays true — see `seedNotifications`.
+ */
+export const learnerNotificationSeeds: {
+  key: string
+  category: "COURSE" | "MESSAGE" | "COMMUNITY" | "CERTIFICATE" | "BILLING"
+  title: string
+  body: string
+  minutesAgo: number
+  unread: boolean
+  withActor?: boolean
+  action?: string
+}[] = [
+  {
+    key: "lesson-unlocked",
+    category: "COURSE",
+    title: "New lesson unlocked",
+    body: "Module 4 — Advanced generics is now available in {course}",
+    minutesAgo: 5,
+    unread: true,
+  },
+  {
+    key: "mentor-request",
+    category: "COMMUNITY",
+    title: "{instructor}",
+    body: "Requesting to add you to the Illustration mentor group",
+    minutesAgo: 30,
+    unread: true,
+    withActor: true,
+    action: "mentor_group_invite",
+  },
+  {
+    key: "new-message",
+    category: "MESSAGE",
+    title: "New message",
+    body: "{instructor} sent you a message about {course}",
+    minutesAgo: 60,
+    unread: false,
+  },
+  {
+    key: "quiz-available",
+    category: "COURSE",
+    title: "Quiz available",
+    body: "Quiz · Tools & Workflow is now unlocked in {course}",
+    minutesAgo: 120,
+    unread: false,
+  },
+  {
+    key: "certificate",
+    category: "CERTIFICATE",
+    title: "Certificate issued",
+    body: "You completed {course} — download your certificate",
+    minutesAgo: 180,
+    unread: true,
+  },
+  {
+    key: "new-reply",
+    category: "MESSAGE",
+    title: "New reply",
+    body: "{instructor} replied to you in “Weekly challenge: gradient mesh”",
+    minutesAgo: 300,
+    unread: true,
+  },
+  {
+    key: "announcement",
+    category: "COMMUNITY",
+    title: "Course announcement",
+    body: "Live session moved to Friday 4pm for {course}",
+    minutesAgo: 60 * 24,
+    unread: false,
+  },
+  {
+    key: "likes",
+    category: "COMMUNITY",
+    title: "Your reply got 12 likes",
+    body: "In “Welcome to the Illustration cohort — start here”",
+    minutesAgo: 60 * 26,
+    unread: false,
+  },
+  {
+    key: "streak",
+    category: "COURSE",
+    title: "Learning streak",
+    body: "You hit a 7-day streak — keep the momentum going",
+    minutesAgo: 60 * 48,
+    unread: false,
+  },
+  {
+    key: "offer",
+    category: "BILLING",
+    title: "Limited-time offer",
+    body: "Save 30% on the annual Lumen Business plan this week",
+    minutesAgo: 60 * 50,
+    unread: false,
+  },
+]

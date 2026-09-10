@@ -4,16 +4,18 @@ import { MailIcon, MailOpenIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import {
-  adminFeedCategory,
-  adminFeedCopy,
-} from "@/lib/config/admin-notification-feed"
-import type { FeedNotification } from "@/lib/admin/notification-feed"
+import { feedCategory, feedCopy } from "@/lib/config/notification-feed"
+import type { FeedNotification } from "@/lib/notification-feed"
+import type { NotificationAudience } from "@/lib/generated/prisma/client"
 import { cn } from "@/lib/utils"
 
 /**
- * One row of `/dashboard/admin/notifications`, from
+ * One row of the notification feed, in every mode, from
  * `ui-design/light/dashboard/instructor/notifications-page.png`.
+ *
+ * The row is identical everywhere; only the category it resolves against
+ * changes, which is what `audience` selects — see
+ * `lib/config/notification-feed.ts`.
  *
  * Measured off that export at DPR 2 and verified against the render: rows are
  * **flush and divided by hairlines** (no gap, no card of their own — the list
@@ -45,6 +47,7 @@ import { cn } from "@/lib/utils"
  * `NotificationAction.state` exists to prevent.
  */
 function NotificationRow({
+  audience,
   row,
   busy,
   onOpen,
@@ -52,6 +55,8 @@ function NotificationRow({
   onResolve,
   variant = "list",
 }: {
+  /** Which mode's category vocabulary to label and colour this row with. */
+  audience: NotificationAudience
   row: FeedNotification
   /**
    * Which of *this row's* controls is mid-flight, or `null`.
@@ -69,7 +74,7 @@ function NotificationRow({
   /** `grid` is the other half of the export's own view switch — see the feed. */
   variant?: "list" | "grid"
 }) {
-  const category = adminFeedCategory(row.category)
+  const category = feedCategory(audience, row.category)
   const Icon = category.icon
 
   return (
@@ -146,7 +151,7 @@ function NotificationRow({
               onClick={() => onResolve(row.id, true)}
               className="h-9 px-5"
             >
-              {adminFeedCopy.accept}
+              {feedCopy.accept}
             </Button>
             <Button
               type="button"
@@ -156,14 +161,14 @@ function NotificationRow({
               onClick={() => onResolve(row.id, false)}
               className="h-9 bg-card px-5 shadow-sm"
             >
-              {adminFeedCopy.decline}
+              {feedCopy.decline}
             </Button>
           </div>
         ) : row.action ? (
           <p className="mt-2 text-[13px] font-semibold text-muted-foreground">
             {row.action.state === "ACCEPTED"
-              ? adminFeedCopy.accepted
-              : adminFeedCopy.declined}
+              ? feedCopy.accepted
+              : feedCopy.declined}
           </p>
         ) : null}
       </div>
@@ -213,10 +218,8 @@ function NotificationRow({
           size="icon"
           loading={busy === "toggle"}
           disabled={busy !== null}
-          title={row.unread ? adminFeedCopy.markRead : adminFeedCopy.markUnread}
-          aria-label={
-            row.unread ? adminFeedCopy.markRead : adminFeedCopy.markUnread
-          }
+          title={row.unread ? feedCopy.markRead : feedCopy.markUnread}
+          aria-label={row.unread ? feedCopy.markRead : feedCopy.markUnread}
           // `row.unread`, **not** `!row.unread`. The argument is the state
           // the row should end up in, and an unread row is exactly the one
           // that becomes read — so the current flag already is the target.

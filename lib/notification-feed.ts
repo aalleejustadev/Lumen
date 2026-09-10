@@ -3,31 +3,34 @@ import { formatDistanceStrict } from "date-fns"
 import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
 import {
-  ADMIN_FEED_PAGE_SIZE,
-  ADMIN_FEED_SEARCH_MAX,
-  adminFeedCategories,
-  adminFeedCategoryValues,
-  adminFeedStatusValues,
-  type AdminFeedStatus,
-} from "@/lib/config/admin-notification-feed"
+  FEED_PAGE_SIZE,
+  FEED_SEARCH_MAX,
+  feedCategories,
+  feedCategoryValues,
+  feedStatusValues,
+  type FeedStatus,
+} from "@/lib/config/notification-feed"
 import type {
   NotificationActionState,
+  NotificationAudience,
   NotificationCategory,
   Prisma,
 } from "@/lib/generated/prisma/client"
 
 /**
- * The reads behind `/dashboard/admin/notifications`, the console's own
- * notification feed — built to
+ * The reads behind the notification feed, in **every** mode — the learner's
+ * `/dashboard/notifications` and the console's
+ * `/dashboard/admin/notifications` are one query path with a different
+ * `audience`, built to
  * `ui-design/light/dashboard/instructor/notifications-page.png`.
  *
- * Pulls in `lib/db`, so the same "never from a Client Component" rule as the
- * rest of `lib/admin/` applies.
+ * Pulls in `lib/db`, so the usual "never from a Client Component" rule
+ * applies; the copy and the per-mode category sets live in
+ * `lib/config/notification-feed.ts` so the page can import them freely.
  *
- * **This is the feed, not the preferences.** `/dashboard/admin/settings/
- * notifications` decides what an admin is *emailed* about; this is what has
- * actually happened. The two share their category vocabulary on purpose —
- * see `adminFeedCategories`.
+ * **This is the feed, not the preferences.** The settings pages decide what
+ * you are *emailed* about; this is what has actually happened. For the admin
+ * the two share a category vocabulary on purpose — see `feedCategories`.
  *
  * Four things decide what the page means:
  *
@@ -79,19 +82,19 @@ export type FeedCategoryCount = {
   count: number
 }
 
-export type AdminFeedPage = {
+export type FeedPage = {
   rows: FeedNotification[]
   total: number
   unread: number
   counts: FeedCategoryCount[]
   page: number
   pageCount: number
-  query: AdminFeedQuery
+  query: FeedQuery
 }
 
-export type AdminFeedQuery = {
+export type FeedQuery = {
   category: NotificationCategory | null
-  status: AdminFeedStatus
+  status: FeedStatus
   search: string
   page: number
 }
@@ -105,12 +108,16 @@ export type AdminFeedQuery = {
  * falls back rather than erroring — a bad link should show the unfiltered
  * feed, not a crash.
  */
-export function parseFeedQuery(params: {
-  cat?: string | string[]
-  status?: string | string[]
-  q?: string | string[]
-  page?: string | string[]
-}): AdminFeedQuery {
+export function parseFeedQuery(
+  audience: NotificationAudience,
+  params: {
+    cat?: string | string[]
+    status?: string | string[]
+    q?: string | string[]
+    page?: string | string[]
+  }
+): FeedQuery {
+  const allowed = feedCategoryValues(audience)
   const one = (value: string | string[] | undefined) =>
     Array.isArray(value) ? value[0] : value
 
@@ -120,20 +127,22 @@ export function parseFeedQuery(params: {
 
   return {
     category:
-      rawCat && adminFeedCategoryValues.has(rawCat)
-        ? (rawCat as NotificationCategory)
-        : null,
+      rawCat && allowed.has(rawCat) ? (rawCat as NotificationCategory) : null,
     status:
-      rawStatus && adminFeedStatusValues.has(rawStatus)
-        ? (rawStatus as AdminFeedStatus)
+      rawStatus && feedStatusValues.has(rawStatus)
+        ? (rawStatus as FeedStatus)
         : "all",
-    search: (one(params.q) ?? "").trim().slice(0, ADMIN_FEED_SEARCH_MAX),
+    search: (one(params.q) ?? "").trim().slice(0, FEED_SEARCH_MAX),
     page: Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1,
   }
 }
 
-/** The categories this feed will ever show — the filter every query starts from. */
-const ADMIN_CATEGORIES = adminFeedCategories.map((category) => category.value)
+/** The categories a given mode's feed will ever show — the filter every query
+ *  starts from, so a row written for one audience can never leak into
+ *  another's list even if the audience column were wrong. */
+function categoriesFor(audience: NotificationAudience) {
+  return feedCategories[audience].map((entry) => entry.value)
+}
 
 function searchFilter(search: string): Prisma.NotificationWhereInput {
   if (!search) return {}
@@ -154,17 +163,19 @@ function initialsOf(name: string) {
   ).toUpperCase()
 }
 
-export async function getAdminFeed(
-  query: AdminFeedQuery
-): Promise<AdminFeedPage | null> {
+export async function getNotificationFeed(
+  audience: NotificationAudience,
+  query: FeedQuery
+): Promise<FeedPage | null> {
   const session = await getSession()
   if (!session) return null
 
   const now = new Date()
+  const categories = categoriesFor(audience)
   const base: Prisma.NotificationWhereInput = {
     userId: session.user.id,
-    audience: "ADMIN",
-    category: { in: ADMIN_CATEGORIES },
+    audience,
+    category: { in: categories },
   }
   const searched = { ...base, ...searchFilter(query.search) }
 
@@ -190,14 +201,14 @@ export async function getAdminFeed(
     }),
   ])
 
-  const pageCount = Math.max(1, Math.ceil(total / ADMIN_FEED_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / FEED_PAGE_SIZE))
   const page = Math.min(query.page, pageCount)
 
   const rows = await db.notification.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    skip: (page - 1) * ADMIN_FEED_PAGE_SIZE,
-    take: ADMIN_FEED_PAGE_SIZE,
+    skip: (page - 1) * FEED_PAGE_SIZE,
+    take: FEED_PAGE_SIZE,
     select: {
       id: true,
       category: true,
@@ -252,7 +263,7 @@ export async function getAdminFeed(
     }),
     total,
     unread,
-    counts: ADMIN_CATEGORIES.map((value) => ({
+    counts: categories.map((value) => ({
       value,
       count:
         grouped.find((entry) => entry.category === value)?._count._all ?? 0,
@@ -263,17 +274,19 @@ export async function getAdminFeed(
   }
 }
 
-/** The unread badge on the console header's bell. Cheap enough to run in the
- *  layout on every console view, and `cache`d by the caller if it is not. */
-export async function getAdminUnreadCount(): Promise<number> {
+/** The unread badge on a shell's header bell and its sidebar row. Cheap
+ *  enough to run in the layout on every view. */
+export async function getUnreadCount(
+  audience: NotificationAudience
+): Promise<number> {
   const session = await getSession()
   if (!session) return 0
 
   return db.notification.count({
     where: {
       userId: session.user.id,
-      audience: "ADMIN",
-      category: { in: ADMIN_CATEGORIES },
+      audience,
+      category: { in: categoriesFor(audience) },
       readAt: null,
     },
   })

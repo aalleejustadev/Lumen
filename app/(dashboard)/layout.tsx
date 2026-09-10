@@ -6,6 +6,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { getSession } from "@/lib/auth"
 import { getCartCount, getWishlistCount } from "@/lib/cart"
+import { getUnreadCount } from "@/lib/notification-feed"
 import { canBecomeInstructor } from "@/lib/instructor"
 
 /**
@@ -39,11 +40,13 @@ export default async function DashboardLayout({
   // shadcn's provider writes `sidebar_state` on every toggle; reading it here
   // is what makes the rail survive a reload.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
-  const [cartCount, wishlistCount, showInstructorCta] = await Promise.all([
-    getCartCount(),
-    getWishlistCount(),
-    canBecomeInstructor(user),
-  ])
+  const [cartCount, wishlistCount, showInstructorCta, unreadNotifications] =
+    await Promise.all([
+      getCartCount(),
+      getWishlistCount(),
+      canBecomeInstructor(user),
+      getUnreadCount("LEARNER"),
+    ])
 
   return (
     <SidebarProvider
@@ -59,10 +62,18 @@ export default async function DashboardLayout({
       <DashboardSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
         isAdmin={user.role === "admin"}
-        navCounts={{ "/dashboard/wishlist": wishlistCount }}
+        navCounts={{
+          "/dashboard/wishlist": wishlistCount,
+          // Omitted at zero rather than passed as 0: `NavRow` draws a badge
+          // for any number it is given, and "0 unread" is noise.
+          ...(unreadNotifications > 0
+            ? { "/dashboard/notifications": unreadNotifications }
+            : {}),
+        }}
       />
       <SidebarInset>
         <DashboardHeader
+          unreadNotifications={unreadNotifications}
           user={{ name: user.name, email: user.email, image: user.image }}
           isAdmin={user.role === "admin"}
           cartCount={cartCount}

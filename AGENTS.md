@@ -1728,8 +1728,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `next/image` throw at request time. **SVG is not an accepted upload** — it
   is a document that can carry script, and the logo is rendered on every
   public page. There is no favicon preview, as the export draws none.
-- `components/dashboard/admin/notifications/` —
-  `/dashboard/admin/notifications`, the console's own notification **feed**.
+- `components/dashboard/notifications/` — the notification **feed**, shared
+  by every mode: the learner's `/dashboard/notifications` and the console's
+  `/dashboard/admin/notifications` are the same component with a different
+  `audience`.
   Built to `ui-design/light/dashboard/instructor/notifications-page.png`:
   that is the _instructor_ export, and the user's instruction was to follow
   its UI exactly and change only the content. So the page is that drawing —
@@ -1802,14 +1804,14 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     button on every row that had one. Same rule `courses-list.tsx` states and
     `promotions-board.tsx` follows; it is the mistake most likely to survive a
     typecheck, a lint and a build, since none of them can see it.
-- **The admin sidebar and the header bell both point here.** `adminNav`
+- **Both shells' sidebars and header bells point at their own feed.** `adminNav`
   gained a Notifications row in the Overview group with a **real** badge:
   `app/(admin)/layout.tsx` counts unread rows and passes them through
   `adminNavCounts`, which omits the key at zero rather than passing 0, since
-  `NavRow` draws a badge for any number it is given. The header's bell was
-  pointing at `/dashboard/notifications` — the learner feed, which has no
-  route at all — and its red marker was hardcoded; both are real now, and the
-  marker is drawn only while something is unread.
+  `NavRow` draws a badge for any number it is given. `app/(dashboard)/layout.tsx`
+  does the same for the learner shell. Both bells were hardcoded markers, and
+  the student one pointed at a route that did not exist; both are real now,
+  and each marker draws only while that mode has something unread.
 - **The seed writes the feed** (`seedNotifications`, from
   `adminNotificationSeeds`). Nothing in the app emits notifications yet, so
   this is the stand-in `seedAuditLog` and `seedUptime` already are for their

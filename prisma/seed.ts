@@ -44,6 +44,7 @@ import {
 import {
   categorySlugByBrowseCategory,
   adminNotificationSeeds,
+  learnerNotificationSeeds,
   communityReportSeeds,
   communityTopicSeeds,
   countryWeights,
@@ -162,6 +163,9 @@ async function clearSeededRows() {
   // Before the courses and accounts, though the order is not forced:
   // `Order.promotion` is SetNull, so a promotion can go at any point without
   // taking an order with it.
+  // Both feeds: ids are `seed_notif_*` (admin) and `seed_lnotif_*` (learner),
+  // so the one prefix match reclaims them together — including rows written
+  // onto a real, unseeded admin account, which would not cascade.
   await db.notification.deleteMany({ where: seeded })
   await db.promotion.deleteMany({ where: seeded })
   await db.contentReport.deleteMany({ where: seeded })
@@ -1973,7 +1977,7 @@ async function seedPromotions(categories: Map<string, string>) {
 }
 
 // ---------------------------------------------------------------------------
-// 14 · Admin notifications
+// 14 · Notification feeds
 // ---------------------------------------------------------------------------
 
 /**
@@ -1996,50 +2000,45 @@ async function seedPromotions(categories: Map<string, string>) {
  *    reason `auditTemplates` gives — a notification about a course nobody can
  *    open reads as a bug rather than as sample data.
  */
-async function seedNotifications(
-  instructors: Map<string, InstructorRow>,
+/**
+ * One writer for both feeds — the admin's and the learner's are the same
+ * table with a different `audience`, so they are the same loop with a
+ * different seed list and a different recipient set.
+ */
+async function writeNotifications(
+  audience: "LEARNER" | "ADMIN",
+  recipients: { id: string }[],
+  seeds: typeof adminNotificationSeeds | typeof learnerNotificationSeeds,
+  instructorList: InstructorRow[],
   courses: CourseRow[]
 ) {
-  // Ordered, so the row each admin gets is the same on every run — the
-  // determinism rule the seeded PRNG enforces everywhere else. `findMany`
-  // without an `orderBy` is free to return them in any order, which would
-  // shuffle the content between two otherwise identical runs.
-  const admins = await db.user.findMany({
-    where: { role: "admin" },
-    orderBy: { id: "asc" },
-    select: { id: true },
-  })
-  if (admins.length === 0 || courses.length === 0) return 0
-
-  const instructorList = [...instructors.values()]
   const MINUTE = 60 * 1000
-
   let written = 0
-  for (const [adminIndex, admin] of admins.entries()) {
-    for (const [index, seed] of adminNotificationSeeds.entries()) {
+
+  for (const [personIndex, person] of recipients.entries()) {
+    for (const [index, seed] of seeds.entries()) {
       // Deterministic picks, so two runs produce the same feed — the rule
       // every other part of this seed follows through its own PRNG.
-      const course = courses[(index * 5 + adminIndex) % courses.length]
+      const course = courses[(index * 5 + personIndex) % courses.length]
       const instructor =
-        instructorList[(index * 3 + adminIndex) % instructorList.length]
+        instructorList[(index * 3 + personIndex) % instructorList.length]
 
       const body = seed.body
         .replace("{course}", course.title)
         .replace("{instructor}", instructor.name)
       const title = seed.title.replace("{instructor}", instructor.name)
       const createdAt = new Date(NOW.getTime() - seed.minutesAgo * MINUTE)
-      const id = `${SEED}notif_${adminIndex}_${seed.key}`
+      const prefix = audience === "ADMIN" ? "notif" : "lnotif"
+      const id = `${SEED}${prefix}_${personIndex}_${seed.key}`
 
       await db.notification.create({
         data: {
           id,
-          userId: admin.id,
-          audience: "ADMIN",
+          userId: person.id,
+          audience,
           category: seed.category,
           title,
           body,
-          // The feed renders an avatar for a row with an actor — see
-          // `Notification.actorId`'s own note.
           actorId: seed.withActor ? instructor.userId : null,
           readAt: seed.unread ? null : new Date(createdAt.getTime() + MINUTE),
           createdAt,
@@ -2047,7 +2046,7 @@ async function seedNotifications(
             ? {
                 action: {
                   create: {
-                    id: `${SEED}notifact_${adminIndex}_${seed.key}`,
+                    id: `${SEED}${prefix}act_${personIndex}_${seed.key}`,
                     actionType: seed.action,
                   },
                 },
@@ -2060,6 +2059,58 @@ async function seedNotifications(
   }
 
   return written
+}
+
+async function seedNotifications(
+  instructors: Map<string, InstructorRow>,
+  courses: CourseRow[]
+) {
+  if (courses.length === 0) return { admin: 0, learner: 0 }
+  const instructorList = [...instructors.values()]
+  if (instructorList.length === 0) return { admin: 0, learner: 0 }
+
+  // Ordered, so the rows each person gets are the same on every run — the
+  // determinism rule the seeded PRNG enforces everywhere else. `findMany`
+  // without an `orderBy` may return them in any order.
+  const admins = await db.user.findMany({
+    where: { role: "admin" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  })
+
+  // The learner feed goes to a handful of demo students, not to all 500
+  // accounts: ten rows each across the whole pool would be five thousand
+  // notifications nobody reads.
+  const demoLearners = await db.user.findMany({
+    where: { role: "user", id: { startsWith: `${SEED}u_` } },
+    orderBy: { id: "asc" },
+    take: 10,
+    select: { id: true },
+  })
+
+  // **Every admin gets a learner feed too**, and they are concatenated
+  // rather than folded into the query above with a `take`. An admin is also
+  // a learner — the two feeds are separate inboxes for one person, which is
+  // the whole point of `NotificationAudience` — and the account a developer
+  // signs in with is usually a real one whose cuid sorts nowhere near the
+  // `seed_` ids, so a single capped query could drop it.
+  const learners = [...admins, ...demoLearners]
+
+  const admin = await writeNotifications(
+    "ADMIN",
+    admins,
+    adminNotificationSeeds,
+    instructorList,
+    courses
+  )
+  const learner = await writeNotifications(
+    "LEARNER",
+    learners,
+    learnerNotificationSeeds,
+    instructorList,
+    courses
+  )
+  return { admin, learner }
 }
 
 // ---------------------------------------------------------------------------
@@ -2120,7 +2171,9 @@ async function main() {
   console.log(`promotions        ${promotions}`)
 
   const notifications = await seedNotifications(instructors, courses)
-  console.log(`notifications     ${notifications}`)
+  console.log(
+    `notifications     ${notifications.admin} admin, ${notifications.learner} learner`
+  )
 
   await seedPayouts(instructors, netByInstructor)
   await seedUptime()
