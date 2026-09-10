@@ -35,12 +35,12 @@ import type {
  * in the account menu — so a workspace toggle in this sidebar would offer a
  * third, contradictory way out of it.
  *
- * Everything but Promotions and Platform Settings exists today. Those two rows
- * carries `built: false`, which makes `NavRow` render it as inert text instead
- * of a link onto a 404 — the same flag `settingsNav` and `attentionQueues`
- * use. Flip each one as its page lands. The hrefs are already the ones
- * `attentionQueues` points its chevrons at, so the two can't invent different
- * spellings for the same page.
+ * Everything but Platform Settings exists today. That row carries
+ * `built: false`, which makes `NavRow` render it as inert text instead of a
+ * link onto a 404 — the same flag `settingsNav` and `attentionQueues` use.
+ * Flip it as its page lands. The hrefs are already the ones `attentionQueues`
+ * points its chevrons at, so the two can't invent different spellings for the
+ * same page.
  */
 export const adminNav: DashboardNavGroup[] = [
   {
@@ -113,7 +113,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Promotions",
         href: "/dashboard/admin/promotions",
         icon: TicketPercentIcon,
-        built: false,
+        built: true,
       },
       {
         // The one row with a chevron, same as Settings in the student

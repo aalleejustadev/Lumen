@@ -46,12 +46,15 @@ import {
   communityReportSeeds,
   communityTopicSeeds,
   countryWeights,
+  coursePromotionOptIn,
   extraInstructorSeeds,
   featuredLearnerSeeds,
   firstNames,
   instructorApplicationSeeds,
   lastNames,
   pendingCourseSeeds,
+  promotionOptOutInstructorSlugs,
+  promotionSeeds,
   reportedReviewSeeds,
   requiredCategorySlugs,
 } from "./seed-data"
@@ -155,6 +158,10 @@ const LESSON_TYPES = {
 async function clearSeededRows() {
   const seeded = { id: { startsWith: SEED } }
 
+  // Before the courses and accounts, though the order is not forced:
+  // `Order.promotion` is SetNull, so a promotion can go at any point without
+  // taking an order with it.
+  await db.promotion.deleteMany({ where: seeded })
   await db.contentReport.deleteMany({ where: seeded })
   // Cascades to `discussion`, `discussion_reply` and `topic_moderator`.
   await db.communityTopic.deleteMany({ where: seeded })
@@ -291,6 +298,9 @@ async function seedInstructors() {
       rating: seed.rating,
       reviewsCount: seed.reviewsCount,
       studentsCount: seed.studentsCount,
+      // The participation switch on `/dashboard/admin/promotions`. On for
+      // everyone but the export's own opted-out row — see the seed-data note.
+      promotionOptIn: !promotionOptOutInstructorSlugs.includes(seed.slug),
     })),
   })
 
@@ -375,6 +385,9 @@ async function seedPublishedCourses(
       status: "PUBLISHED",
       submittedAt,
       publishedAt,
+      // `null` means *inherit* from the instructor, which is what all but two
+      // courses do — see `coursePromotionOptIn`.
+      promotionOptIn: coursePromotionOptIn[course.slug] ?? null,
       // `BrowseCourse.reviews` is the catalog's student count — what the sale
       // page's "students" stat and the admin overview's top-courses table both
       // draw. It is the denormalised total the schema documents, and it
@@ -1896,6 +1909,68 @@ async function seedCommunity(
 }
 
 // ---------------------------------------------------------------------------
+// 13 · Promotions
+// ---------------------------------------------------------------------------
+
+/**
+ * The platform-wide sales behind `/dashboard/admin/promotions` — one running
+ * and four in the history table, from `promotionSeeds`.
+ *
+ * Two things it has to get right, because the page derives everything else
+ * from them:
+ *
+ *  - **Every window is anchored to the run**, so the running sale is still
+ *    running and the four past ones are still past however long from now this
+ *    is executed. A promotion has no status column — the page reads
+ *    `startsAt`/`endsAt` against the clock — so an absolute date would decide
+ *    the page's state, and the card the export is built around would vanish
+ *    the day it expired.
+ *  - **A day boundary, not the moment of the run.** `startsAt` is the start of
+ *    its UTC day and `endsAt` the last millisecond of its own, which is what
+ *    `lib/actions/admin-promotions.ts` writes when an admin picks the same days
+ *    in the dialog. Seeding the raw offset instead would put "Ends 01 Oct" on
+ *    a sale that actually stopped at 14:32 that afternoon.
+ *
+ * `categorySlugs` is resolved against the admin-owned taxonomy, the same way
+ * every course is — `requiredCategorySlugs()` includes these, so a database
+ * missing Development or Design is told before anything is written.
+ */
+async function seedPromotions(categories: Map<string, string>) {
+  /** Midnight UTC, `days` from the run. */
+  function dayStart(days: number) {
+    const date = new Date(NOW.getTime() + days * DAY)
+    date.setUTCHours(0, 0, 0, 0)
+    return date
+  }
+
+  for (const seed of promotionSeeds) {
+    await db.promotion.create({
+      data: {
+        id: `${SEED}promo_${seed.key}`,
+        name: seed.name,
+        discountType: seed.discountType,
+        value: seed.value,
+        scope: seed.categorySlugs.length > 0 ? "CATEGORIES" : "ALL_COURSES",
+        startsAt: dayStart(seed.startsInDays),
+        // The end of the chosen day, so "Ends 01 Oct" includes the 1st.
+        endsAt: new Date(dayStart(seed.endsInDays).getTime() + DAY - 1),
+        forceOnAllCourses: seed.forceOnAllCourses,
+        redemptionCount: seed.redemptionCount,
+        revenueCents: seed.revenueCents,
+        createdAt: dayStart(seed.startsInDays - 3),
+        categories: {
+          connect: seed.categorySlugs.map((slug) => ({
+            id: categories.get(slug)!,
+          })),
+        },
+      },
+    })
+  }
+
+  return promotionSeeds.length
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 
@@ -1948,6 +2023,9 @@ async function main() {
     `community         ${community.topics} topics, ${community.threads} threads, ` +
       `${community.moderators} moderator rows, ${community.reports} reports`
   )
+
+  const promotions = await seedPromotions(categories)
+  console.log(`promotions        ${promotions}`)
 
   await seedPayouts(instructors, netByInstructor)
   await seedUptime()

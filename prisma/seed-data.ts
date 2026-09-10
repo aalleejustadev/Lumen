@@ -64,6 +64,7 @@ export function requiredCategorySlugs(): string[] {
     ...new Set([
       ...Object.values(categorySlugByBrowseCategory),
       ...pendingCourseSeeds.map((seed) => seed.categorySlug),
+      ...promotionSeeds.flatMap((seed) => seed.categorySlugs),
     ]),
   ].sort()
 }
@@ -946,3 +947,143 @@ export const communityReportSeeds: {
     note: "Off-topic replies derailing the release note.",
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+/**
+ * The platform-wide sales behind `/dashboard/admin/promotions`, from
+ * `ui-design/light/dashboard/admin/promotions-page__admin.png` — one running
+ * and the four its history table draws, with that export's own discounts,
+ * scopes, redemptions and revenue.
+ *
+ * **Dates are offsets from the run, not calendar dates.** A promotion has no
+ * status column — `lib/admin/promotions.ts` reads its state off `startsAt` and
+ * `endsAt` against the clock — so a sale pinned to an absolute date would
+ * quietly become history, and the page would lose the one card its export is
+ * built around. Offsets keep each sale in the state it is seeded for however
+ * long from now the seed is run, which is the arrangement `seedAuditLog` and
+ * `seedUptime` already use for the same reason.
+ *
+ * The one figure that cannot be the export's is the **end date**: it writes
+ * "Ends 31 Aug 2026" on a sale it also marks LIVE NOW, which is a date in the
+ * past for anyone reading this after August 2026. The card says when the sale
+ * actually ends, the reading the billing page's plan line settled — the export
+ * loses to the truth whenever the two disagree.
+ *
+ * `redemptionCount` and `revenueCents` are the denormalised counters
+ * `Promotion` carries for exactly this card. Setting them rather than writing
+ * 12,840 orders per sale is the arrangement `Discussion.replyCount` is already
+ * in; `Order.promotionId` is the row-level link a real checkout will fill in.
+ */
+export const promotionSeeds: {
+  key: string
+  name: string
+  discountType: "PERCENT" | "FIXED_PRICE"
+  /** Percent when PERCENT, **cents** when FIXED_PRICE. */
+  value: number
+  /** Empty means ALL_COURSES, which the page renders "All categories". */
+  categorySlugs: string[]
+  /** Days from the run. Negative is the past. */
+  startsInDays: number
+  endsInDays: number
+  forceOnAllCourses: boolean
+  redemptionCount: number
+  revenueCents: number
+}[] = [
+  {
+    key: "back-to-skills",
+    name: "Back to Skills Sale",
+    discountType: "PERCENT",
+    value: 70,
+    categorySlugs: [],
+    // Three and a half weeks in, three to run — a sale caught mid-flight,
+    // which is the state the export draws it in.
+    startsInDays: -24,
+    endsInDays: 21,
+    forceOnAllCourses: false,
+    redemptionCount: 12_840,
+    revenueCents: 18_400_000,
+  },
+  {
+    key: "summer-learning",
+    name: "Summer Learning Sale",
+    discountType: "PERCENT",
+    value: 65,
+    categorySlugs: [],
+    startsInDays: -72,
+    endsInDays: -41,
+    forceOnAllCourses: false,
+    redemptionCount: 18_420,
+    revenueCents: 24_100_000,
+  },
+  {
+    key: "developer-week",
+    name: "Developer Week",
+    discountType: "FIXED_PRICE",
+    value: 999,
+    categorySlugs: ["development"],
+    startsInDays: -143,
+    endsInDays: -136,
+    forceOnAllCourses: false,
+    redemptionCount: 9_180,
+    revenueCents: 9_100_000,
+  },
+  {
+    key: "design-refresh",
+    name: "Design Refresh",
+    discountType: "PERCENT",
+    value: 50,
+    categorySlugs: ["design"],
+    startsInDays: -193,
+    endsInDays: -180,
+    forceOnAllCourses: false,
+    redemptionCount: 6_240,
+    revenueCents: 7_800_000,
+  },
+  {
+    key: "new-year-kickstart",
+    name: "New Year Kickstart",
+    discountType: "PERCENT",
+    value: 70,
+    categorySlugs: [],
+    // The one sale the export shows that ran platform-wide with the override
+    // on — a New Year event is exactly the "platform-wide event" the dialog's
+    // own help text reserves that switch for.
+    startsInDays: -253,
+    endsInDays: -238,
+    forceOnAllCourses: true,
+    redemptionCount: 22_610,
+    revenueCents: 30_200_000,
+  },
+]
+
+/**
+ * Instructors whose courses sit out platform promotions —
+ * `Instructor.promotionOptIn = false`.
+ *
+ * Marco Devine is the export's own opted-out row, so his switch is the one
+ * that starts off. Everyone else defaults to on, which is what
+ * `PlatformSetting.autoEnrollNewCoursesInPromotions` says a new teaching
+ * account gets.
+ */
+export const promotionOptOutInstructorSlugs = ["marco-devine"]
+
+/**
+ * Per-course overrides — `Course.promotionOptIn`, where `null` means *inherit*
+ * from the instructor.
+ *
+ * Two rows, deliberately pointing opposite ways, because that column is
+ * nullable precisely so a course can disagree with its instructor and the
+ * admin export's two course tiles are what count the result. Without them the
+ * three-level arrangement `Course.promotionOptIn`'s own note describes would
+ * never be exercised by any data in the app: every course would simply inherit,
+ * and a bug in the inheritance would look like a working page.
+ */
+export const coursePromotionOptIn: Record<string, boolean> = {
+  // Marco sits out promotions, but keeps his flagship course in them.
+  "python-for-everybody": true,
+  // Maya participates, and holds this one course back at its list price.
+  "the-complete-react-bootcamp": false,
+}
