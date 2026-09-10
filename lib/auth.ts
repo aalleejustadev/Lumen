@@ -8,6 +8,7 @@ import { admin } from "better-auth/plugins/admin"
 import { siteConfig } from "@/lib/config/site"
 import { db } from "@/lib/db"
 import {
+  sendChangeEmailConfirmation,
   sendInvitationEmail,
   sendPasswordResetEmail,
   sendVerificationEmail,
@@ -84,6 +85,25 @@ export const auth = betterAuth({
   socialProviders,
 
   user: {
+    /**
+     * Changing your own email, from the Profile settings page.
+     *
+     * The confirmation link goes to the address on the account **today**, not
+     * to the new one — that is Better Auth's design and the right one: the
+     * link is what proves the person asking controls the account already, so
+     * an unattended session cannot be used to quietly repoint it.
+     *
+     * `updateEmailWithoutVerification` is left at its default `false`. It
+     * would let an account whose address has never been verified change it
+     * outright, and while `requireEmailVerification` is off here (so such
+     * accounts exist), an unverified address is exactly the case where a
+     * silent change is least safe.
+     */
+    changeEmail: {
+      enabled: true,
+      sendChangeEmailConfirmation: ({ user, newEmail, url }) =>
+        sendChangeEmailConfirmation(user.email, newEmail, url),
+    },
     additionalFields: {
       // Which side of the classroom the account signed up for — the "I want
       // to" choice on the register screen. Free-form on purpose: it is a

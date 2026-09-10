@@ -69,8 +69,17 @@ export const settingsHeading = {
   description: "Manage your account settings and set e-mail preferences.",
 } as const
 
-/** `User.name` on the account page — the string the chrome and email render. */
+/** `User.name` on the **profile** page — the string the chrome and email
+ *  render. It moved there from Account at the user's request: the admin
+ *  profile export already drew a Full name field, so having it on both pages
+ *  was the same value in two places. Account is preferences now (date of
+ *  birth, language, time zone) and carries no identity field. */
 export const MAX_NAME_LENGTH = 100
+
+/** RFC 5321's practical ceiling for an address, and what the Email field caps
+ *  at. Email is editable on the profile page — see `lib/email-change.ts` for
+ *  why changing it is a confirmation flow rather than a plain column write. */
+export const MAX_EMAIL_LENGTH = 254
 
 /**
  * The floor `updateAccount` enforces on a submitted date of birth. Thirteen is

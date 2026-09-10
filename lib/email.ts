@@ -65,6 +65,31 @@ function sendInvitationEmail(to: string, url: string) {
   })
 }
 
+/**
+ * The confirmation Better Auth sends when somebody changes their email.
+ *
+ * It goes to the **current** address, not the new one, which is the whole
+ * point: the link is what proves the person asking for the change is the
+ * person who already controls the account. Somebody who walks up to an
+ * unlocked laptop cannot quietly repoint the account at an address of their
+ * own, because the mail lands in the inbox of whoever owns it today.
+ *
+ * The new address is named in the body for the same reason — if this arrives
+ * unexpectedly it has to say what was asked for, so the owner knows what to
+ * ignore and what to go and undo.
+ */
+function sendChangeEmailConfirmation(
+  to: string,
+  newEmail: string,
+  url: string
+) {
+  return sendMail({
+    to,
+    subject: `Confirm your new ${siteConfig.name} email address`,
+    text: `A request was made to change the email on your ${siteConfig.name} account to ${newEmail}.\n\nConfirm the change:\n\n${url}\n\nIf you didn't ask for this, ignore the message — your address stays as it is. It may also be worth changing your password.`,
+  })
+}
+
 function sendPasswordResetEmail(to: string, url: string) {
   return sendMail({
     to,
@@ -74,6 +99,7 @@ function sendPasswordResetEmail(to: string, url: string) {
 }
 
 export {
+  sendChangeEmailConfirmation,
   sendInvitationEmail,
   sendMail,
   sendPasswordResetEmail,

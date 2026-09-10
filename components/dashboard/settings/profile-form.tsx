@@ -12,7 +12,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import {
@@ -24,6 +23,8 @@ import {
 import { updateProfile, type ProfileFieldErrors } from "@/lib/actions/profile"
 import {
   MAX_BIO_LENGTH,
+  MAX_EMAIL_LENGTH,
+  MAX_NAME_LENGTH,
   MAX_PROFILE_URLS,
   USERNAME_CHANGE_DAYS,
   USERNAME_MAX_LENGTH,
@@ -85,6 +86,36 @@ function ProfileForm({ profile }: { profile: Profile }) {
   return (
     <form onSubmit={onSubmit}>
       <FieldGroup>
+        {/* Full name leads the form: it moved here from the account page,
+            where it used to sit beside date of birth and the locale
+            preferences. Profile is the identity page — see
+            `MAX_NAME_LENGTH`. */}
+        <Field data-invalid={errors.name ? true : undefined}>
+          <FieldLabel htmlFor="name" className={SETTINGS_LABEL}>
+            Full name
+          </FieldLabel>
+          <Input
+            id="name"
+            name="name"
+            defaultValue={profile.name}
+            maxLength={MAX_NAME_LENGTH}
+            autoComplete="name"
+            required
+            aria-invalid={errors.name ? true : undefined}
+            className={SETTINGS_CONTROL}
+          />
+          {errors.name ? (
+            <FieldError className={SETTINGS_DESCRIPTION}>
+              {errors.name}
+            </FieldError>
+          ) : (
+            <FieldDescription className={SETTINGS_DESCRIPTION}>
+              The name shown on your profile, in discussions and on
+              certificates.
+            </FieldDescription>
+          )}
+        </Field>
+
         <Field data-invalid={errors.username ? true : undefined}>
           <FieldLabel htmlFor="username" className={SETTINGS_LABEL}>
             Username
@@ -122,55 +153,47 @@ function ProfileForm({ profile }: { profile: Profile }) {
           )}
         </Field>
 
-        {/* Read-only by design: the export's own help text sends you to email
-            settings to manage addresses, and the account's address is Better
-            Auth's identity key — changing it is a verification flow, not a
-            text field. Rendered as a disabled `<select>` (not a plain input)
-            because that is what the export draws, chevron and all, and it is
-            the control the future "pick one of your verified addresses"
-            version will need. The wrapper's `opacity-50` is turned off so the
-            border stays full strength like the export; the muted value is
-            what marks it unavailable. */}
-        {/* No `data-disabled` on the `Field`: that would fade the label and
-            the help text through `group-data-[disabled=true]/field`, and the
-            export keeps both at full strength — only the *value* is muted.
-            The `<select disabled>` plus `aria-describedby` already say why it
-            can't be edited. */}
-        <Field>
+        {/* **Editable, and a plain input.** The export draws a disabled
+            `<select>` whose help text points at "your email settings" — a
+            page that does not exist, so the control was a dead end. It is a
+            real field now, per the user's instruction, in every mode.
+            Changing it is still not a plain column write: Better Auth owns
+            this address, and `lib/email-change.ts` sends a confirmation link
+            to the address on the account *today* before the new one takes
+            effect. The help text below says so, because a field that looks
+            like it saved when it has only sent a mail is worse than one that
+            explains itself. */}
+        <Field data-invalid={errors.email ? true : undefined}>
           <FieldLabel htmlFor="email" className={SETTINGS_LABEL}>
             Email
           </FieldLabel>
-          {/* `NativeSelect` hands `className` to its *wrapper*, and the
-              `<select>` inside carries its own hardcoded `h-8 pl-2.5
-              text-sm`, so the export's 46px box has to be reached through
-              descendant selectors — which win on specificity (0,1,1 against
-              0,1,0) no matter what order Tailwind emits them in. The same
-              goes for nudging the built-in chevron from `right-2.5` out to
-              the measured 14px. */}
-          <NativeSelect
-            className={cn(
-              "w-full has-[select:disabled]:opacity-100",
-              // `bg-background!` is the one `!` here: the select's own
-              // `dark:bg-input/30` is (0,2,0) and a `[&_select]:` descendant
-              // override is only (0,1,1), so it cannot win on specificity and
-              // tailwind-merge can't drop it either (different variants).
-              "[&_select]:h-11.5 [&_select]:bg-background! [&_select]:pl-3.5 [&_select]:text-[15px] [&_select]:text-muted-foreground",
-              "[&_[data-slot=native-select-icon]]:right-3.5"
-            )}
-            disabled
+          <Input
             id="email"
+            name="email"
+            type="email"
+            inputMode="email"
+            defaultValue={profile.email}
+            maxLength={MAX_EMAIL_LENGTH}
+            autoComplete="email"
+            spellCheck={false}
+            required
+            aria-invalid={errors.email ? true : undefined}
             aria-describedby="email-description"
-          >
-            <NativeSelectOption value={profile.email}>
-              {profile.email}
-            </NativeSelectOption>
-          </NativeSelect>
-          <FieldDescription
-            id="email-description"
-            className={SETTINGS_DESCRIPTION}
-          >
-            You can manage verified email addresses in your email settings.
-          </FieldDescription>
+            className={SETTINGS_CONTROL}
+          />
+          {errors.email ? (
+            <FieldError className={SETTINGS_DESCRIPTION}>
+              {errors.email}
+            </FieldError>
+          ) : (
+            <FieldDescription
+              id="email-description"
+              className={SETTINGS_DESCRIPTION}
+            >
+              Used to sign in. Changing it sends a confirmation link to your
+              current address — the new one takes effect once you follow it.
+            </FieldDescription>
+          )}
         </Field>
 
         <Field data-invalid={errors.bio ? true : undefined}>

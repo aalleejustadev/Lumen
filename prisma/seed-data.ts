@@ -1087,3 +1087,145 @@ export const coursePromotionOptIn: Record<string, boolean> = {
   // Maya participates, and holds this one course back at its list price.
   "the-complete-react-bootcamp": false,
 }
+
+// ---------------------------------------------------------------------------
+// Admin notifications
+// ---------------------------------------------------------------------------
+
+/**
+ * The console's notification feed, behind `/dashboard/admin/notifications`.
+ *
+ * The page is built to the *instructor* export
+ * (`ui-design/light/dashboard/instructor/notifications-page.png`) at the
+ * user's instruction — the UI followed as drawn, the content made the
+ * admin's. So the cadence here is that export's own (5 minutes, 30 minutes,
+ * an hour, … two days) and the ten-ish rows it lists, while every row says
+ * something an admin would actually be told.
+ *
+ * **A seed rather than real emissions**, for the reason `seedAuditLog` gives
+ * about its own 160 entries: nothing in the app writes notifications yet, and
+ * a feed with two rows leaves the search, the category card and the pager
+ * with nothing to do. `seedNotifications` is the stand-in for the code that
+ * will eventually emit these, exactly as the seed stands in for a health
+ * monitor in `seedUptime`.
+ *
+ * `{course}` and `{instructor}` are filled from **real rows** at seed time,
+ * because a notification pointing at a course that does not exist is the one
+ * kind of demo data that reads as broken — the point `auditTemplates` makes.
+ *
+ * One row carries an action, which is what draws the export's Accept/Decline
+ * pair. An instructor application is the admin's natural analogue of that
+ * export's "add you to the mentor group" request: a named person asking for
+ * something you answer with one of two buttons.
+ */
+export const adminNotificationSeeds: {
+  key: string
+  category: "MEMBERS" | "COURSE" | "COMMUNITY" | "BILLING" | "SECURITY"
+  title: string
+  body: string
+  minutesAgo: number
+  unread: boolean
+  /** Renders the actor's avatar in place of the category glyph. */
+  withActor?: boolean
+  /** Adds the pending Accept / Decline pair. */
+  action?: string
+}[] = [
+  {
+    key: "course-submitted",
+    category: "COURSE",
+    title: "Course submitted for review",
+    body: "{course} was submitted by {instructor} and is waiting for approval",
+    minutesAgo: 5,
+    unread: true,
+  },
+  {
+    key: "application",
+    category: "MEMBERS",
+    title: "{instructor}",
+    body: "Applied to teach on Lumen and is waiting on a decision",
+    minutesAgo: 30,
+    unread: true,
+    withActor: true,
+    action: "instructor_application",
+  },
+  {
+    key: "review-reported",
+    category: "COMMUNITY",
+    title: "Review reported",
+    body: "A learner reported a review on {course} as spam",
+    minutesAgo: 60,
+    unread: false,
+  },
+  {
+    key: "payout-failed",
+    category: "BILLING",
+    title: "Payout failed",
+    body: "One transfer in the last payout run was returned by the bank",
+    minutesAgo: 120,
+    unread: false,
+  },
+  {
+    key: "signin",
+    category: "SECURITY",
+    title: "New admin sign-in",
+    body: "Your account signed in from a new device in Lisbon, Portugal",
+    minutesAgo: 180,
+    unread: true,
+  },
+  {
+    key: "discussion-reported",
+    category: "COMMUNITY",
+    title: "Discussion reported",
+    body: "Two replies in “Weekly challenge: gradient mesh” were flagged as off-topic",
+    minutesAgo: 300,
+    unread: true,
+  },
+  {
+    key: "course-resubmitted",
+    category: "COURSE",
+    title: "Changes resubmitted",
+    body: "{instructor} addressed the requested changes on {course}",
+    minutesAgo: 60 * 24,
+    unread: false,
+  },
+  {
+    key: "signups",
+    category: "MEMBERS",
+    title: "Signups up 18% this week",
+    body: "1,240 new learners created accounts in the last seven days",
+    minutesAgo: 60 * 26,
+    unread: false,
+  },
+  {
+    key: "refund-spike",
+    category: "BILLING",
+    title: "Refund rate above target",
+    body: "Refunds reached 2.1% of paid orders over the trailing 30 days",
+    minutesAgo: 60 * 48,
+    unread: false,
+  },
+  {
+    key: "role-granted",
+    category: "SECURITY",
+    title: "Admin role granted",
+    body: "An existing account was given the admin role from the Users table",
+    minutesAgo: 60 * 52,
+    unread: false,
+  },
+  {
+    key: "instructor-approved",
+    category: "MEMBERS",
+    title: "Instructor approved",
+    body: "{instructor} was approved and can now publish courses",
+    minutesAgo: 60 * 72,
+    unread: false,
+  },
+  {
+    key: "promotion-ended",
+    category: "BILLING",
+    title: "Promotion ended",
+    body: "Summer Learning Sale finished with 18,420 redemptions",
+    minutesAgo: 60 * 96,
+    unread: false,
+  },
+]

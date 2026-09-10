@@ -48,6 +48,21 @@ enum NotifyAbout {
   NOTHING
 }
 
+/// `User.adminNotifyAbout` — the "Notify me about…" radio on the **admin**
+/// notification settings, `/dashboard/admin/settings/notifications`.
+///
+/// A separate enum from `NotifyAbout` rather than a shared one with a fourth
+/// member. The learner's middle option is DIRECT_MESSAGES, which means
+/// nothing to somebody running the platform; the admin's is NEEDS_ACTION —
+/// "only the things waiting on me". Sharing one enum would leave each
+/// audience with a value it can never sensibly pick, and a mailer reading
+/// either column would have to know which members applied to whom.
+enum AdminNotifyAbout {
+  ALL_ACTIVITY
+  NEEDS_ACTION
+  NOTHING
+}
+
 /// The **Status** column on the admin Users table. Better Auth's own
 /// `banned`/`banExpires` covers SUSPENDED only; the export draws two more
 /// states it has no column for — PENDING (invited, never signed in) and
@@ -60,19 +75,19 @@ enum UserStatus {
 }
 
 model User {
-  id                String         @id
+  id                String      @id
   name              String
   email             String
-  emailVerified     Boolean        @default(false)
+  emailVerified     Boolean     @default(false)
   image             String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   role              String?
-  banned            Boolean?       @default(false)
+  banned            Boolean?    @default(false)
   banReason         String?
   banExpires        DateTime?
   // `user.additionalFields.intent` in lib/auth.ts — LEARNING | TEACHING
-  intent            String?        @default("LEARNING")
+  intent            String?     @default("LEARNING")
   /// The public handle from `/dashboard/settings/profile`. Nullable because
   /// Better Auth creates accounts with a `name` and no handle (sign-up asks
   /// for "Full name"), so an account has one only once its owner saves the
@@ -82,7 +97,7 @@ model User {
   /// Google/GitHub hands us and two people may share it, while a handle is
   /// the thing a future public learner page keys on, the same role
   /// `Instructor.slug` plays.
-  username          String?        @unique
+  username          String?     @unique
   /// When `username` last changed. The settings page promises "you can only
   /// change this once every 30 days", and `lib/actions/profile.ts` enforces
   /// it — a rule about elapsed time needs a timestamp, not just the value.
@@ -97,7 +112,7 @@ model User {
   /// (`@db.Date`): a birthday has no time and no zone, and storing it as a
   /// `timestamp` makes it shift a day either side of UTC. `lib/account.ts`
   /// moves it across the wire as a `yyyy-MM-dd` string for the same reason.
-  dateOfBirth       DateTime?      @db.Date
+  dateOfBirth       DateTime?   @db.Date
   /// Preferred dashboard language, as a BCP-47 tag from `lib/config/locale.ts`
   /// ("en", "pt-BR", …). Stored but not yet acted on — there is no i18n layer,
   /// so this is the preference a future one reads.
@@ -111,22 +126,52 @@ model User {
   country           String?
   /// See `UserStatus`. Defaults to ACTIVE because a self-serve sign-up is
   /// immediately active; the invitation flow creates PENDING rows instead.
-  status            UserStatus     @default(ACTIVE)
+  status            UserStatus  @default(ACTIVE)
   /// From `/dashboard/settings/notifications` — the "Notify me about…"
   /// radio. A single choice rather than three booleans because the export
   /// draws it as a radio group: "Nothing" is not "all three off", it is its
   /// own state, and an enum is what stops the two spellings drifting.
   /// Defaults to the option the export draws as selected.
-  notifyAbout       NotifyAbout    @default(DIRECT_MESSAGES)
+  notifyAbout       NotifyAbout @default(DIRECT_MESSAGES)
   /// The four "Email Notifications" switches on the same page. Plain columns
   /// rather than a JSON blob so a future mailer can filter on them in SQL
   /// (`where courseEmails`), and their defaults are the export's own on/off
   /// states — a brand-new account starts opted in to everything except
   /// marketing, which is the only one of the four that is promotional.
-  courseEmails      Boolean        @default(true)
-  marketingEmails   Boolean        @default(false)
-  communityEmails   Boolean        @default(true)
-  securityEmails    Boolean        @default(true)
+  courseEmails      Boolean     @default(true)
+  marketingEmails   Boolean     @default(false)
+  communityEmails   Boolean     @default(true)
+  securityEmails    Boolean     @default(true)
+
+  /// The admin console's own notification preferences, from
+  /// `/dashboard/admin/settings/notifications`.
+  ///
+  /// Separate columns rather than a reuse of the four above, because they
+  /// answer a different question. The learner rows are about *their* courses
+  /// and *their* discussions; these are about the platform's work queues —
+  /// the same four the Platform Overview page draws under "Needs your
+  /// attention", which is deliberate: an admin should be mailed about
+  /// precisely the things that page would show them.
+  ///
+  /// They sit on `User` rather than in a table of their own because they are
+  /// one row per account, exactly like the learner set, and because an
+  /// account can hold the admin role and still be a learner — the two sets
+  /// coexist rather than replacing each other. `securityEmails` above is
+  /// deliberately **not** duplicated here: it is about the account itself,
+  /// which everybody has, so the admin form renders that same column.
+  ///
+  /// Defaults are all on. Every one is work waiting on somebody, so the
+  /// useful default is to be told; the promotional row that justifies an
+  /// off-by-default (`marketingEmails`) has no equivalent here.
+  adminNotifyAbout        AdminNotifyAbout @default(NEEDS_ACTION)
+  /// A new instructor application is waiting for review.
+  adminApplicationEmails  Boolean          @default(true)
+  /// A course has been submitted and is awaiting approval.
+  adminCourseReviewEmails Boolean          @default(true)
+  /// A review or discussion has been reported by a learner.
+  adminReportEmails       Boolean          @default(true)
+  /// Payout runs, failed transfers and refund activity.
+  adminPayoutEmails       Boolean          @default(true)
   /// The Stripe Customer this account's payments and saved cards hang off.
   ///
   /// Checkout used to pass a bare `customer_email`, which meant Stripe made a
@@ -139,14 +184,14 @@ model User {
   /// Unique, so two rows can never claim the same Stripe customer, and
   /// nullable because it is *Stripe's* id: a blank `STRIPE_SECRET_KEY` (or a
   /// key rotation to a different account) must not stop the app booting.
-  stripeCustomerId  String?        @unique
-  sessions          Session[]
-  accounts          Account[]
+  stripeCustomerId        String?          @unique
+  sessions                Session[]
+  accounts                Account[]
   // Populated once this user actually starts teaching — see `Instructor`.
-  instructorProfile Instructor?
-  cartItems         CartItem[]
-  wishlistItems     WishlistItem[]
-  orders            Order[]
+  instructorProfile       Instructor?
+  cartItems               CartItem[]
+  wishlistItems           WishlistItem[]
+  orders                  Order[]
 
   // Learning
   enrollments   Enrollment[]
@@ -1258,18 +1303,46 @@ model Announcement {
 
 /// Exactly the five categories in the drawn Notifications sidebar. The counts
 /// beside each are `count(readAt is null)` filtered by this column.
+/// Which feed a notification belongs to.
+///
+/// `/dashboard/admin/notifications` and the learner's `/dashboard/notifications`
+/// are two feeds over one table, and three of the categories below (COURSE,
+/// COMMUNITY, BILLING) mean different things to each audience — "a course" is
+/// a lesson you can take or a submission you must review. Without this column
+/// an admin who is also enrolled in something would see "New lesson unlocked"
+/// in their console feed. Each page filters to its own audience, so the two
+/// can never bleed.
+enum NotificationAudience {
+  LEARNER
+  ADMIN
+}
+
+/// The category card down the left of both notification feeds.
+///
+/// One enum spanning both audiences rather than one per audience: the rows
+/// are the same shape and most of the members are shared. Which subset a
+/// given page offers is a config concern — see `adminFeedCategories` — and
+/// `NotificationAudience` is what keeps the two feeds' rows apart.
 enum NotificationCategory {
   COURSE
   MESSAGE
   COMMUNITY
   CERTIFICATE
   BILLING
+  /// Admin: instructor applications, new signups, account changes.
+  MEMBERS
+  /// Admin: sign-ins, role changes, anything an incident review would open.
+  SECURITY
 }
 
 model Notification {
   id         String               @id @default(cuid())
   userId     String
   user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Which feed this row belongs to — see the enum's own note. Defaults to
+  /// LEARNER because that is what an unqualified "notification" means here;
+  /// the admin writer sets it explicitly.
+  audience   NotificationAudience @default(LEARNER)
   category   NotificationCategory
   title      String
   body       String?
@@ -1285,8 +1358,10 @@ model Notification {
 
   action NotificationAction?
 
-  @@index([userId, createdAt])
-  @@index([userId, readAt])
+  /// Every feed query is "this user, this audience, newest first", so the
+  /// audience belongs in the index rather than being filtered after the fact.
+  @@index([userId, audience, createdAt])
+  @@index([userId, audience, readAt])
   @@map("notification")
 }
 

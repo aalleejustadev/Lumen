@@ -5,12 +5,19 @@ import { revalidatePath } from "next/cache"
 
 import { auth, getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
+import {
+  emailChangeMessage,
+  requestEmailChange,
+  type EmailChangeOutcome,
+} from "@/lib/email-change"
 import { suggestUsername, usernameUnlocksAt } from "@/lib/profile"
 import { deleteAvatar, putAvatar } from "@/lib/storage"
 import {
   AVATAR_MAX_BYTES,
   AVATAR_MIME_TYPES,
   MAX_BIO_LENGTH,
+  MAX_EMAIL_LENGTH,
+  MAX_NAME_LENGTH,
   MAX_PROFILE_URLS,
   USERNAME_CHANGE_DAYS,
   USERNAME_MAX_LENGTH,
@@ -41,6 +48,8 @@ import {
  */
 
 export type ProfileFieldErrors = {
+  name?: string
+  email?: string
   username?: string
   bio?: string
   /** Indexed to match the submitted URL list, so each row can show its own. */
@@ -103,13 +112,26 @@ export async function updateProfile(
 
   const current = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { name: true, username: true, usernameChangedAt: true },
+    select: {
+      name: true,
+      email: true,
+      username: true,
+      usernameChangedAt: true,
+    },
   })
   if (!current) {
     return { ok: false, message: "We couldn't find your account." }
   }
 
   const errors: ProfileFieldErrors = {}
+
+  // ---- Full name ---------------------------------------------------------
+  // Moved here from the account form: the profile page is where identity
+  // lives now, and the value was previously editable on both.
+  const name = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, MAX_NAME_LENGTH)
+  if (name.length === 0) errors.name = "Enter your name."
 
   // ---- Username ----------------------------------------------------------
   const username = normalizeUsername(String(formData.get("username") ?? ""))
@@ -178,6 +200,25 @@ export async function updateProfile(
     }
   }
 
+  // ---- Email -------------------------------------------------------------
+  // Attempted *before* the column write so a rejected address (already in
+  // use, malformed) fails the whole save rather than leaving the other
+  // fields written and the email silently dropped. It is the one field here
+  // that Better Auth owns, and usually it does not apply at once — a
+  // confirmation goes to the current address first. See `lib/email-change.ts`.
+  const emailOutcome: EmailChangeOutcome = await requestEmailChange(
+    session.user.id,
+    current.email,
+    String(formData.get("email") ?? "").slice(0, MAX_EMAIL_LENGTH)
+  )
+  if (emailOutcome.status === "error") {
+    return {
+      ok: false,
+      message: "Check the highlighted fields and try again.",
+      errors: { email: emailOutcome.message },
+    }
+  }
+
   await db.user.update({
     where: { id: session.user.id },
     data: {
@@ -190,12 +231,27 @@ export async function updateProfile(
     },
   })
 
-  revalidatePath("/dashboard/settings/profile")
+  // `name` goes through Better Auth rather than the update above: it is a
+  // core field the sidebar, app bar and account menu render from the
+  // *session*, which has a five-minute cookie cache, so a bare column write
+  // would leave the old name in the chrome for up to five minutes.
+  if (name !== current.name) {
+    await auth.api.updateUser({ body: { name }, headers: await headers() })
+  }
+
+  // The chrome renders the name, so the whole shell re-renders rather than
+  // just this route.
+  revalidatePath("/dashboard", "layout")
   return {
     ok: true,
-    message: changed
-      ? `Profile updated. Your username is locked for ${USERNAME_CHANGE_DAYS} days.`
-      : "Profile updated.",
+    message: [
+      changed
+        ? `Profile updated. Your username is locked for ${USERNAME_CHANGE_DAYS} days.`
+        : "Profile updated.",
+      emailChangeMessage(emailOutcome),
+    ]
+      .filter(Boolean)
+      .join(" "),
   }
 }
 

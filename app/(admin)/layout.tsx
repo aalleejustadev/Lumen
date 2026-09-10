@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AdminHeader } from "@/components/dashboard/admin/admin-header"
 import { AdminSidebar } from "@/components/dashboard/admin/admin-sidebar"
 import { getAttentionFacts } from "@/lib/admin/overview"
+import { getAdminUnreadCount } from "@/lib/admin/notification-feed"
 import { getSession } from "@/lib/auth"
 import { adminNavCounts } from "@/lib/config/admin-nav"
 
@@ -45,7 +46,10 @@ export default async function AdminLayout({
   // two shells, which is what a single "collapse the sidebar" preference
   // should do.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
-  const attention = await getAttentionFacts()
+  const [attention, unreadNotifications] = await Promise.all([
+    getAttentionFacts(),
+    getAdminUnreadCount(),
+  ])
 
   return (
     <SidebarProvider
@@ -59,11 +63,12 @@ export default async function AdminLayout({
     >
       <AdminSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
-        navCounts={adminNavCounts(attention)}
+        navCounts={adminNavCounts(attention, unreadNotifications)}
       />
       <SidebarInset>
         <AdminHeader
           user={{ name: user.name, email: user.email, image: user.image }}
+          unreadNotifications={unreadNotifications}
         />
         {children}
       </SidebarInset>

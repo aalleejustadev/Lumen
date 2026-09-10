@@ -24,9 +24,19 @@ import { initialsOf, type MenuUser } from "@/lib/user"
  *
  * The search stays, over the console's own navigation rather than the
  * student palette: jumping to My Learning from in here would silently drop
- * you out of admin mode.
+ * you out of admin mode. The bell is the same: it points at
+ * `/dashboard/admin/notifications`, the console's feed, for exactly that
+ * reason — and its marker is real rather than decorative, drawn only while
+ * something is actually unread.
  */
-function AdminHeader({ user }: { user: MenuUser }) {
+function AdminHeader({
+  user,
+  unreadNotifications = 0,
+}: {
+  user: MenuUser
+  /** Unread rows in the admin's own feed, counted in `app/(admin)/layout.tsx`. */
+  unreadNotifications?: number
+}) {
   return (
     <header className="sticky top-0 z-40 flex h-[70px] shrink-0 items-center gap-3 border-b bg-background px-4 sm:gap-4 sm:px-6">
       <SidebarTrigger className="size-9.5 shrink-0 cursor-pointer border bg-card shadow-sm dark:bg-card" />
@@ -37,14 +47,25 @@ function AdminHeader({ user }: { user: MenuUser }) {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Notifications"
+          aria-label={
+            unreadNotifications > 0
+              ? `Notifications — ${unreadNotifications} unread`
+              : "Notifications"
+          }
           nativeButton={false}
           className="relative hidden size-9.5 cursor-pointer sm:inline-flex"
-          render={<Link href="/dashboard/notifications" />}
+          // The console's own feed, not the learner's `/dashboard/notifications`
+          // — which is where this pointed while the admin page did not exist,
+          // and which would have dropped an admin out of the console.
+          render={<Link href="/dashboard/admin/notifications" />}
         >
           <BellIcon />
-          {/* Unread marker. Static until notifications have a source. */}
-          <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
+          {/* Real now: the layout counts the admin's unread rows. Drawn only
+              when there is something unread, so a clear feed shows a clean
+              bell rather than a marker that never goes out. */}
+          {unreadNotifications > 0 ? (
+            <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
+          ) : null}
         </Button>
 
         <ThemeToggle variant="ghost" />

@@ -1,12 +1,11 @@
 "use server"
 
-import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 
-import { auth, getSession } from "@/lib/auth"
+import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { languages, timeZoneIds } from "@/lib/config/locale"
-import { MAX_NAME_LENGTH, MIN_AGE_YEARS } from "@/lib/config/settings"
+import { MIN_AGE_YEARS } from "@/lib/config/settings"
 
 /**
  * Writes for `/dashboard/settings/account`. Reads are in `lib/account.ts`.
@@ -15,10 +14,10 @@ import { MAX_NAME_LENGTH, MIN_AGE_YEARS } from "@/lib/config/settings"
  * server-side, return `{ ok, message }` for the caller to toast. And the same
  * split over *where* each field is written —
  *
- *  - `name` goes through `auth.api.updateUser`. It is a core Better Auth
- *    field, and the sidebar, app bar and account menu all render it from the
- *    *session*, which has a 5-minute cookie cache; a bare `db.user.update`
- *    would leave the old name in the chrome for up to five minutes.
+ *  - **`name` is not written here any more.** It moved to the profile form,
+ *    which is the identity page; this action owns preferences only. The
+ *    layout is still revalidated below, because `dateOfBirth` and the locale
+ *    pair are read outside this route.
  *  - `dateOfBirth`, `language` and `timeZone` are plain Prisma columns and are
  *    deliberately not `additionalFields`, which would both bloat that cookie
  *    and let a client set them straight through `/api/auth/update-user`,
@@ -26,7 +25,6 @@ import { MAX_NAME_LENGTH, MIN_AGE_YEARS } from "@/lib/config/settings"
  */
 
 export type AccountFieldErrors = {
-  name?: string
   dateOfBirth?: string
   language?: string
   timeZone?: string
@@ -87,18 +85,6 @@ export async function updateAccount(
 
   const errors: AccountFieldErrors = {}
 
-  // ---- Name --------------------------------------------------------------
-  // Collapsed rather than only trimmed: this is the string the chrome and
-  // outgoing email render, and "Ada   Lovelace" is a typo, not a choice.
-  const name = String(formData.get("name") ?? "")
-    .trim()
-    .replace(/\s+/g, " ")
-  if (name.length === 0) {
-    errors.name = "Enter the name you'd like shown."
-  } else if (name.length > MAX_NAME_LENGTH) {
-    errors.name = `Use at most ${MAX_NAME_LENGTH} characters.`
-  }
-
   // ---- Date of birth -----------------------------------------------------
   // Optional: the export opens on "Pick a date", so an account that has never
   // set one is a valid state and clearing it has to stay possible.
@@ -151,13 +137,9 @@ export async function updateAccount(
     },
   })
 
-  if (name !== session.user.name) {
-    await auth.api.updateUser({ body: { name }, headers: await headers() })
-  }
-
-  // The layout renders the name in the sidebar footer and the account menu, so
-  // the whole shell re-renders — the same reason the cart, wishlist and avatar
-  // actions revalidate the layout rather than their own page.
+  // Still the layout rather than this route: nothing in the chrome renders
+  // these three, but the settings pages sit under it and a narrower
+  // invalidation would be a second thing to get right for no gain.
   revalidatePath("/dashboard", "layout")
   return { ok: true, message: "Account updated." }
 }

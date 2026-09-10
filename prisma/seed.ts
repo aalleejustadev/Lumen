@@ -43,6 +43,7 @@ import {
 } from "@/lib/config/instructor-profiles"
 import {
   categorySlugByBrowseCategory,
+  adminNotificationSeeds,
   communityReportSeeds,
   communityTopicSeeds,
   countryWeights,
@@ -161,6 +162,7 @@ async function clearSeededRows() {
   // Before the courses and accounts, though the order is not forced:
   // `Order.promotion` is SetNull, so a promotion can go at any point without
   // taking an order with it.
+  await db.notification.deleteMany({ where: seeded })
   await db.promotion.deleteMany({ where: seeded })
   await db.contentReport.deleteMany({ where: seeded })
   // Cascades to `discussion`, `discussion_reply` and `topic_moderator`.
@@ -1971,6 +1973,96 @@ async function seedPromotions(categories: Map<string, string>) {
 }
 
 // ---------------------------------------------------------------------------
+// 14 · Admin notifications
+// ---------------------------------------------------------------------------
+
+/**
+ * The console's notification feed, from `adminNotificationSeeds`.
+ *
+ * **Written for every admin account, not just the seeded one.** The feed is
+ * per-user, and the account a developer actually signs in with is usually
+ * their own rather than `priya.nadar@example.com` — seeding only the demo
+ * admin would leave the page empty for the person looking at it. The rows
+ * still carry the `seed_` prefix, so `clearSeededRows` reclaims them from a
+ * real account as cleanly as from a seeded one.
+ *
+ * Two things it has to get right:
+ *
+ *  - **Every row is anchored to the run**, so "5 minutes ago" is still five
+ *    minutes ago whenever this executes. The feed's whole content is relative
+ *    time, and absolute dates would have it open on a wall of "8 months ago".
+ *    Same arrangement `seedAuditLog`, `seedUptime` and `seedPromotions` use.
+ *  - **`{course}` and `{instructor}` resolve against real rows**, for the
+ *    reason `auditTemplates` gives — a notification about a course nobody can
+ *    open reads as a bug rather than as sample data.
+ */
+async function seedNotifications(
+  instructors: Map<string, InstructorRow>,
+  courses: CourseRow[]
+) {
+  // Ordered, so the row each admin gets is the same on every run — the
+  // determinism rule the seeded PRNG enforces everywhere else. `findMany`
+  // without an `orderBy` is free to return them in any order, which would
+  // shuffle the content between two otherwise identical runs.
+  const admins = await db.user.findMany({
+    where: { role: "admin" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  })
+  if (admins.length === 0 || courses.length === 0) return 0
+
+  const instructorList = [...instructors.values()]
+  const MINUTE = 60 * 1000
+
+  let written = 0
+  for (const [adminIndex, admin] of admins.entries()) {
+    for (const [index, seed] of adminNotificationSeeds.entries()) {
+      // Deterministic picks, so two runs produce the same feed — the rule
+      // every other part of this seed follows through its own PRNG.
+      const course = courses[(index * 5 + adminIndex) % courses.length]
+      const instructor =
+        instructorList[(index * 3 + adminIndex) % instructorList.length]
+
+      const body = seed.body
+        .replace("{course}", course.title)
+        .replace("{instructor}", instructor.name)
+      const title = seed.title.replace("{instructor}", instructor.name)
+      const createdAt = new Date(NOW.getTime() - seed.minutesAgo * MINUTE)
+      const id = `${SEED}notif_${adminIndex}_${seed.key}`
+
+      await db.notification.create({
+        data: {
+          id,
+          userId: admin.id,
+          audience: "ADMIN",
+          category: seed.category,
+          title,
+          body,
+          // The feed renders an avatar for a row with an actor — see
+          // `Notification.actorId`'s own note.
+          actorId: seed.withActor ? instructor.userId : null,
+          readAt: seed.unread ? null : new Date(createdAt.getTime() + MINUTE),
+          createdAt,
+          ...(seed.action
+            ? {
+                action: {
+                  create: {
+                    id: `${SEED}notifact_${adminIndex}_${seed.key}`,
+                    actionType: seed.action,
+                  },
+                },
+              }
+            : {}),
+        },
+      })
+      written += 1
+    }
+  }
+
+  return written
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 
@@ -2026,6 +2118,9 @@ async function main() {
 
   const promotions = await seedPromotions(categories)
   console.log(`promotions        ${promotions}`)
+
+  const notifications = await seedNotifications(instructors, courses)
+  console.log(`notifications     ${notifications}`)
 
   await seedPayouts(instructors, netByInstructor)
   await seedUptime()

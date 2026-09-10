@@ -43,6 +43,8 @@ const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/x-icon": "ico",
+  "image/vnd.microsoft.icon": "ico",
 }
 
 function endpoint() {
@@ -133,5 +135,76 @@ export async function deleteAvatar(userId: string, imageUrl: string | null) {
   } catch {
     // A leftover object costs pennies; a failed cleanup must not fail the
     // upload that already succeeded.
+  }
+}
+
+/**
+ * The platform's logo and favicon, behind Platform Controls' two upload
+ * buttons — `PlatformSetting.logoUrl` and `.faviconUrl`.
+ *
+ * **Same bucket as the avatars, under a `branding/` prefix**, rather than a
+ * second bucket. A Neon bucket is created out-of-band with `neonctl` and
+ * branches with the database, so adding one means a new manual step in every
+ * environment and a second pair of variables to keep in step; a prefix costs
+ * nothing and inherits the branch scoping the avatars already rely on. The
+ * bucket's name is the only thing that reads oddly — it is `lumen-avatars`
+ * because avatars were the first thing in it, not because it is limited to
+ * them.
+ *
+ * `public_read` is right here for a stronger reason than it is for avatars:
+ * the logo and favicon are rendered on every page of the **public** site, by
+ * visitors who are not signed in at all, so a presigned URL is not merely
+ * wasteful but wrong.
+ *
+ * A new key per upload, for the reason `putAvatar` gives — these objects are
+ * cached `immutable`, so overwriting one would leave the old logo on screen
+ * until the cache expired.
+ */
+export async function putBrandingAsset(
+  kind: "logo" | "favicon",
+  file: { bytes: Uint8Array; contentType: string }
+): Promise<string | null> {
+  const s3 = client()
+  if (!s3) return null
+
+  const extension = EXTENSIONS[file.contentType] ?? "bin"
+  const key = `branding/${kind}/${randomUUID()}.${extension}`
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: file.bytes,
+      ContentType: file.contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  )
+
+  return publicUrl(key)
+}
+
+/**
+ * Collect the logo or favicon a new upload has just replaced.
+ *
+ * Scoped to `branding/<kind>/` for the reason `deleteAvatar` is scoped to one
+ * user's prefix: the column it comes from is a plain URL string, and a value
+ * that did not originate here must never turn into a delete.
+ */
+export async function deleteBrandingAsset(
+  kind: "logo" | "favicon",
+  assetUrl: string | null
+) {
+  if (!assetUrl) return
+  const prefix = `${endpoint()}/${BUCKET}/branding/${kind}/`
+  if (!endpoint() || !assetUrl.startsWith(prefix)) return
+
+  const s3 = client()
+  if (!s3) return
+
+  const key = assetUrl.slice(`${endpoint()}/${BUCKET}/`.length)
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
+  } catch {
+    // As above: a failed cleanup must not fail a successful upload.
   }
 }

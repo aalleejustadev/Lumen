@@ -1,4 +1,5 @@
 import {
+  BellIcon,
   BookOpenTextIcon,
   ChartLineIcon,
   ChartNoAxesColumnIncreasingIcon,
@@ -35,12 +36,14 @@ import type {
  * in the account menu — so a workspace toggle in this sidebar would offer a
  * third, contradictory way out of it.
  *
- * Everything but Platform Settings exists today. That row carries
- * `built: false`, which makes `NavRow` render it as inert text instead of a
- * link onto a 404 — the same flag `settingsNav` and `attentionQueues` use.
- * Flip it as its page lands. The hrefs are already the ones `attentionQueues`
+ * **Every row now exists.** `built` stays on the type rather than being
+ * removed with the last `false`: it is what lets a tenth row be listed here
+ * (and so appear in the sidebar) before its route lands, rendering as inert
+ * text instead of a link onto a 404 — the same flag `settingsNav` and
+ * `attentionQueues` use. The hrefs are already the ones `attentionQueues`
  * points its chevrons at, so the two can't invent different spellings for the
- * same page.
+ * same page, and Platform Settings' four children are the exact paths
+ * `lib/config/admin-settings.ts` builds its own sections card from.
  */
 export const adminNav: DashboardNavGroup[] = [
   {
@@ -62,6 +65,17 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Audit Log",
         href: "/dashboard/admin/audit-log",
         icon: ChartNoAxesColumnIncreasingIcon,
+        built: true,
+      },
+      {
+        // The console's own feed, not the learner's `/dashboard/notifications`
+        // — and a different page again from the notification *preferences*
+        // under Platform Settings. Its badge is real: the layout counts the
+        // admin's unread rows and passes them down through `navCounts`, the
+        // way the student sidebar's Wishlist count works.
+        title: "Notifications",
+        href: "/dashboard/admin/notifications",
+        icon: BellIcon,
         built: true,
       },
     ],
@@ -122,7 +136,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Platform Settings",
         href: "/dashboard/admin/settings",
         icon: SettingsIcon,
-        built: false,
+        built: true,
         items: [
           { title: "Profile", href: "/dashboard/admin/settings/profile" },
           { title: "Account", href: "/dashboard/admin/settings/account" },
@@ -150,11 +164,21 @@ export const adminNav: DashboardNavGroup[] = [
  * Keyed by href so the shell — not the sidebar — decides which rows carry a
  * real number, the same arrangement `navCounts` has in the student layout.
  */
-export function adminNavCounts(facts: AttentionFacts): Record<string, number> {
+export function adminNavCounts(
+  facts: AttentionFacts,
+  /** Unread rows in the admin's own feed — see `getAdminUnreadCount`. */
+  unreadNotifications = 0
+): Record<string, number> {
   return {
     "/dashboard/admin/users": facts.instructorApplications.count,
     "/dashboard/admin/courses": facts.coursesAwaitingReview.count,
     "/dashboard/admin/reviews": facts.reportedReviews.count,
+    // Omitted at zero rather than passed as 0: `NavRow` draws a badge for any
+    // number it is given, and "0 unread" is the noise an empty queue's own
+    // note argues against.
+    ...(unreadNotifications > 0
+      ? { "/dashboard/admin/notifications": unreadNotifications }
+      : {}),
   }
 }
 
@@ -181,8 +205,10 @@ export const adminCommandPaletteGroups: {
  * The account menu in admin mode, from `exit-admin-mode__admin.png`. Shorter
  * than the student shell's `accountMenu`: Billing, Notifications and Help
  * Center are learner surfaces, and the console is not the place to be sold a
- * plan. Profile and Account point at the admin's own settings pages, which is
- * where those rows go today — `/dashboard/admin/settings/*` is still to build.
+ * plan. Profile and Account point at the admin's **own** settings pages under
+ * `/dashboard/admin/settings/*`, which is where they belong now that those
+ * routes exist — they pointed at the learner's `/dashboard/settings/*` until
+ * then, which took an admin out of the console to edit their own name.
  */
 export const adminAccountMenu: {
   title: string
@@ -191,12 +217,12 @@ export const adminAccountMenu: {
 }[] = [
   {
     title: "Profile",
-    href: "/dashboard/settings/profile",
+    href: "/dashboard/admin/settings/profile",
     icon: UserRoundIcon,
   },
   {
     title: "Account",
-    href: "/dashboard/settings/account",
+    href: "/dashboard/admin/settings/account",
     icon: ShieldCheckIcon,
   },
 ]

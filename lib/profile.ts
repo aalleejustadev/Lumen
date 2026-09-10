@@ -12,6 +12,7 @@ import {
  */
 
 export type Profile = {
+  /** Edited on this page now, not on Account — see `MAX_NAME_LENGTH`. */
   name: string
   email: string
   image: string | null

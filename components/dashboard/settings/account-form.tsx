@@ -12,7 +12,6 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -36,7 +35,6 @@ import {
 import { updateAccount, type AccountFieldErrors } from "@/lib/actions/account"
 import type { Account } from "@/lib/account"
 import { languages, type TimeZoneOption } from "@/lib/config/locale"
-import { MAX_NAME_LENGTH } from "@/lib/config/settings"
 import { cn } from "@/lib/utils"
 
 /**
@@ -142,32 +140,9 @@ function AccountForm({
       />
 
       <FieldGroup>
-        <Field data-invalid={errors.name ? true : undefined}>
-          <FieldLabel htmlFor="name" className={SETTINGS_LABEL}>
-            Name
-          </FieldLabel>
-          <Input
-            id="name"
-            name="name"
-            defaultValue={account.name}
-            maxLength={MAX_NAME_LENGTH}
-            autoComplete="name"
-            required
-            aria-invalid={errors.name ? true : undefined}
-            className={SETTINGS_CONTROL}
-          />
-          {errors.name ? (
-            <FieldError className={SETTINGS_DESCRIPTION}>
-              {errors.name}
-            </FieldError>
-          ) : (
-            <FieldDescription className={SETTINGS_DESCRIPTION}>
-              This is the name that will be displayed on your profile and in
-              emails.
-            </FieldDescription>
-          )}
-        </Field>
-
+        {/* No Name field. It used to lead this form, and now lives on the
+            profile page — the identity page — so the value is not editable
+            in two places. This card is preferences only. */}
         <Field data-invalid={errors.dateOfBirth ? true : undefined}>
           <FieldLabel htmlFor="date-of-birth" className={SETTINGS_LABEL}>
             Date of birth
