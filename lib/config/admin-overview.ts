@@ -195,7 +195,7 @@ export const attentionQueues: AttentionQueue[] = [
     icon: StarIcon,
     tone: "star",
     href: "/dashboard/admin/reviews",
-    built: false,
+    built: true,
     describe: ({ reportedReviews: queue }) => ({
       count: queue.count,
       title: `${queue.count} reported review${queue.count === 1 ? "" : "s"}`,

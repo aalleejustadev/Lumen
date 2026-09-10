@@ -1355,6 +1355,90 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `AuditCategory` has no CONTENT member, so all three writes log under
   **COURSES** — a category is part of the catalog, and a fifth enum value would
   need a fifth tab on the audit log for one label's sake.
+- `components/dashboard/admin/reviews/` — `/dashboard/admin/reviews`, from
+  `reported-reviews__admin.png`: `reported-review-card.tsx` (one card),
+  `reported-reviews-list.tsx` (client — the stack, the pending flag and the
+  pager, since one transition covers every card), `reviews-format.ts`,
+  composed by `reported-reviews-page.tsx`. `lib/admin/reviews.ts` reads,
+  `lib/config/admin-reviews.ts` is the copy plus the pill vocabulary, and
+  `lib/actions/admin-reviews.ts` is the four decisions. **Nothing on it is demo
+  data, and this page needed no migration** — `CourseReview` and
+  `ContentReport` were already shaped for it, docstrings and all
+  (`ContentReport`'s names this screen; `ReviewStatus`'s names its three
+  buttons), and the seed already writes the three open reports the export
+  draws. The page header is **pixel-identical to `courses-page__admin.png`** —
+  the h1 cap and the lead ink land on the same rows in both — so it is that
+  page's header, not a second measurement.
+  Measured off the export at DPR 2: the console's usual 32px inset, 160px cards
+  on a 14px gap, 18px vertical / 20px horizontal card padding, a 34px avatar
+  12px from a 15px/600 name, then the muted "on <course>" and a 20px reason
+  pill on that same 12px rhythm, the timestamp at the trailing edge, and a 2px
+  `--border` quote rule 14px from 16px body copy on a 24px line. Rendered
+  against the export every one of those lands exactly; the card runs **164px
+  against the drawn 160** because the decisions are built at the app's 40px
+  control baseline over the export's 36px — the trade `courses-list.tsx`
+  already made against that export's 38px, and the reason its buttons also run
+  wider (this export renders type below the design system's own scale; don't
+  shrink the type to close it).
+  Six things decide what the page means, and the export settles none of them:
+  - **The queue is exactly what the sidebar badge counts** — open reports whose
+    target is a review. `getAttentionFacts` counts that same pair, so the badge
+    and the page can never disagree about how much work is waiting. It is two
+    queries rather than a join because `ContentReport` is polymorphic:
+    `targetId` is a plain string, so there is no relation to include.
+  - **The name is the reviewer's real one.** The export writes "Anonymous
+    learner" on all three cards while giving each a *different* face, so it is
+    a placeholder in a name slot rather than a policy — an anonymised queue
+    would have dropped the avatar too, and both trailing actions act on a
+    specific person. Real rows beat the export's mock strings, the same reading
+    the categories page's percentages and the billing page's plan line settled.
+  - **The quote block is the review body, not the reporter's note.** It is what
+    "Remove review" removes, and the reason pill already carries *why*. Leaving
+    the complainant's sentence out is also the page's own stated principle: the
+    lead says reviews are never removed for being critical, and leading with
+    the report's framing is how that goes wrong. `ContentReport.note` is still
+    stored, for the appeal screen below.
+  - **Remove, Keep and Hide are one function with three outcomes**, for the
+    reason `admin-courses.ts` gives about its own three: each writes a status
+    onto the *review*, the matching status onto the *report* and an audit entry
+    in one transaction, because `CourseReview.status` is what the learner
+    surfaces render and `ContentReport.status` is what this queue reads.
+    It **refuses anything not currently `OPEN`** — two admins working one queue
+    is the ordinary case, and a stale tab would otherwise overwrite a
+    colleague's decision. Remove is the **soft** delete `CourseReview.deletedAt`
+    exists for: the audit log names its targets, and a review a moderator took
+    down has to still resolve 24 months later. All three log under **COURSES**,
+    for the reason the categories page records.
+  - **All three resolve the report out of the queue, including Hide.** That is
+    `ReportStatus`'s own design — it carries `HIDDEN_PENDING_APPEAL` as a value
+    distinct from `OPEN` — and it is what makes the sidebar badge fall as the
+    work is done. The consequence worth knowing: **there is no appeals surface
+    yet**, no route and no export for one, so a parked report is listed nowhere
+    once it leaves this queue. Build that screen off
+    `ContentReport.status = HIDDEN_PENDING_APPEAL`; it is the one follow-up this
+    page leaves open.
+  - **Suspend reviewer is `setUserStatus`, not a second copy of it**, so it
+    writes `User.status` and Better Auth's `banned` together, logs under
+    SECURITY, and refuses the two cases that would lock the console. It takes
+    the **report** id and resolves the account server-side — a user id from the
+    browser would let anyone with the page open suspend an unrelated account —
+    and it deliberately **leaves the report open**, because suspending the
+    person and deciding the review are two acts, which is why the export draws
+    two buttons. It goes inert once the account is already suspended, the
+    treatment `user-row-actions.tsx` gives a learner's "View profile"; Message
+    author is a `mailto:`, for that file's own reason.
+  Two more, about the shell: the card cannot express its padding through
+  `--card-spacing` (that one variable drives the block padding *and* the row
+  gap, and the gaps here are 12px and 16px against an 18px padding), so it is
+  zeroed and an inner box carries the padding — the arrangement
+  `course-review-page.tsx` uses. And **no filter row or tabs are added**,
+  unlike the courses page: every card here is an open report, so there is
+  nothing to filter by. The pager is added for the reason that page's filter
+  row was, and draws only once there is a second page, so the queue as the
+  export shows it looks exactly as drawn.
+- The Reviews row in `adminNav` and the `reportedReviews` attention card both
+  flipped to `built: true` with this page; the sidebar badge and the Platform
+  Overview chevron were already pointed at `/dashboard/admin/reviews`.
 - `lib/config/countries.ts` — the codes behind the Country column and the Add
   new user select. `User.country` stores ISO-3166 alpha-2 and the English names
   are **computed** through `Intl.DisplayNames`, the call `locale.ts` makes for
