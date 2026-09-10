@@ -1439,6 +1439,110 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
 - The Reviews row in `adminNav` and the `reportedReviews` attention card both
   flipped to `built: true` with this page; the sidebar badge and the Platform
   Overview chevron were already pointed at `/dashboard/admin/reviews`.
+- `components/dashboard/admin/community/` — `/dashboard/admin/community`,
+  from `community-page__admin.png`, `new-topic__admin.png` and
+  `moderators__dialog_admin.png`: `community-board.tsx` (client — the header
+  button, the topic rows, the moderators table and both dialogs, since they
+  all share one pending flag and a topic row's *Moderators* and a table row's
+  *Edit* open the same editor), `community-stats.tsx`, `topic-dialog.tsx`,
+  `moderators-dialog.tsx`, composed by `community-page.tsx`.
+  `lib/admin/community.ts` reads, `lib/config/admin-community.ts` is the copy
+  plus the pill and permission vocabulary, `lib/actions/admin-community.ts` is
+  the four writes. **Nothing on it is demo data and it needed no migration** —
+  `CommunityTopic`, `TopicModerator` and `Discussion` were already shaped for
+  these exports, docstrings and all (`CommunityTopic`'s note names this page
+  and its dialog; `TopicModerator`'s names the four permission switches) — but
+  the seed wrote none of them, so `seedCommunity` is new.
+  The stats row is a Server Component passed to the client board **as
+  `children`**, which is what keeps its four cards and icons out of the
+  bundle; the `h1` lives inside the board for the reason `categories-list.tsx`
+  gives, that the export puts the page's primary action in the title's row.
+  Measured off the export at DPR 2 and verified against the render, which now
+  lands on every one: 80px KPI cards on an 18px gap, 34px above each section
+  heading and 15px below, 74px topic rows on a 14px gap with 18px horizontal
+  and 16px vertical padding, a 42px accent tile 16px from an 18px/700 name, a
+  42px table header over 60px rows on 20px cell padding.
+  Six things decide what the page means, and the export settles none of them:
+  - **Its own numbers do not reconcile**, so one definition wins each time —
+    the reading the categories page's percentages settled. Its Threads tile
+    says 1,842 where its six rows sum to **1,814**, and its Moderators tile
+    says 18 where the four rows of its own table cannot add to that. Threads
+    is every non-removed `Discussion`, so the tile is the exact sum of the
+    column beneath it; **Moderators counts distinct people**, which is what
+    the table's own lead ("People with elevated permissions in one or more
+    topics") promises, while a row's "N moderators" is seats in that topic.
+  - **"Reported items" is community content**, open `ContentReport` rows
+    targeting a discussion or a reply — not the review queue's. Keeping the
+    two apart is what lets this page and `/dashboard/admin/reviews` each count
+    their own work instead of both drawing the same backlog.
+  - **"Posts" reads the denormalised `Discussion.replyCount`**, not a
+    `count()` over `discussion_reply`. That column exists for it ("the list
+    draws both counts on every row" — the model's own note), and the seed sets
+    it rather than materialising ~18,000 reply rows nothing reads yet. Same
+    arrangement `top-courses-card.tsx` has with `Course.enrollmentCount`.
+  - **The Moderators dialog's permission switches edit the selected
+    moderator, not the topic.** This is the one place the export is not
+    reproduced literally: it captions that section "Applies to every moderator
+    in this topic", which its own data contradicts twice — the four rows
+    directly above carry four *different* summaries, and so does the
+    Permissions column of the table behind it. Uniform per-topic permissions
+    cannot produce either, and `TopicModerator` stores the four booleans per
+    (topic, user) for exactly that reason. So the moderator rows are a radio
+    group and the caption names whoever is selected. The dialog is a **staged
+    editor** — adds, removals and permission changes commit on Save, which is
+    what makes that button mean something and closing it a discard — and it
+    loads its lists when it opens, the arrangement `payout-run-dialog.tsx`
+    records, `.catch()` and all.
+  - **The table's Permissions column is the union across a person's topics**,
+    since the booleans are per (topic, user): the column answers "what can
+    this person do" and the per-topic truth is one click away in Edit. All
+    four collapse to **Full control**, exactly as drawn. Scope collapses to
+    **All topics** when somebody moderates every one, and truncates to
+    "A · B +2 more" past two — its four rows never show more than two names,
+    so the long case is unillustrated and a table cell is the wrong place for
+    six. **Edit opens the dialog for the topic they moderate with them
+    pre-selected**, and offers the list first when they moderate several,
+    because the permissions being edited belong to one topic.
+  - **Delete is refused while a topic holds threads, and Postgres would not
+    stop it.** `Discussion.topic` cascades, so deleting Q&A would silently
+    take 862 threads with it — the opposite of the categories page, where
+    RESTRICT does the work and the guard only turns the error into a sentence.
+    Here the guard *is* the protection: the `⋯` item draws disabled with the
+    reason and `deleteTopic` re-checks it. Verified by stripping the disabled
+    attribute and clicking anyway — the action refused and all 862 threads
+    survived.
+  Two more, about the shell: **the slug is not re-derived on a rename** (it is
+  the topic's stable key and a learner-facing filter value), and both dialogs
+  **drop the export's "Cancel"**, per the standing rule — `DialogContent`
+  already draws a close X. Saving moderators logs under **SECURITY** rather
+  than COURSES, the distinction `setUserStatus` already makes: this is who may
+  delete other people's posts.
+- **`admin-count-card.tsx` is the console's shared count tile** — a 44px
+  tinted square with the figure and label beside it and no delta, which is
+  what `users-page__admin.png` and `community-page__admin.png` both draw
+  (identically: 80px tall, 20px sides, measured). It was extracted from
+  `users-stats.tsx` when the second page needed it, for the reason
+  `admin-stat-card.tsx` was extracted for Reports. It is `p-5 py-4.5`, 18px
+  top and bottom against 20px sides, which is what lands it on the drawn 80px
+  — `p-5` alone renders 84, which is what the Users page had been doing. The
+  `p` shorthand stays in front because it is the one thing tailwind-merge
+  reliably drops `py-(--card-spacing)` against. It stays separate from the
+  student `learning-stat-card.tsx`, which reached the same anatomy from a
+  different export.
+- **The seed now writes the community.** `seedCommunity` creates the six
+  topics the export draws with its exact figures — 124/1,940, 862/9,410,
+  318/4,220, 406/3,180, 96/1,120, 8/64 — by writing that many `Discussion`
+  rows per topic and distributing `postCount - threadCount` across their
+  `replyCount` columns. `moderatorCount` in `communityTopicSeeds` is the
+  **total** the export draws beside each row (3/6/4/3/2/0), which is what
+  reproduces its counts and, at zero, its **No moderators** state on Rules &
+  Guidelines. **Learners can moderate** and the pool says so: the dialog's own
+  Add list offers "Nadia Rahman · Student", and there are only nine staff
+  accounts, so a staff-only pool could never approach the 18 seats its tile
+  draws — a STAFF_ONLY topic still keeps a staff-only list, since somebody who
+  cannot see the Instructor Lounge cannot moderate it. Admins take the first
+  seat wherever there is one, which is what accumulates the wide scope and the
+  Full control row the export's table draws.
 - `lib/config/countries.ts` — the codes behind the Country column and the Add
   new user select. `User.country` stores ISO-3166 alpha-2 and the English names
   are **computed** through `Intl.DisplayNames`, the call `locale.ts` makes for

@@ -744,3 +744,205 @@ export const instructorApplicationSeeds: {
     status: "REJECTED",
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Community
+// ---------------------------------------------------------------------------
+
+/**
+ * The six topics `community-page__admin.png` draws, in the order it draws
+ * them, with the counts it puts beside each one.
+ *
+ * `threadCount` and `postCount` are the export's own figures. The seed writes
+ * `threadCount` real `Discussion` rows per topic and distributes
+ * `postCount - threadCount` across their **denormalised** `replyCount`
+ * columns rather than materialising ~18,000 `DiscussionReply` rows nothing
+ * reads yet — the arrangement `Course.enrollmentCount` is already in, and the
+ * reason that column exists ("the list draws both counts on every row" —
+ * `Discussion`'s own note).
+ *
+ * The accents are the export's six tile tints, which are exactly
+ * `CATEGORY_ACCENTS` in order.
+ *
+ * Two of the export's own numbers do not reconcile and the data wins: its
+ * per-topic threads sum to 1,814 where its Threads tile says 1,842, and its
+ * Moderators tile says 18 where the four rows of its own table cannot add to
+ * that. See `lib/admin/community.ts` for the definitions that replace them.
+ */
+export const communityTopicSeeds: {
+  slug: string
+  name: string
+  description: string
+  accentColor: string
+  visibility: "EVERYONE" | "ENROLLED_ONLY" | "STAFF_ONLY"
+  learnersCanStartThreads: boolean
+  requiresModeratorApproval: boolean
+  threadCount: number
+  postCount: number
+  /** How many `TopicModerator` rows the seed writes for this topic. */
+  moderatorCount: number
+  /** Thread subjects, cycled with a numeric suffix past the first pass. */
+  subjects: string[]
+}[] = [
+  {
+    slug: "announcements",
+    name: "Announcements",
+    description: "Platform and course news from staff",
+    accentColor: "blue",
+    visibility: "EVERYONE",
+    // This is what renders the **Staff post only** pill.
+    learnersCanStartThreads: false,
+    requiresModeratorApproval: false,
+    threadCount: 124,
+    postCount: 1940,
+    moderatorCount: 3,
+    subjects: [
+      "New certificates are rolling out this week",
+      "Scheduled maintenance on Sunday",
+      "Introducing saved payment methods",
+      "Course player now remembers your place",
+      "Refreshed category pages are live",
+      "Instructor payouts move to weekly runs",
+      "Dark mode is out of beta",
+    ],
+  },
+  {
+    slug: "q-and-a",
+    name: "Q&A",
+    description: "Learners helping learners across all courses",
+    accentColor: "violet",
+    visibility: "EVERYONE",
+    learnersCanStartThreads: true,
+    requiresModeratorApproval: false,
+    threadCount: 862,
+    postCount: 9410,
+    moderatorCount: 6,
+    subjects: [
+      "How do you keep momentum through a long module?",
+      "Stuck on the state management lesson",
+      "Best order to take the design courses in?",
+      "What does the grader actually check?",
+      "Anyone else find section 4 harder than section 5?",
+      "Recommended reading after the basics",
+      "How long did the capstone take you?",
+      "Is the quiz meant to be this fiddly?",
+    ],
+  },
+  {
+    slug: "challenges",
+    name: "Challenges",
+    description: "Weekly practice briefs set by instructors",
+    accentColor: "cyan",
+    visibility: "EVERYONE",
+    learnersCanStartThreads: true,
+    requiresModeratorApproval: false,
+    threadCount: 318,
+    postCount: 4220,
+    moderatorCount: 4,
+    subjects: [
+      "Weekly brief: redraw a landing page in greyscale",
+      "Weekly brief: ship a CLI in under 100 lines",
+      "Weekly brief: one chart, three audiences",
+      "Weekly brief: rewrite an error message",
+      "Weekly brief: a logo from two shapes",
+      "Weekly brief: refactor without changing behaviour",
+    ],
+  },
+  {
+    slug: "showcase",
+    name: "Showcase",
+    description: "Finished work and portfolio feedback",
+    accentColor: "green",
+    visibility: "ENROLLED_ONLY",
+    learnersCanStartThreads: true,
+    requiresModeratorApproval: false,
+    threadCount: 406,
+    postCount: 3180,
+    moderatorCount: 3,
+    subjects: [
+      "First finished piece from the illustration course",
+      "Portfolio review please — junior product designer",
+      "Built my first dashboard, feedback welcome",
+      "Six weeks of practice, side by side",
+      "Rebranded a local bakery as a course project",
+      "My capstone shipped to real users",
+    ],
+  },
+  {
+    slug: "instructor-lounge",
+    name: "Instructor Lounge",
+    description: "Private space for teaching staff",
+    accentColor: "amber",
+    visibility: "STAFF_ONLY",
+    learnersCanStartThreads: true,
+    requiresModeratorApproval: false,
+    threadCount: 96,
+    postCount: 1120,
+    moderatorCount: 2,
+    subjects: [
+      "How are you handling refund requests?",
+      "Recording setup that finally worked for me",
+      "Do you script your lessons or improvise?",
+      "Pricing a short course — what worked",
+      "Getting learners through the first module",
+    ],
+  },
+  {
+    slug: "rules-and-guidelines",
+    name: "Rules & Guidelines",
+    description: "Code of conduct and moderation policy",
+    accentColor: "red",
+    visibility: "EVERYONE",
+    learnersCanStartThreads: false,
+    requiresModeratorApproval: true,
+    threadCount: 8,
+    postCount: 64,
+    moderatorCount: 0,
+    subjects: [
+      "Community code of conduct",
+      "What gets a review removed",
+      "How to report a post",
+      "Appealing a moderation decision",
+      "Self-promotion policy",
+    ],
+  },
+]
+
+/**
+ * The five open reports behind the **Reported items** tile — community
+ * content, not the review queue's. `ReportTargetType` carries DISCUSSION and
+ * DISCUSSION_REPLY for exactly this, and keeping the two queues apart is what
+ * lets the Community page and `/dashboard/admin/reviews` each count their own
+ * work.
+ */
+export const communityReportSeeds: {
+  topicSlug: string
+  reason: "SPAM" | "ABUSIVE" | "SPOILERS" | "COPYRIGHT" | "OTHER"
+  note: string
+}[] = [
+  {
+    topicSlug: "q-and-a",
+    reason: "SPAM",
+    note: "Affiliate link dropped into an answer.",
+  },
+  {
+    topicSlug: "q-and-a",
+    reason: "ABUSIVE",
+    note: "Calls another learner names for asking a basic question.",
+  },
+  {
+    topicSlug: "showcase",
+    reason: "COPYRIGHT",
+    note: "Posted work appears to be a stock illustration, not their own.",
+  },
+  {
+    topicSlug: "challenges",
+    reason: "SPOILERS",
+    note: "Full solution posted before the brief closes.",
+  },
+  {
+    topicSlug: "announcements",
+    reason: "OTHER",
+    note: "Off-topic replies derailing the release note.",
+  },
+]

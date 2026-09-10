@@ -35,8 +35,7 @@ import type {
  * in the account menu — so a workspace toggle in this sidebar would offer a
  * third, contradictory way out of it.
  *
- * Dashboard, Reports, Audit Log, Users, Courses, Categories and Reviews exist
- * today. Every other row
+ * Everything but Promotions and Platform Settings exists today. Those two rows
  * carries `built: false`, which makes `NavRow` render it as inert text instead
  * of a link onto a 404 — the same flag `settingsNav` and `attentionQueues`
  * use. Flip each one as its page lands. The hrefs are already the ones
@@ -103,7 +102,7 @@ export const adminNav: DashboardNavGroup[] = [
         title: "Community",
         href: "/dashboard/admin/community",
         icon: MessagesSquareIcon,
-        built: false,
+        built: true,
       },
     ],
   },

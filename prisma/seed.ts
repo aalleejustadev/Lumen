@@ -43,6 +43,8 @@ import {
 } from "@/lib/config/instructor-profiles"
 import {
   categorySlugByBrowseCategory,
+  communityReportSeeds,
+  communityTopicSeeds,
   countryWeights,
   extraInstructorSeeds,
   featuredLearnerSeeds,
@@ -154,6 +156,8 @@ async function clearSeededRows() {
   const seeded = { id: { startsWith: SEED } }
 
   await db.contentReport.deleteMany({ where: seeded })
+  // Cascades to `discussion`, `discussion_reply` and `topic_moderator`.
+  await db.communityTopic.deleteMany({ where: seeded })
   await db.auditLog.deleteMany({ where: seeded })
   await db.refund.deleteMany({ where: seeded })
   await db.instructorEarning.deleteMany({ where: seeded })
@@ -1714,6 +1718,184 @@ async function seedAuditLog(
 }
 
 // ---------------------------------------------------------------------------
+// 12 · Community
+// ---------------------------------------------------------------------------
+
+/**
+ * The six topics, their threads, their moderators and the five open reports
+ * behind `/dashboard/admin/community`.
+ *
+ * **Replies are not materialised.** Each `Discussion` carries the
+ * denormalised `replyCount` its own schema note calls for, and the seed
+ * distributes each topic's `postCount - threadCount` across them rather than
+ * writing ~18,000 `DiscussionReply` rows nothing reads yet — the arrangement
+ * `Course.enrollmentCount` is already in. Write real replies when a thread
+ * view exists to draw them.
+ *
+ * Moderators are drawn from instructor accounts and the admins, and the pool
+ * is walked with a stride rather than sampled, so a person picks up a second
+ * topic only once every account has one — which is what keeps the distinct
+ * head-count near the assignment count and the export's own 18 close to both.
+ * Every admin moderates every topic, which is what renders **All topics** in
+ * the Scope column.
+ */
+async function seedCommunity(
+  learners: LearnerRow[],
+  instructors: Map<string, InstructorRow>,
+  admins: string[]
+) {
+  const topics: Prisma.CommunityTopicCreateManyInput[] = []
+  const discussions: Prisma.DiscussionCreateManyInput[] = []
+  const moderators: Prisma.TopicModeratorCreateManyInput[] = []
+  const reports: Prisma.ContentReportCreateManyInput[] = []
+
+  const instructorUserIds = [...instructors.values()].map((row) => row.userId)
+  const authorPool = learners.map((learner) => learner.id)
+  const staffPool = [...new Set([...instructorUserIds, ...admins])]
+  // **Learners can moderate**, which is not an assumption — the Moderators
+  // dialog's own "Add a moderator" list offers "Nadia Rahman · Student" and
+  // "Mei Tanaka · Student · top contributor". Staff lead the pool because the
+  // export's table is three instructors and an admin, and there are only nine
+  // staff accounts, so a staff-only pool could never reach the 18 distinct
+  // moderators its tile draws.
+  const trustedLearners = learners
+    .filter((learner) => learner.signedIn)
+    .slice(0, 14)
+    .map((learner) => learner.id)
+  const modPool = [...new Set([...staffPool, ...trustedLearners])]
+
+  // Where the next topic starts drawing from `modPool`, so assignments spread
+  // across accounts instead of piling onto the first few.
+  let modCursor = 0
+  /** The first discussion of each topic, for the report rows below. */
+  const firstDiscussionByTopic = new Map<string, string>()
+
+  for (const [index, seed] of communityTopicSeeds.entries()) {
+    const topicId = `${SEED}ct_${seed.slug}`
+
+    topics.push({
+      id: topicId,
+      slug: seed.slug,
+      name: seed.name,
+      description: seed.description,
+      accentColor: seed.accentColor,
+      visibility: seed.visibility,
+      learnersCanStartThreads: seed.learnersCanStartThreads,
+      requiresModeratorApproval: seed.requiresModeratorApproval,
+      order: index,
+      createdAt: ago((300 - index * 12) * DAY),
+    })
+
+    // --- threads -----------------------------------------------------------
+    // A staff-post-only topic is written by staff; everywhere else it is the
+    // learners, which is what the pill on the row is telling you.
+    const writers = seed.learnersCanStartThreads ? authorPool : staffPool
+    const replyBudget = Math.max(0, seed.postCount - seed.threadCount)
+    const base = Math.floor(replyBudget / Math.max(1, seed.threadCount))
+    let remainder = replyBudget - base * seed.threadCount
+
+    for (let n = 0; n < seed.threadCount; n += 1) {
+      const id = `${SEED}dsc_${seed.slug}_${pad(n, 4)}`
+      if (n === 0) firstDiscussionByTopic.set(seed.slug, id)
+
+      const subject = seed.subjects[n % seed.subjects.length]!
+      const pass = Math.floor(n / seed.subjects.length)
+      // A little jitter around the mean, settled up at the end so the topic
+      // hits its drawn post count exactly.
+      const extra = remainder > 0 && rng() < 0.4 ? 1 : 0
+      remainder -= extra
+
+      discussions.push({
+        id,
+        topicId,
+        authorId: pick(writers),
+        title: pass === 0 ? subject : `${subject} (${pass + 1})`,
+        body: `${subject} — opening the thread so we can keep the discussion in one place.`,
+        tags: [],
+        isPinned: n === 0 && !seed.learnersCanStartThreads,
+        replyCount: base + extra,
+        status: "PUBLISHED",
+        createdAt: ago(Math.floor(rng() * 280) * DAY + n * HOUR),
+      })
+    }
+    // Anything the jitter left unspent goes on the first thread, so
+    // `threads + sum(replyCount)` is exactly the export's post figure.
+    if (remainder > 0 && discussions.length > 0) {
+      const first = discussions[discussions.length - seed.threadCount]
+      if (first) first.replyCount = (first.replyCount as number) + remainder
+    }
+
+    // --- moderators --------------------------------------------------------
+    // `moderatorCount` is the **total** the export draws beside the row, not
+    // a number of extras: writing 3/6/4/3/2/0 is what reproduces its counts
+    // and, at zero, its **No moderators** state on Rules & Guidelines.
+    //
+    // A staff-only topic keeps a staff-only list: a learner who cannot see
+    // the Instructor Lounge cannot moderate it either. Admins take the first
+    // seat wherever there is one, so a single account accumulates the wide
+    // scope and the **Full control** permission set the export's admin row
+    // draws.
+    const pool = seed.visibility === "STAFF_ONLY" ? staffPool : modPool
+    const chosen: string[] = []
+    for (const adminId of admins) {
+      if (chosen.length >= seed.moderatorCount) break
+      if (pool.includes(adminId)) chosen.push(adminId)
+    }
+    while (chosen.length < seed.moderatorCount) {
+      const userId = pool[modCursor % pool.length]!
+      modCursor += 1
+      if (!chosen.includes(userId)) chosen.push(userId)
+    }
+
+    for (const [n, userId] of chosen.entries()) {
+      const isAdmin = admins.includes(userId)
+      moderators.push({
+        id: `${SEED}tm_${seed.slug}_${pad(n, 2)}`,
+        topicId,
+        userId,
+        canPin: true,
+        canLock: isAdmin || n % 3 !== 2,
+        canDelete: isAdmin || n % 2 === 0,
+        canSuspend: isAdmin,
+      })
+    }
+  }
+
+  for (const [index, seed] of communityReportSeeds.entries()) {
+    const targetId = firstDiscussionByTopic.get(seed.topicSlug)
+    if (!targetId) continue
+    const topic = communityTopicSeeds.find((row) => row.slug === seed.topicSlug)
+    reports.push({
+      id: `${SEED}crep_${index}`,
+      reporterId: pick(authorPool),
+      targetType: "DISCUSSION",
+      targetId,
+      targetLabel: `Thread in ${topic?.name ?? seed.topicSlug}`,
+      reason: seed.reason,
+      note: seed.note,
+      status: "OPEN",
+      createdAt: ago((1 + index) * DAY),
+    })
+  }
+
+  await db.communityTopic.createMany({ data: topics })
+  // Chunked: Postgres caps a statement at 65,535 bind parameters and these
+  // rows carry a dozen columns each, so ~1,800 of them go over in one insert.
+  for (let i = 0; i < discussions.length; i += 500) {
+    await db.discussion.createMany({ data: discussions.slice(i, i + 500) })
+  }
+  await db.topicModerator.createMany({ data: moderators })
+  await db.contentReport.createMany({ data: reports })
+
+  return {
+    topics: topics.length,
+    threads: discussions.length,
+    moderators: moderators.length,
+    reports: reports.length,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 
@@ -1760,6 +1942,13 @@ async function main() {
   console.log(`reviews           ${reviews}`)
 
   await seedApplications(learners, reviewerId)
+
+  const community = await seedCommunity(learners, instructors, admins)
+  console.log(
+    `community         ${community.topics} topics, ${community.threads} threads, ` +
+      `${community.moderators} moderator rows, ${community.reports} reports`
+  )
+
   await seedPayouts(instructors, netByInstructor)
   await seedUptime()
   const auditEntries = await seedAuditLog(
