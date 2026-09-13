@@ -1162,6 +1162,89 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     browser's); all six still run to two lines and the card height lands within
     1px, so the type is left at the system scale — the standing rule about not
     shrinking type to close an export gap.
+- `components/dashboard/help/` — the help-centre **article** page, built to
+  `ui-design/light/dashboard/student/help-center-article-page.png` and its
+  companion `help-center-article-sidebar.png`: `help-article-page.tsx` (the
+  composer), `help-article-rail.tsx` (the sticky right rail),
+  `help-article-feedback.tsx` (the one client piece). `lib/config/help-article.ts`
+  is the shape and the shared copy.
+  - **It is the shared template both modes render, and it knows about
+    neither.** The two help centres are one design over different words —
+    `HelpAudience` is a *column* in the schema rather than two tables, and
+    `HelpCategory`'s own note says the two draw "different six" topics — so the
+    component takes a resolved `HelpArticleView` and every mode-specific thing
+    in it (the words, where "Help Center" points, how a sibling article is
+    addressed) arrives as data from the route. It lives in
+    `components/dashboard/help/`, not under either mode's directory, for the
+    reason `sidebar-nav.tsx` lives where it does.
+  - **Only the instructor side is wired.** `app/(instructor)/dashboard/
+    instructor/help/[slug]` is the one route, over
+    `lib/config/instructor-help-articles.ts`. **There is no student help centre
+    at all** — not an index, not an article, and `/dashboard/help` in
+    `dashboardNav` has always been a link onto a 404 — so adding it is a second
+    route plus a content file, and nothing in the template changes. That is the
+    whole point of the split.
+  - **None of the content is the export's.** That drawing is a learner's
+    "Getting started with Lumen"; the layout is reproduced exactly and all
+    twelve articles are written for someone teaching, two per topic. They quote
+    rules the codebase actually enforces (two business days in review with
+    editing left open, the per-sale rate snapshot on `OrderItem.revenueShareBps`,
+    `InstructorEarning.clearsAt`, the payout schedule the instructor owns,
+    `admin-reviews.ts`' "never removed for being critical"). Where a figure
+    would date the prose — the share, the threshold — the sentence names the
+    screen that holds it instead, so an admin changing a platform default
+    cannot make an article wrong; the two places a number belongs are the FAQ
+    answers, which read it per request.
+  - **Sections are structured, not Markdown.** `HelpArticle.body` will hold
+    Markdown, and two things survive the move: the rail is derived from the
+    section list rather than stored, which is what that column's docstring
+    demands ("so the two can't disagree"), and a structured section can carry
+    the export's tip callout, which Markdown has no syntax for. Parse `body`
+    into these sections in the route when the table is populated.
+  - Measured off the exports at DPR 2 and verified against the render, which
+    lands within ±1px on every landmark from the breadcrumb to the body's third
+    line: the same **1000px centred column** the index uses, split **748px**
+    article + 32px gutter + **220px** rail. Prose is held to a **696px
+    measure** — the export's own, and the width its callout is drawn at — while
+    the two cards at the foot run the full 748; body copy at the full column
+    would run past 110 characters a line, and the cards are furniture rather
+    than prose. Type: 14px breadcrumb, **30px** `h1` (cap height 22px, matching
+    a 30px render exactly — *not* the 32px the other dashboard titles use),
+    13px meta, 17px/28 lead, 20px/700 section headings, **16px on a 27px
+    line** — the lead runs on 28 and the body on 27, consistently across all
+    four of the export's sections, so matching it is what stops a long article
+    drifting a pixel per line.
+  - **The rail is sticky, which is what the second export exists to specify.**
+    `lg:sticky lg:top-[86px] lg:self-start` — 70px of app bar plus 16px, the
+    offset `course-purchase-card.tsx` already uses — and `self-start` is
+    load-bearing for that file's own reason: Grid's default `align-items:
+    stretch` would make the rail as tall as the article, and an element as tall
+    as its scroll container can never stick. It also carries
+    `lg:mt-9.5`, because the export aligns its first heading with the `h1`
+    rather than the breadcrumb above it, and a `max-h`/`overflow-y-auto` for an
+    article whose contents list is taller than the viewport.
+  - **Anchors need `scroll-mt-[86px]` on the section**, or a jumped-to heading
+    lands underneath the sticky app bar. Verified: a contents link puts its
+    heading at 85.5px. (A link to a section near the end of a short article
+    lands lower simply because the document runs out of scroll — that is not
+    the offset failing.)
+  - **The topic cards on the index are links now, and their counts are real.**
+    Both were waiting on this route, as that card's own note said. The export's
+    drawn figures (7/16/12/9/8/6) are therefore not reproduced — a card cannot
+    advertise sixteen articles and open onto two — and the index's search now
+    matches an article's title and lead as well as the topic's own words. A
+    card opens its topic's first article rather than a topic index: there is no
+    export for one, and the rail lists the siblings. Build
+    `/dashboard/instructor/help/topic/[slug]` if a topic ever grows past a
+    handful.
+  - **Nothing records the "Was this article helpful?" answer.** There is no
+    vote model and no counter on `HelpArticle`, so the card swaps the pair for
+    a thank-you rather than pretending to file something — and deliberately
+    does not keep the answer in `localStorage`, which would be the same
+    illusion one layer down. Make it a Server Action and keep the swap when the
+    column lands. The two cards at the foot run 86px against the drawn 84.5
+    because the buttons are built at the app's 40px control baseline over the
+    export's 38px — the trade `courses-list.tsx` already made.
 - `components/dashboard/admin/reports/` — `/dashboard/admin/reports`, from
   `reports-page__admin.png`: `reports-stats.tsx` (the four-up KPI row),
   `revenue-chart-card.tsx` (client — recharts), `payout-runs-card.tsx` (client

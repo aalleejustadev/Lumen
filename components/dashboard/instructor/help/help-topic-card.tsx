@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import {
   instructorHelpCopy,
   type HelpTopic,
@@ -16,20 +18,34 @@ import {
  * measured at 0.156em here, and the standing note says not to add
  * `font-semibold` to a card title.
  *
- * **It is deliberately not a link.** There is no article model and no
- * `/dashboard/instructor/help/[topic]` route, and the export draws no chevron
- * or other affordance on these cards — so they read as the flat informational
- * blocks they are rather than promising a page that would 404, the rule the
- * inert sidebar rows follow. `HelpTopic.articles` documents what changes when
- * the articles land.
+ * **It is a link now that the articles exist**, which is what the earlier note
+ * here said would happen. It opens the topic's first article rather than a
+ * topic index: there is no export for a topic page, and the article's rail
+ * lists its siblings, so the rest of the topic is one click away. Build
+ * `/dashboard/instructor/help/topic/[slug]` if a topic ever holds enough
+ * articles for that to feel thin — nothing else has to change.
+ *
+ * `count` and `href` are passed in rather than read off `topic`, so this card
+ * stays ignorant of where the articles live — the composer resolves both.
  *
  * `mt-auto` on the count keeps it on the card's bottom edge: every
  * description in the export happens to run to two lines, so the column would
  * look identical without it right up until one of them wrapped to three.
  */
-function HelpTopicCard({ topic }: { topic: HelpTopic }) {
+function HelpTopicCard({
+  topic,
+  href,
+  count,
+}: {
+  topic: HelpTopic
+  href: string
+  count: number
+}) {
   return (
-    <div className="flex flex-col rounded-xl border bg-card p-5.5">
+    <Link
+      href={href}
+      className="flex flex-col rounded-xl border bg-card p-5.5 transition-colors hover:bg-hover"
+    >
       <div className="grid size-10.5 place-items-center rounded-lg bg-hover">
         <topic.icon className="size-4.5" />
       </div>
@@ -38,9 +54,9 @@ function HelpTopicCard({ topic }: { topic: HelpTopic }) {
         {topic.description}
       </p>
       <p className="mt-auto pt-3 text-[13px] leading-none text-subtle-foreground">
-        {instructorHelpCopy.articles(topic.articles)}
+        {instructorHelpCopy.articles(count)}
       </p>
-    </div>
+    </Link>
   )
 }
 

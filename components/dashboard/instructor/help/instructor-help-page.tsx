@@ -13,6 +13,7 @@ import {
   instructorHelpCopy,
   type HelpFacts,
 } from "@/lib/config/instructor-help"
+import { instructorHelpArticles } from "@/lib/config/instructor-help-articles"
 
 /**
  * `/dashboard/instructor/help`, built to
@@ -57,12 +58,34 @@ function InstructorHelpPage({ facts }: { facts: HelpFacts }) {
   const deferred = React.useDeferredValue(query)
   const faqs = React.useMemo(() => instructorFaqs(facts), [facts])
 
+  // Each topic resolved against the articles filed under it — the count the
+  // card shows and the article its link opens, both from one list so they
+  // cannot disagree. Search matches a topic's own words *and its articles*:
+  // a reader typing "payout" means the guide, not the category name.
+  const resolved = React.useMemo(
+    () =>
+      helpTopics.map((topic) => {
+        const articles = instructorHelpArticles.filter(
+          (entry) => entry.categorySlug === topic.slug
+        )
+        return {
+          topic,
+          count: articles.length,
+          href: articles[0]
+            ? `/dashboard/instructor/help/${articles[0].slug}`
+            : "/dashboard/instructor/help",
+          haystack:
+            `${topic.title} ${topic.description} ` +
+            articles.map((entry) => `${entry.title} ${entry.lead}`).join(" "),
+        }
+      }),
+    []
+  )
+
   const needle = deferred.trim().toLowerCase()
   const topics = needle
-    ? helpTopics.filter((topic) =>
-        `${topic.title} ${topic.description}`.toLowerCase().includes(needle)
-      )
-    : helpTopics
+    ? resolved.filter((entry) => entry.haystack.toLowerCase().includes(needle))
+    : resolved
   const questions = needle
     ? faqs.filter((faq) =>
         `${faq.question} ${faq.answer}`.toLowerCase().includes(needle)
@@ -115,8 +138,13 @@ function InstructorHelpPage({ facts }: { facts: HelpFacts }) {
               {instructorHelpCopy.topicsHeading}
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {topics.map((topic) => (
-                <HelpTopicCard key={topic.title} topic={topic} />
+              {topics.map((entry) => (
+                <HelpTopicCard
+                  key={entry.topic.slug}
+                  topic={entry.topic}
+                  href={entry.href}
+                  count={entry.count}
+                />
               ))}
             </div>
           </>

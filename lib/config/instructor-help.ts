@@ -27,60 +27,64 @@ import {
  */
 
 export type HelpTopic = {
+  /** Matches `HelpArticle.categorySlug`, which is what makes the count real. */
+  slug: string
   title: string
   description: string
   icon: LucideIcon
-  /**
-   * The export's own figure. There is no article model and no
-   * `/dashboard/instructor/help/[topic]` route yet, so this is the number the
-   * design draws rather than a count of rows — which is also why a topic card
-   * is not a link. Both become real together: give the topic a `href`, wrap
-   * the card in it, and count the articles.
-   */
-  articles: number
 }
 
-/** The six cards under "Browse by topic", in the order the export lays them out. */
+/**
+ * The six cards under "Browse by topic", in the order the export lays them out.
+ *
+ * **The article counts are no longer written here.** They were the export's
+ * own figures while there was nothing to count; now that
+ * `lib/config/instructor-help-articles.ts` exists they are derived from it, so
+ * the card cannot advertise sixteen articles and open onto two. The drawn
+ * numbers (7/16/12/9/8/6) are therefore not reproduced — the same reading the
+ * categories page's percentages and the community tiles settled, that a real
+ * figure beats a mock one.
+ */
 export const helpTopics: HelpTopic[] = [
   {
+    slug: "becoming-an-instructor",
     title: "Becoming an instructor",
     description:
       "Course requirements, the review process, and publishing your first course.",
     icon: RocketIcon,
-    articles: 7,
   },
   {
+    slug: "course-creation",
     title: "Course creation",
     description:
       "Building a curriculum, lesson types, quizzes, and reordering content.",
     icon: BookOpenIcon,
-    articles: 16,
   },
   {
+    slug: "teaching-and-students",
     title: "Teaching & students",
     description:
       "Answering Q&A, running discussions, and keeping cohorts engaged.",
     icon: UsersRoundIcon,
-    articles: 12,
   },
   {
+    slug: "earnings-and-payouts",
     title: "Earnings & payouts",
     description: "Revenue share, payout schedule, and fixing a failed payout.",
     icon: WalletIcon,
-    articles: 9,
   },
   {
+    slug: "pricing-and-coupons",
     title: "Pricing & coupons",
     description: "Setting a list price and running promotions that convert.",
     icon: TicketPercentIcon,
-    articles: 8,
   },
   {
+    slug: "policies-and-standards",
     title: "Policies & standards",
     description:
       "Content rights, accuracy rules, and how review disputes work.",
     icon: BadgeCheckIcon,
-    articles: 6,
   },
 ]
 
