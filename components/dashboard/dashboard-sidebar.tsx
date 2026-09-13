@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -12,84 +11,17 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar"
-import {
-  NavRow,
-  NavRowWithChildren,
-  RowTooltip,
-} from "@/components/dashboard/sidebar-nav"
+import { NavRow, NavRowWithChildren } from "@/components/dashboard/sidebar-nav"
+import { WorkspaceSwitch } from "@/components/dashboard/workspace-switch"
 import { SidebarUser } from "@/components/dashboard/sidebar-user"
 import { Logo } from "@/components/shared/logo"
 import { type MenuUser } from "@/lib/user"
-import {
-  dashboardNav,
-  workspaceModes,
-  type WorkspaceMode,
-} from "@/lib/config/dashboard"
+import { dashboardNav } from "@/lib/config/dashboard"
 import { plans } from "@/lib/config/pricing"
 import { siteConfig } from "@/lib/config/site"
-import { cn } from "@/lib/utils"
 
 /** Figures come from the pricing config so the two can't drift apart. */
 const business = plans.find((plan) => plan.id === "lumen-business")
-
-/**
- * Student / Instructor. Local state until instructor surfaces exist.
- *
- * Two controls, one visible at a time. Expanded it is a radiogroup with both
- * options; on the rail there is only room for one icon, and the useful one is
- * the mode you are *not* in — tapping it switches you, which is what the
- * export shows (a presentation icon while Student is active). A single
- * unchecked radio would be a strange thing to hand a screen reader, so the
- * rail gets its own button with a plain label instead.
- */
-function WorkspaceSwitch() {
-  const [mode, setMode] = React.useState<WorkspaceMode>("student")
-  const other =
-    workspaceModes.find((option) => option.value !== mode) ?? workspaceModes[1]
-
-  return (
-    <>
-      <div
-        role="radiogroup"
-        aria-label="Workspace"
-        className="mt-3.5 flex h-10 items-center rounded-full bg-track p-1 group-data-[collapsible=icon]:hidden"
-      >
-        {workspaceModes.map((option) => {
-          const selected = mode === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => setMode(option.value)}
-              className={cn(
-                "flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full text-[13px] font-semibold transition-colors",
-                selected
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <option.icon className="size-4" />
-              {option.label}
-            </button>
-          )
-        })}
-      </div>
-
-      <RowTooltip label={`Switch to ${other.label}`}>
-        <button
-          type="button"
-          onClick={() => setMode(other.value)}
-          aria-label={`Switch to ${other.label}`}
-          className="mx-auto mt-3.5 hidden size-9 cursor-pointer items-center justify-center rounded-lg bg-card text-foreground shadow-sm transition-colors group-data-[collapsible=icon]:flex hover:bg-hover"
-        >
-          <other.icon className="size-4" />
-        </button>
-      </RowTooltip>
-    </>
-  )
-}
 
 function UpgradeCard() {
   return (
@@ -123,10 +55,14 @@ function UpgradeCard() {
 function DashboardSidebar({
   user,
   isAdmin,
+  canTeach,
   navCounts,
 }: {
   user: MenuUser
   isAdmin?: boolean
+  /** Whether the switch offers Instructor — decided in the layout by
+   *  `canTeach`, the same answer the instructor shell's guard acts on. */
+  canTeach?: boolean
   /** Live row counts from the layout, keyed by href. A row that isn't listed
    *  keeps the placeholder `badge` from `lib/config/dashboard.ts`. */
   navCounts?: Record<string, number>
@@ -140,7 +76,7 @@ function DashboardSidebar({
           <Link href="/" aria-label={`${siteConfig.name} home`}>
             <Logo labelClassName="group-data-[collapsible=icon]:hidden" />
           </Link>
-          <WorkspaceSwitch />
+          <WorkspaceSwitch mode="student" canTeach={canTeach} />
         </SidebarHeader>
 
         {/* The promo card lives inside the scroll area rather than a fixed

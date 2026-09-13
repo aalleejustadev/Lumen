@@ -104,7 +104,14 @@ function NavRow({
       <span className="truncate group-data-[collapsible=icon]:hidden">
         {item.title}
       </span>
-      {badge ? (
+      {/* One trailing slot, two things that can sit in it. The tag wins when a
+          row carries both: it names the row, where a badge only counts what is
+          waiting in it, and the export never draws the two together. */}
+      {item.tag ? (
+        <span className="ml-auto rounded-full border border-success/50 px-2 py-0.5 text-[11px] leading-none font-medium text-success group-data-[collapsible=icon]:hidden">
+          {item.tag}
+        </span>
+      ) : badge ? (
         <span className="ml-auto text-[13px] text-subtle-foreground tabular-nums group-data-[collapsible=icon]:hidden">
           {badge}
         </span>

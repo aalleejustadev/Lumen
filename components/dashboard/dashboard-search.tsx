@@ -17,6 +17,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { CourseFeedbackDialog } from "@/components/dashboard/learning/course/course-feedback-dialog"
 import { browseCourses } from "@/lib/config/browse-courses"
 import { adminCommandPaletteGroups } from "@/lib/config/admin-nav"
+import { instructorCommandPaletteGroups } from "@/lib/config/instructor-nav"
 import { commandPaletteGroups } from "@/lib/config/dashboard"
 
 /**
@@ -33,10 +34,10 @@ import { commandPaletteGroups } from "@/lib/config/dashboard"
  * state and the `browseCourses` import feeding it — when the prompt becomes
  * automatic.
  *
- * `variant` picks which navigation the palette offers: the admin console gets
- * its own, since a palette that jumps to My Learning from inside the console
- * would quietly drop you out of admin mode, and rating a course has nothing to
- * do with the console either. It is a **string**, not the group list itself —
+ * `variant` picks which navigation the palette offers: the admin console and
+ * the instructor workspace each get their own, since a palette that jumps to
+ * My Learning from inside either one would quietly drop you back into the
+ * student shell, and rating a course has nothing to do with either. It is a **string**, not the group list itself —
  * both headers are Server Components, and every item in those lists carries a
  * `LucideIcon`, which is a function and cannot cross the server-client
  * boundary. So the lists are picked here, inside the client module, exactly as
@@ -45,11 +46,18 @@ import { commandPaletteGroups } from "@/lib/config/dashboard"
 function DashboardSearch({
   variant = "student",
 }: {
-  variant?: "student" | "admin"
+  variant?: "student" | "admin" | "instructor"
 } = {}) {
-  const admin = variant === "admin"
-  const groups = admin ? adminCommandPaletteGroups : commandPaletteGroups
-  const preview = !admin
+  const groups =
+    variant === "admin"
+      ? adminCommandPaletteGroups
+      : variant === "instructor"
+        ? instructorCommandPaletteGroups
+        : commandPaletteGroups
+  // The "Rate this course" preview is a *learner* action, so it hangs only
+  // off the student palette — rating a course has as little to do with
+  // teaching one as it does with administering the platform.
+  const preview = variant === "student"
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)

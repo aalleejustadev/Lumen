@@ -15,6 +15,13 @@ export const metadata: Metadata = {
  * marketing routes this is a dense app screen, so it runs the full content
  * width rather than the 1200px marketing column — `DashboardOverview` owns
  * the bento grid beneath the heading.
+ *
+ * The badge reads **Student mode** unconditionally. It used to say
+ * "Instructor mode" when `User.intent` was TEACHING, which was a stand-in for
+ * a mode that did not exist yet — and is now simply wrong: this is the student
+ * shell, instructor mode is its own route group at `/dashboard/instructor`,
+ * and `intent` is only the "I want to teach" box on the sign-up form. A pill
+ * naming the mode you are *not* in would be worse than none.
  */
 export default async function DashboardPage() {
   const session = await getSession()
@@ -30,7 +37,7 @@ export default async function DashboardPage() {
           className="h-6 gap-1.5 border-border bg-card px-2.5 font-medium text-foreground"
         >
           <span className="size-1.5 rounded-full bg-accent-2" />
-          {user.intent === "TEACHING" ? "Instructor mode" : "Student mode"}
+          Student mode
         </Badge>
       </div>
 

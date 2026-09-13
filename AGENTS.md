@@ -989,6 +989,179 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `app/(dashboard)/layout.tsx` rather than querying itself, and the admin
   header never renders the link at all. `access-admin-console__admin.png` does
   draw it for an admin — a deliberate divergence, per the same brief.
+- **Instructor mode is a third shell, in `app/(instructor)/`.** The
+  Student / Instructor control the sidebar exports draw is **navigation, not a
+  tab**: the two workspaces are two URLs — `/dashboard` and
+  `/dashboard/instructor` — so switching mode is a page load that re-runs a
+  server-side guard. That is the only arrangement in which changing mode can
+  change *permissions*; a `useState` toggle (which is what it was) could swap
+  the visible rows and nothing else. It is a route group of its own rather than
+  a layout nested under `(dashboard)`, for the reason the admin console's is:
+  a nested layout draws *inside* its parent's chrome, which would have wrapped
+  the student sidebar and app bar around it. The path is unchanged by the
+  group, so the hrefs are the plain ones the sidebar links at.
+  - **The guard is `canTeach` in `lib/instructor.ts`** — an `Instructor` row,
+    or the `instructor` role while a freshly approved application's profile is
+    still being written. The row rather than the role for the reason
+    `canBecomeInstructor` beside it already gives: that row is what the sale
+    and profile pages render, so its existence is what "is an instructor"
+    really means. **`User.intent` is deliberately not consulted** — that is the
+    "I want to teach" box on the sign-up form, a stated interest anyone can
+    tick, and letting it open the mode would make `InstructorApplication` and
+    the admin's approval queue decorative. **Admins are not automatically
+    instructors**: an admin with no teaching profile has no courses, no
+    students and no earnings, so the mode would be an empty workspace.
+  - **The layout guard and the switch read the same function**, so the control
+    can never offer a mode the guard would then refuse. `app/(dashboard)/
+    layout.tsx` passes the answer down as `canTeach`; a learner without a
+    profile still *sees* the Instructor half, drawn inert with a reason rather
+    than hidden — hiding half a two-item segmented control leaves a lone
+    "Student" pill that reads as a rendering fault. It is not linked to the
+    application flow because `/teach`, which the header's "Become an
+    Instructor" already points at, is not a built route.
+  - `notFound()` rather than a redirect, as in the console: a signed-in learner
+    who hand-edits the URL should not be able to tell "you may not see this"
+    from "there is nothing here". The session check runs first so someone
+    signed out is sent to sign in.
+  - `components/dashboard/workspace-switch.tsx` is the control, shared by both
+    sidebars the way `sidebar-nav.tsx` shares the rows — a change to it has to
+    land on both at once. It is a `nav` of links with `aria-current`, **not a
+    radiogroup**: a radio promises a form control that commits a value, where
+    these go to two pages. On the rail it collapses to the single icon of the
+    mode you are *not* in, which is what the exports draw.
+  - `instructor-sidebar.tsx` is the panel from
+    `instructor-dashboard-sidebar.png` and `instructor-header.tsx` the bar.
+    `lib/config/instructor-nav.ts` owns the navigation — four groups (Teach,
+    Audience, Business, General), a list of its own rather than a filter over
+    `dashboardNav` because the two shells share no rows at all. The header
+    drops the cart and the "Become an Instructor" link, for the reasons
+    `AdminHeader` gives about the console. **There is no "Exit instructor
+    mode" row** and no upgrade card: the switch *is* the way out (unlike the
+    console, which has none), and the promo sells a learner plan.
+  - **Only Dashboard and Notifications are built; the other twelve rows carry
+    an explicit `built: false`.** The flag defaults to *built*, so a row left
+    without it silently renders as a live link onto a 404 — which is exactly
+    what happened on the first pass and is worth knowing before adding a row.
+    Each unbuilt row has an export of its own waiting in
+    `ui-design/light/dashboard/instructor/`, and the hrefs listed there are
+    what those routes must be called.
+  - **The Settings row's four children point at
+    `/dashboard/instructor/settings/*`, not the learner's.** Those pages live
+    in the other shell and would drop you out of the mode, which is the leak
+    the whole arrangement exists to prevent. The sidebar **footer's** account
+    menu is still the learner's, though — every row in it (Profile, Account,
+    Billing, Help) is a personal-account surface that already exists, where the
+    instructor equivalents do not. Point it at an `instructorAccountMenu` when
+    those four land.
+  - `/dashboard/instructor/notifications` is real and needed no new machinery:
+    the feed has been audience-parameterised since it was built, and
+    `lib/config/notification-feed.ts` already carried the INSTRUCTOR category
+    vocabulary (Courses, Students, Messages, Community, Earnings) before the
+    route existed. `notifications-page.png` is the *instructor's* export, so
+    that page is finally rendering on the screen it was drawn for. The seed
+    writes no INSTRUCTOR rows yet, so it opens on its empty state.
+  - **The landing page is the export's heading row and a placeholder.** The
+    badge is the sibling of the other two modes' pills — sampled off
+    `instructor-dashboard.png`, its fill is the page ground (transparent, like
+    the console's rather than the student's `bg-card`) and its dot is #8a5cf5,
+    which is `--role-instructor` exactly. The bento grid beneath it is **not**
+    built: that export draws seven cards needing reads that do not exist
+    (`WatchTimeRollup`, lesson publication state, per-instructor revenue), and
+    inventing a different overview would be worse than saying where the work
+    stands.
+  - **`DashboardNavItem` gained `tag`** for the export's green outlined "New"
+    beside Create Course — a word rather than a count, and a separate field
+    from `badge` because the two are different things in one slot: a badge is
+    work waiting and is overridden by a live count from a layout, a tag is a
+    label on the row. The tag wins when a row somehow carries both.
+- **`/dashboard`'s mode pill now reads "Student mode" unconditionally.** It
+  said "Instructor mode" when `User.intent` was TEACHING, which was a stand-in
+  for a mode that did not exist — and is simply wrong now that one does: this
+  is the student shell, and a pill naming the mode you are *not* in is worse
+  than none.
+- `components/dashboard/instructor/help/` — `/dashboard/instructor/help`, from
+  `ui-design/light/dashboard/instructor/instructor-help-center-page.png`:
+  `help-topic-card.tsx` (one "Browse by topic" card), `help-faq-card.tsx` (the
+  accordion), `help-contact-cards.tsx` (the two at the foot), composed by
+  `instructor-help-page.tsx`. `lib/config/instructor-help.ts` is every word the
+  page says. Measured off that export at DPR 2 and verified against the render,
+  which lands within ±1.2px on every element: a **1000px content column,
+  centred** — capped like the settings and notification pages rather than the
+  console's full width — a 224px hero card on **40px** padding holding a
+  30px/800 title, a 15px lead and a **518 x 50** search field, then 20px/700
+  section headings on `mt-9 mb-4.5`, a three-up topic grid of 322px cards on a
+  16px gap, the FAQ card, and the two contact cards 24px below it.
+  Every colour in the export lands on an existing token **exactly**, sampled:
+  card `--card` inside a `--border` (#e9e9e6) hairline, icon tiles `--hover`
+  (#efefec), FAQ dividers `--border-subtle` (#f0f0ee), and the search field
+  filled with `--background` (#f4f4f3) so the page colour is what separates it
+  from the white card it sits on — the trick `settings-controls.ts` records,
+  and the reason its `dark:bg-background` and `md:text-[15px]` repeat variants
+  `Input` already carries.
+  Seven things decide what the page is:
+  - **The hero `h1` is the one heading here that keeps its base 800.** Its stem
+    measures 0.167em; the standing correction down to 700 is for *page titles*,
+    and this is a display heading. The two section headings measure ~0.15em and
+    do take the explicit `font-bold`.
+  - **The topic cards use 22px padding and the two contact cards 24px.** That
+    is not a slip — measured off hard edges (the icon tile in one, the button
+    in the other), the export really does differ by 2px between the two blocks.
+  - **A topic card is not a link.** There is no article model and no
+    `/dashboard/instructor/help/[topic]` route, and the export draws no chevron
+    or other affordance on them, so they render as the flat informational
+    blocks they are rather than promising a 404 — the rule every unbuilt
+    sidebar row follows. `HelpTopic.articles` says what changes when the
+    articles land: the counts are the export's figures, not a count of rows.
+  - **The FAQ answer carries an explicit `max-w-[640px]` measure, on the
+    paragraph rather than on `AccordionContent`.** The export wraps its one
+    drawn answer after "your changes are", which the full 952px content box
+    does not do — at 15px Figtree that line advances 626px and the next word
+    takes it to 674, so the measure sits between them. Padding alone will not
+    reproduce it (`course-feedback-dialog.tsx` records the same point about its
+    lead), and putting it on the padded box instead costs 44px of padding out
+    of the measure and breaks the line a word early, because `box-sizing:
+    border-box` is global.
+  - **The generated `Accordion` needed three corrections**, each by repeating
+    the variant rather than `!`: its chevron points down/up where the export
+    points **right when closed and down when open** (both built-ins hidden and
+    one `ChevronRight` redrawn with a 90° rotate, the swap
+    `course-content-card.tsx` makes); its trigger underlines on hover, wrong
+    for a row filling the card's width; and its item border is `--border`,
+    where the internal dividers must be `--border-subtle`. Base UI's prop for
+    one-at-a-time is **`multiple`**, not `openMultiple`.
+  - **The search field filters rather than decorating.** A field advertising
+    search that did nothing on Enter is the promise `dashboard-search.tsx`
+    refuses to make. The content is static config, so it is a client-side match
+    over the topics and over the questions **and their answers** — searching
+    "payout" should find the question that only says it in the answer. Nothing
+    is written to the URL, unlike the console's tables: this changes no rows,
+    so there is no query worth sharing. The contact cards sit outside the
+    filter, because "Still stuck?" is most useful when a search found nothing.
+  - **The answers quote facts the page reads, not numbers written into copy.**
+    A help page is where a platform states its own rules, so a revenue share or
+    a payout threshold spelled out in a sentence would be a second source of
+    truth free to drift from the one the money runs on. `instructorFaqs` takes
+    a `HelpFacts` and the route supplies it: the share and the support address
+    from the `PlatformSetting` singleton an admin edits at
+    `/dashboard/admin/settings/platform` (via `getPlatformSettings`, reused
+    from `lib/admin/settings.ts` rather than re-read — that singleton is
+    platform-wide rather than console-specific), and the payout day and minimum
+    from the **signed-in instructor's own** columns. The export draws only the
+    first answer, so the other four are written against rules the codebase
+    already enforces — `OrderItem.revenueShareBps`' per-sale snapshot,
+    `InstructorEarning.clearsAt`, and `admin-reviews.ts`' own "never removed
+    for being critical", so the moderation queue and this page cannot promise
+    instructors two different things.
+    Two more: **"Open Discussions" renders disabled** because
+    `/dashboard/instructor/discussions` does not exist — and the flag is read
+    off `instructorNav` rather than written down again, so the button lights up
+    on its own the day that row flips to `built: true`. **"Contact support" is
+    a `mailto:`** at the platform's configured address, for the reason
+    `user-row-actions.tsx` records. And the topic descriptions wrap a word
+    earlier than the export draws (its text shapes ~3% tighter than the
+    browser's); all six still run to two lines and the card height lands within
+    1px, so the type is left at the system scale — the standing rule about not
+    shrinking type to close an export gap.
 - `components/dashboard/admin/reports/` — `/dashboard/admin/reports`, from
   `reports-page__admin.png`: `reports-stats.tsx` (the four-up KPI row),
   `revenue-chart-card.tsx` (client — recharts), `payout-runs-card.tsx` (client

@@ -7,7 +7,7 @@ import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { getSession } from "@/lib/auth"
 import { getCartCount, getWishlistCount } from "@/lib/cart"
 import { getUnreadCount } from "@/lib/notification-feed"
-import { canBecomeInstructor } from "@/lib/instructor"
+import { canBecomeInstructor, canTeach } from "@/lib/instructor"
 
 /**
  * Everything under this group requires a session — the guard lives here rather
@@ -24,9 +24,11 @@ import { canBecomeInstructor } from "@/lib/instructor"
  * owns which rows carry a real number; anything unlisted keeps the
  * placeholder from `lib/config/dashboard.ts`.
  *
- * The admin console is **not** under this group — it has its own shell in
- * `app/(admin)/`, for the reason that layout explains — so nothing here needs
- * to know about admin mode beyond the account menu's "Admin console" row.
+ * Neither the admin console nor the instructor workspace is under this group —
+ * each has its own shell in `app/(admin)/` and `app/(instructor)/`, for the
+ * reason those layouts explain. So the only thing this one knows about the
+ * other two is which of them to *offer*: the account menu's "Admin console"
+ * row, and the sidebar's Student / Instructor switch.
  */
 export default async function DashboardLayout({
   children,
@@ -40,13 +42,22 @@ export default async function DashboardLayout({
   // shadcn's provider writes `sidebar_state` on every toggle; reading it here
   // is what makes the rail survive a reload.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
-  const [cartCount, wishlistCount, showInstructorCta, unreadNotifications] =
-    await Promise.all([
-      getCartCount(),
-      getWishlistCount(),
-      canBecomeInstructor(user),
-      getUnreadCount("LEARNER"),
-    ])
+  const [
+    cartCount,
+    wishlistCount,
+    showInstructorCta,
+    teaches,
+    unreadNotifications,
+  ] = await Promise.all([
+    getCartCount(),
+    getWishlistCount(),
+    canBecomeInstructor(user),
+    // Whether the sidebar's Student / Instructor switch offers its second
+    // half. The same function `app/(instructor)/layout.tsx` guards on, so the
+    // control cannot offer a mode the guard would then refuse.
+    canTeach(user),
+    getUnreadCount("LEARNER"),
+  ])
 
   return (
     <SidebarProvider
@@ -62,6 +73,7 @@ export default async function DashboardLayout({
       <DashboardSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
         isAdmin={user.role === "admin"}
+        canTeach={teaches}
         navCounts={{
           "/dashboard/wishlist": wishlistCount,
           // Omitted at zero rather than passed as 0: `NavRow` draws a badge

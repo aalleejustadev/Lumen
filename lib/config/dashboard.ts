@@ -26,6 +26,15 @@ export type DashboardNavItem = {
    *  Wishlist no longer has one: `wishlist_item` rows are real, so the layout
    *  counts them and passes the number down through `navCounts`. */
   badge?: number
+  /**
+   * A word rather than a count, drawn as an outlined pill at the trailing edge
+   * of the row — the green **New** beside Create Course in
+   * `instructor-dashboard-sidebar.png`. Separate from `badge` because the two
+   * are different things in the same slot: a badge is a quantity of work
+   * waiting, a tag is a label on the row itself, and only `badge` is ever
+   * overridden by a live count from a layout.
+   */
+  tag?: string
   items?: { title: string; href: string }[]
   /**
    * False when `href` has no route yet. `NavRow` renders such a row as inert
@@ -119,10 +128,31 @@ export const dashboardNav: DashboardNavGroup[] = [
   },
 ]
 
-/** The Student / Instructor switch above the navigation. */
+/**
+ * The Student / Instructor switch above the navigation.
+ *
+ * Each mode carries the URL it lands on, because the switch is **navigation,
+ * not a tab**: the two workspaces are separate route groups with separate
+ * shells, separate navigation and separate permissions — `app/(dashboard)/`
+ * and `app/(instructor)/` — so switching mode is a page load, and the mode you
+ * are in is a fact about the URL rather than a piece of client state. That is
+ * what makes it survive a reload, a shared link and the back button, and it is
+ * the only arrangement in which "changing the tab changes the permissions" can
+ * be true: a `useState` toggle cannot re-run a server-side guard.
+ */
 export const workspaceModes = [
-  { value: "student", label: "Student", icon: GraduationCapIcon },
-  { value: "instructor", label: "Instructor", icon: PresentationIcon },
+  {
+    value: "student",
+    label: "Student",
+    icon: GraduationCapIcon,
+    href: "/dashboard",
+  },
+  {
+    value: "instructor",
+    label: "Instructor",
+    icon: PresentationIcon,
+    href: "/dashboard/instructor",
+  },
 ] as const
 
 export type WorkspaceMode = (typeof workspaceModes)[number]["value"]
