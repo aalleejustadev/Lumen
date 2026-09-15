@@ -1107,6 +1107,18 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     revalidates `/dashboard` as a layout, which already covers this shell, so
     a new name or picture reaches the instructor sidebar's footer without a
     navigation.
+  - **`/dashboard/instructor/settings/account` is the learner's card too**,
+    from `account-page.png` — the arrangement
+    `/dashboard/admin/settings/account` already makes, and for its reason:
+    date of birth, language and time zone are properties of a *person's*
+    login, not of a learner, and one account holds every mode. Checked field
+    by field, the shipped form is already what that export draws, down to the
+    "Select language" and "(GMT+00:00) London" placeholders. **Its one
+    divergence is the export's Name field**, deliberately not reproduced:
+    Profile owns identity in every mode, `updateAccount` no longer writes
+    `name` at all, and neither the learner's nor the console's account card
+    draws it — that export predates the split, and reproducing it would put
+    the same value on two of this mode's own pages.
   - `/dashboard/instructor/notifications` is real and needed no new machinery:
     the feed has been audience-parameterised since it was built, and
     `lib/config/notification-feed.ts` already carried the INSTRUCTOR category

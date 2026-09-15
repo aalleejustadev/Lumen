@@ -26,10 +26,10 @@ export type InstructorSettingsNavItem = {
   /**
    * False until the route exists. `settings-nav-card.tsx` renders an unbuilt
    * row as inert text rather than a `Link` onto a 404 — the same flag
-   * `settingsNav`, `adminSettingsNav` and `instructorNav` all use. Profile is
-   * the only one built today; the other three have exports of their own
-   * waiting in `ui-design/light/dashboard/instructor/` (`account-page.png`,
-   * `payout-settings-page.png`, `notification-settings-page.png`).
+   * `settingsNav`, `adminSettingsNav` and `instructorNav` all use. Profile and
+   * Account are built; the other two have exports of their own waiting in
+   * `ui-design/light/dashboard/instructor/` (`payout-settings-page.png`,
+   * `notification-settings-page.png`).
    */
   built: boolean
 }
@@ -59,7 +59,7 @@ export const instructorSettingsNav: InstructorSettingsNavItem[] = [
     title: "Account",
     href: "/dashboard/instructor/settings/account",
     icon: ShieldCheckIcon,
-    built: false,
+    built: true,
   },
   {
     title: "Payout settings",
