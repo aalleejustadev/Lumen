@@ -57,6 +57,7 @@ import {
   pendingCourseSeeds,
   promotionOptOutInstructorSlugs,
   promotionSeeds,
+  couponSeeds,
   instructorThreadSeeds,
   learnerThreadSeeds,
   reportedReviewSeeds,
@@ -185,6 +186,9 @@ async function clearSeededRows() {
   await db.payoutRun.deleteMany({ where: seeded })
   await db.payoutMethod.deleteMany({ where: seeded })
   await db.user.deleteMany({ where: seeded })
+  // Cascades from `Course` anyway, but spelled out: `Order.coupon` is SetNull,
+  // so an order that used a seeded code would otherwise outlive it silently.
+  await db.coupon.deleteMany({ where: seeded })
   await db.course.deleteMany({ where: seeded })
   await db.instructor.deleteMany({ where: seeded })
   // **Categories are deliberately not cleared.** They are no longer seeded —
@@ -909,6 +913,102 @@ async function seedSessions(learners: LearnerRow[]) {
 }
 
 // ---------------------------------------------------------------------------
+// 6 · Coupons
+// ---------------------------------------------------------------------------
+
+type CouponRowSeed = {
+  id: string
+  courseId: string
+  instructorId: string
+  priceCents: number
+  startsAt: Date
+  endsAt: Date | null
+  redemptionLimit: number | null
+}
+
+/**
+ * The discount codes behind `coupons-page__main.png`.
+ *
+ * Written **before** the purchases, which is the whole point: a redemption is
+ * an order, not a counter, so `seedPurchases` needs the codes in hand to
+ * attach them to real sales. `CouponRedemption`'s own docstring demands
+ * exactly that — "both sums over rows, never counters that can drift from the
+ * orders they claim to describe" — so nothing here invents a redemption total.
+ *
+ * `resultingPriceCents` is computed with the same formula
+ * `lib/actions/instructor-coupons.ts` uses, so a seeded coupon and one an
+ * instructor creates by hand cannot price the same discount two ways. A
+ * FIXED_PRICE code stores the price it was given and derives the percentage,
+ * which is the direction that action runs it in too.
+ */
+async function seedCoupons(
+  courses: CourseRow[],
+  listPriceBySlug: Map<string, number>
+) {
+  const bySlug = new Map(courses.map((course) => [course.slug, course]))
+  const data: Prisma.CouponCreateManyInput[] = []
+  const rows: CouponRowSeed[] = []
+
+  for (const seed of couponSeeds) {
+    const course = bySlug.get(seed.courseSlug)
+    const listPrice = listPriceBySlug.get(seed.courseSlug)
+    if (!course || !listPrice) continue
+
+    const resultingPriceCents =
+      seed.discountType === "FIXED_PRICE"
+        ? cents(seed.price)
+        : Math.round((listPrice * (100 - seed.percentOff)) / 100)
+    const percentOff =
+      seed.discountType === "FIXED_PRICE"
+        ? Math.round(((listPrice - resultingPriceCents) / listPrice) * 100)
+        : seed.percentOff
+
+    const id = `${SEED}cp_${seed.code.toLowerCase()}`
+    // **Never before the course it discounts was published.** The offsets
+    // above are chosen for the shape of the table, and the catalog publishes
+    // over two years — so without this clamp a long-running code lands on a
+    // course that did not exist yet, which is the one kind of demo data that
+    // reads as broken.
+    const wanted = ago(-seed.startsInDays * DAY)
+    const startsAt = wanted < course.publishedAt ? course.publishedAt : wanted
+    const endsAt = seed.endsInDays === null ? null : ago(-seed.endsInDays * DAY)
+    // An end date the clamp has just overtaken would leave a coupon that
+    // expired before it began; skip it rather than write a contradiction.
+    if (endsAt && endsAt <= startsAt) continue
+
+    data.push({
+      id,
+      code: seed.code,
+      courseId: course.id,
+      instructorId: course.instructorId,
+      discountType: seed.discountType,
+      percentOff,
+      resultingPriceCents,
+      redemptionLimit: seed.redemptionLimit,
+      startsAt,
+      endsAt,
+      // Not `startsAt`: a *scheduled* coupon starts in the future, and a row
+      // created after it exists is a contradiction — it is also what the list
+      // orders on, which would put the one coupon nobody can use yet at the
+      // top of the page.
+      createdAt: startsAt > NOW ? ago(3 * DAY) : startsAt,
+    })
+    rows.push({
+      id,
+      courseId: course.id,
+      instructorId: course.instructorId,
+      priceCents: resultingPriceCents,
+      startsAt,
+      endsAt,
+      redemptionLimit: seed.redemptionLimit,
+    })
+  }
+
+  await db.coupon.createMany({ data })
+  return rows
+}
+
+// ---------------------------------------------------------------------------
 // 7 · Orders, enrolments and the earnings ledger
 // ---------------------------------------------------------------------------
 
@@ -920,13 +1020,40 @@ type EnrollmentRow = {
   paidAt: Date
 }
 
-async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
+async function seedPurchases(
+  learners: LearnerRow[],
+  courses: CourseRow[],
+  coupons: CouponRowSeed[]
+) {
   const orders: Prisma.OrderCreateManyInput[] = []
   const items: Prisma.OrderItemCreateManyInput[] = []
   const earnings: Prisma.InstructorEarningCreateManyInput[] = []
+  const redemptions: Prisma.CouponRedemptionCreateManyInput[] = []
   const enrollments: EnrollmentRow[] = []
   const netByInstructor = new Map<string, number>()
+  const redeemed = new Map<string, number>()
   let orderIndex = 0
+
+  /**
+   * A coupon this order could actually have used.
+   *
+   * Three conditions, and each is the real rule rather than a convenience:
+   * the code has to be for **this** course, it has to have been live on the
+   * day of the sale (a coupon cannot be redeemed before it starts or after it
+   * ends), and it has to have room left under its own `redemptionLimit`. The
+   * last one is what stops the table drawing "212 / 150".
+   */
+  function couponFor(courseId: string, paidAt: Date) {
+    const usable = coupons.filter(
+      (coupon) =>
+        coupon.courseId === courseId &&
+        coupon.startsAt <= paidAt &&
+        (coupon.endsAt === null || coupon.endsAt >= paidAt) &&
+        (coupon.redemptionLimit === null ||
+          (redeemed.get(coupon.id) ?? 0) < coupon.redemptionLimit)
+    )
+    return usable.length === 0 ? null : pick(usable)
+  }
 
   for (const learner of learners) {
     const basket = Number(
@@ -964,33 +1091,87 @@ async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
     const subtotal = chosen.reduce((sum, course) => sum + course.priceCents, 0)
     const orderId = `${SEED}o_${pad(orderIndex++, 5)}`
 
+    /**
+     * **A coupon discounts one item, not the whole basket.**
+     *
+     * `Order.couponId`'s own note says at most one of *coupon or promotion*
+     * applies to an order — not that the order must hold one course. A code is
+     * issued by an instructor for a specific course, so it comes off that item
+     * and the rest of the basket pays list, which is what a real checkout
+     * does. `couponCourseId` is the item it lands on.
+     */
+    let coupon: CouponRowSeed | null = null
+    let couponCourseId: string | null = null
+    // Most people who could use a code do; the rest pay list, so the table
+    // ends up with coupons that are busy and coupons that are barely touched.
+    if (rng() < 0.62) {
+      for (const course of chosen) {
+        const candidate = couponFor(course.id, paidAt)
+        if (candidate) {
+          coupon = candidate
+          couponCourseId = course.id
+          break
+        }
+      }
+    }
+    const amountTotal = chosen.reduce(
+      (sum, course) =>
+        sum +
+        (coupon && course.id === couponCourseId
+          ? coupon.priceCents
+          : course.priceCents),
+      0
+    )
+
     orders.push({
       id: orderId,
       userId: learner.id,
       stripeSessionId: `cs_test_${orderId}`,
       stripePaymentIntentId: `pi_test_${orderId}`,
       status: "PAID",
-      amountTotal: subtotal,
+      amountTotal,
       subtotalCents: subtotal,
+      discountCents: subtotal - amountTotal,
+      couponId: coupon ? coupon.id : null,
       email: learner.email,
       createdAt: paidAt,
       paidAt,
     })
 
+    if (coupon) {
+      redeemed.set(coupon.id, (redeemed.get(coupon.id) ?? 0) + 1)
+      redemptions.push({
+        id: `${orderId}_r`,
+        couponId: coupon.id,
+        orderId,
+        userId: learner.id,
+        discountCents: subtotal - amountTotal,
+        createdAt: paidAt,
+      })
+    }
+
     for (const [itemIndex, course] of chosen.entries()) {
       const itemId = `${orderId}_i${itemIndex}`
+      // What the learner actually paid for this course. The dialog's callout
+      // promises the instructor's share is taken on the discounted price, and
+      // this is the row that has to make that true — for the discounted item
+      // only, since the rest of the basket paid list.
+      const paidCents =
+        coupon && course.id === couponCourseId
+          ? coupon.priceCents
+          : course.priceCents
       items.push({
         id: itemId,
         orderId,
         courseSlug: course.slug,
         courseId: course.id,
         title: course.title,
-        unitAmount: course.priceCents,
+        unitAmount: paidCents,
         instructorId: course.instructorId,
         revenueShareBps: REVENUE_SHARE_BPS,
       })
 
-      const net = Math.round((course.priceCents * REVENUE_SHARE_BPS) / 10000)
+      const net = Math.round((paidCents * REVENUE_SHARE_BPS) / 10000)
       const clearsAt = new Date(paidAt.getTime() + 30 * DAY)
       earnings.push({
         id: `${SEED}e_${pad(earnings.length, 6)}`,
@@ -998,8 +1179,8 @@ async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
         courseId: course.id,
         orderItemId: itemId,
         source: "SALE",
-        grossCents: course.priceCents,
-        platformFeeCents: course.priceCents - net,
+        grossCents: paidCents,
+        platformFeeCents: paidCents - net,
         netCents: net,
         // Cleared and old enough to have been swept up by one of the monthly
         // runs below; cleared but recent; or still inside its 30 days.
@@ -1079,6 +1260,9 @@ async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
 
   await db.order.createMany({ data: orders })
   await db.orderItem.createMany({ data: items })
+  // After the orders they point at: `CouponRedemption.order` is a required
+  // relation, so the rows cannot exist before the sale they record.
+  await db.couponRedemption.createMany({ data: redemptions })
   await db.instructorEarning.createMany({ data: earnings })
   await db.refund.createMany({ data: refunds })
 
@@ -1105,6 +1289,7 @@ async function seedPurchases(learners: LearnerRow[], courses: CourseRow[]) {
   return {
     enrollments,
     netByInstructor,
+    redemptionCount: redemptions.length,
     orderCount: orders.length,
     refundCount: refunds.length,
   }
@@ -2431,9 +2616,25 @@ async function main() {
   await seedPendingCourses(categories, instructors, reviewerId)
   console.log(`queued courses    ${pendingCourseSeeds.length}`)
 
-  const { enrollments, netByInstructor, orderCount, refundCount } =
-    await seedPurchases(learners, courses)
-  console.log(`orders            ${orderCount} (${refundCount} refunded)`)
+  // Before the purchases, not after: a redemption is an order, so the codes
+  // have to exist for `seedPurchases` to attach them to real sales. See
+  // `seedCoupons`.
+  const listPriceBySlug = new Map(
+    browseCourses.map((course) => [course.slug, cents(course.listPrice)])
+  )
+  const coupons = await seedCoupons(courses, listPriceBySlug)
+  console.log(`coupons           ${coupons.length}`)
+
+  const {
+    enrollments,
+    netByInstructor,
+    orderCount,
+    refundCount,
+    redemptionCount,
+  } = await seedPurchases(learners, courses, coupons)
+  console.log(
+    `orders            ${orderCount} (${refundCount} refunded, ${redemptionCount} used a coupon)`
+  )
   console.log(`enrolments        ${enrollments.length}`)
 
   const reviews = await seedReviews(enrollments, courses, instructors)

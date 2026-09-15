@@ -1700,20 +1700,29 @@ enum SubscriptionInterval {
 /// "You can run up to three active coupons at a time" is a rule about how many
 /// rows may overlap in time, not a column — enforced in the action.
 model Coupon {
-  id                  String     @id @default(cuid())
-  code                String     @unique
+  id                  String                @id @default(cuid())
+  code                String                @unique
   courseId            String
-  course              Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course              Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
   instructorId        String
-  instructor          Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  instructor          Instructor            @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  /// Which of the dialog's two radio cards was chosen —
+  /// `create-coupon__dialog.png` offers "Percentage off" and "Fixed price",
+  /// and both columns below are written either way (a percentage coupon
+  /// snapshots the resulting price, a fixed-price one snapshots the percentage
+  /// it worked out to), so without this there is nothing to re-open the Edit
+  /// dialog *on*. It reuses `PromotionDiscountType` rather than declaring a
+  /// second enum: the two members mean exactly what they mean over there, the
+  /// call `instructorNotifyAbout` makes with `NotifyAbout`.
+  discountType        PromotionDiscountType @default(PERCENT)
   percentOff          Int
   /// The resulting price, snapshotted when the coupon is created — the table
   /// draws both "40% off" and "$59.99", and the list price can move afterwards.
   resultingPriceCents Int
   redemptionLimit     Int?
-  startsAt            DateTime   @default(now())
+  startsAt            DateTime              @default(now())
   endsAt              DateTime?
-  createdAt           DateTime   @default(now())
+  createdAt           DateTime              @default(now())
 
   redemptions CouponRedemption[]
   orders      Order[]

@@ -3,22 +3,26 @@ import type { LucideIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
 
 /**
- * The console's **count** tile: a 44px tinted square, with the figure and its
- * label stacked beside it, and no delta.
+ * The dashboard's **count** tile: a 44px tinted square, with the figure and
+ * its label stacked beside it, and no delta.
  *
  * **Not `admin-stat-card.tsx`.** That one is Platform Overview's and Reports'
  * — a small icon beside a label, with the figure and a month-over-month delta
- * on the line below. This is the other shape the console draws, and two pages
- * now draw it: `users-page__admin.png` and `community-page__admin.png`, whose
- * cards measure identically (80px tall, 20px inset, 44px tile, 16px gap
- * between four across the content width). It lives here for the reason
- * `admin-stat-card.tsx` does — one geometry, so a change lands on both at
- * once, and neither page stops matching its own export.
+ * on the line below. This is the other shape, and **three** exports across two
+ * shells now draw it identically (80px tall, 20px inset, 44px tile, 16px gap
+ * between four across the content width): `users-page__admin.png`,
+ * `community-page__admin.png` and the instructor's `coupons-page__main.png`.
  *
- * It is deliberately *not* shared with the student `learning-stat-card.tsx`,
- * which arrived at the same anatomy from a different export: an admin page
- * reaching into `components/dashboard/learning/` would tie these headers to a
- * redesign of a learner surface they have nothing to do with.
+ * It started life in `components/dashboard/admin/` when the second console
+ * page needed it. The third caller is in the *instructor* shell, which is why
+ * it sits here now rather than there: reaching across a shell boundary for a
+ * header would tie this page to a redesign of the console, which is exactly
+ * the coupling the note below refuses in the other direction.
+ *
+ * It is still deliberately *not* shared with the student
+ * `learning-stat-card.tsx`, which arrived at the same anatomy from a different
+ * export — that one is a tinted tile on a white card rather than this card's
+ * own inverse, and the two exports are free to diverge.
  *
  * `p-5 py-4.5` is 20px sides against 18px top and bottom, which is what lands
  * the card on the **80px** both exports measure — `p-5` alone renders 84.
@@ -33,7 +37,7 @@ import { Card } from "@/components/ui/card"
  * at the default leadings the text block is taller than the tile and the row
  * grows past what is drawn.
  */
-function AdminCountCard({
+function CountCard({
   icon: Icon,
   value,
   label,
@@ -57,4 +61,4 @@ function AdminCountCard({
   )
 }
 
-export { AdminCountCard }
+export { CountCard }

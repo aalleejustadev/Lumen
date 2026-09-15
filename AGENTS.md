@@ -2259,6 +2259,125 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   the export's own shape by construction: 12 rows, **4 unread**, four
   categories showing a count of 1 and Billing showing none, and one actor row
   with a pending Accept/Decline.
+- `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
+  from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
+  `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New
+  coupon button, the tabs, the course filter, the table, the pager and the
+  dialog's open state, since one dialog serves both that button and every
+  row's Edit), `coupon-dialog.tsx`, `coupons-stats.tsx` (a Server Component
+  passed in as `children`, so four cards and their icons stay off the bundle —
+  `community-page.tsx`' arrangement), `coupons-format.ts`, composed by
+  `coupons-page.tsx`. `lib/instructor-coupons.ts` reads,
+  `lib/config/instructor-coupons.ts` is every word the page says, and
+  `lib/actions/instructor-coupons.ts` is the two writes. **Nothing on it is
+  demo data** — `Coupon` and `CouponRedemption` were already shaped for these
+  exports, docstrings and all, and `CouponRedemption`'s own note dictates how
+  the figures are made ("both sums over rows, never counters that can drift
+  from the orders they claim to describe").
+  Measured off the exports at DPR 2 and verified against the render: the
+  instructor shell's usual page inset, a four-up KPI row of 364px cards on a
+  16px gap, a **42px** segmented track (`--track`, `p-1`, the dark pill inside)
+  opposite a 42px course filter, then a zero-padding card whose 43px header
+  sits over **72px** rows divided by `--border-subtle`, cells inset 20px, a 6px
+  redemption bar 196px wide with its counter 12px past the end, and a 53 x 33
+  bordered Edit. The dialog is **540px on 30px padding** (a 478px content
+  column), 44px `--background` fields, two 66px discount cards on a 10px gap,
+  a 232/232 field grid on a 14px gutter, a 70px callout and a 40px submit.
+  - **It needed one migration and only one**: `Coupon.discountType`, reusing
+    `PromotionDiscountType` rather than declaring a second enum, because its
+    two members mean exactly what they mean over there — the call
+    `instructorNotifyAbout` makes with `NotifyAbout`. Both `percentOff` and
+    `resultingPriceCents` are written whichever card was chosen (the table
+    draws "40% off" *and* "$59.99" on one row), so without a discriminator
+    there is nothing for the Edit dialog to re-open **on**.
+  - **Status is read off the clock, never stored** — the call `Promotion`
+    already makes. A coupon at its redemption limit stays **Active**, which is
+    what the export draws (EARLYBIRD, 148/150): exhaustion is a different fact
+    from expiry, and the redemption cell is where it shows.
+  - **Revenue is `redemptions × resultingPriceCents`.** That column exists
+    because "the list price can move afterwards" (the model's own note), so it
+    is the only figure that still means what it meant on the day of the sale.
+    The export's own rows reconcile with no single definition — three of its
+    four match redemptions × price and LAUNCH40 does not — so one definition
+    wins, the reading the Categories page's percentages settled. **"Avg.
+    discount given" is weighted by redemptions**, because it is what was
+    *given*: a code used 212 times has to count 212 times.
+  - **The four KPI figures ignore the tabs and the course filter.** They
+    describe the whole coupon programme, and a headline that moved every time
+    somebody opened a tab would be measuring the filter.
+  - **Rows are ordered active, then scheduled, then expired — newest first
+    inside each.** The export's five rows are in no order any column produces
+    (their end dates run 30 Sep, 12 Sep, 18 Oct, 05 Nov), so there is nothing
+    to reproduce; this is the order that matches what the page is *for*.
+    Sorting purely by recency put the one coupon nobody can use yet on top.
+    It is done in JS because status is derived from the clock, and the list is
+    already read whole for the KPI cards, so the sort is free.
+  - **"Up to three active coupons per course" is enforced, not just stated.**
+    The dialog's lead says it out loud, and a sentence in a dialog that nothing
+    checks is the promise this codebase refuses to make elsewhere. It counts by
+    the clock the same way the pill is derived, so the number somebody is
+    refused on is the number the Active tab shows; expired and scheduled codes
+    do not count. Verified through the UI — the third was created, the fourth
+    refused and nothing written.
+  - **The export's "Cancel" is not reproduced**, per the standing dialog rule —
+    that export draws a close X of its own, so a second control whose only job
+    is to dismiss is the redundancy the payout-run dialog had removed.
+  - **The callout computes its own figures** from the form's live values rather
+    than carrying them in the sentence. It states a real rule — the
+    instructor's share is taken on what the learner actually paid — and a
+    number written into copy would be a second source of truth free to drift
+    from `OrderItem.revenueShareBps`. The share itself comes from the
+    `PlatformSetting` singleton through `getPlatformSettings`, the same read
+    the Help Center's FAQ answers use.
+  - **Use the repo's `Table`, not a hand-rolled one.** Rolled by hand, the
+    900px table escaped its own `overflow-x-auto` wrapper and gave the *page* a
+    horizontal scrollbar at phone width — `min-w-0` on the wrapper did not fix
+    it, and the shipped Users and Community tables (measured against, both
+    clean at 400px) differ only in using the primitive. Worth knowing because
+    the wrapper reported `overflow-x: auto` at 352px and its own scrolling
+    worked; only `document.scrollWidth` gave it away.
+- **`components/dashboard/count-card.tsx` is the dashboard's shared count
+  tile**, and it used to be `components/dashboard/admin/admin-count-card.tsx`.
+  **Three** exports across two shells now draw it identically — 80px tall, 20px
+  inset, a 44px tile, four across on a 16px gap — so `users-page__admin.png`
+  and `community-page__admin.png` are joined by the instructor's
+  `coupons-page__main.png`. It moved out of the console's directory for the
+  reason its own note refuses in the other direction: an instructor page
+  reaching into `components/dashboard/admin/` would tie a header to a redesign
+  of the console. It is still **not** shared with the student
+  `learning-stat-card.tsx`, which reached the same anatomy from a different
+  export and inverts the tile and the card.
+- **The seed writes coupons, and writes them _before_ the purchases**
+  (`seedCoupons`, from `couponSeeds`). That order is the whole point: a
+  redemption is an **order**, not a counter, so `seedPurchases` takes the codes
+  and attaches them to real sales — `Order.couponId`, `Order.discountCents`,
+  the item's discounted `unitAmount`, an `InstructorEarning` computed on the
+  discounted price, and a `CouponRedemption` row. Five things about it:
+  - **A coupon discounts one item, not the basket.** `Order.couponId`'s note
+    says at most one of *coupon or promotion* applies to an order, not that the
+    order holds one course — so the code comes off the item it was issued for
+    and the rest pays list, which is what a real checkout does.
+  - **A coupon never starts before its course was published.** The offsets are
+    chosen for the shape of the table and the catalog publishes over two years,
+    so `seedCoupons` clamps `startsAt` to `publishedAt` — without it a
+    long-running code lands on a course that did not exist yet, which is the
+    one kind of demo data that reads as broken. It is what moved the expired
+    code off `icon-design-fundamentals`, which publishes twelve days before the
+    run.
+  - **A scheduled coupon's `createdAt` is not its `startsAt`.** That would be a
+    row created in the future, and it is also what the list falls back to for
+    ties.
+  - **Dates are offsets from the run, never literals** — the reason
+    `seedNotifications` gives. The export was drawn when "today" sat before
+    12 Sep 2026, so its own EARLYBIRD row is Active with an end date that has
+    since passed.
+  - **The redemption limits are scaled to this seed, not copied.** The export's
+    caps run 150–500 against a platform doing ~400 orders in total, which would
+    leave every bar 3% full and saying nothing; the cap is the instructor's own
+    choice, so the honest version is one somebody running this catalog would
+    set. The counts underneath are real either way. **Eight of the eleven codes
+    are Simon Simorangkir's**, so his page lands on the export's own footer
+    exactly — "Showing 1–5 of 8 coupons", across two pages.
 - `components/dashboard/messages/` — the **Messages** surface, shared by the
   learner's `/dashboard/messages` and the instructor's
   `/dashboard/instructor/messages`. Built to

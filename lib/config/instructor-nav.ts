@@ -126,10 +126,14 @@ export const instructorNav: DashboardNavGroup[] = [
         built: false,
       },
       {
+        // Real: `Coupon` and `CouponRedemption` were already shaped for
+        // `coupons-page__main.png`, so the surface needed only a
+        // `discountType` column — see `lib/instructor-coupons.ts`. It carries
+        // no badge: a count of discount codes is not work waiting on anybody.
         title: "Coupons",
         href: "/dashboard/instructor/coupons",
         icon: TicketPercentIcon,
-        built: false,
+        built: true,
       },
     ],
   },

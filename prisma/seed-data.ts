@@ -1549,3 +1549,181 @@ export const learnerThreadSeeds: {
     ],
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Coupons
+// ---------------------------------------------------------------------------
+
+/**
+ * The discount codes behind
+ * `ui-design/light/dashboard/instructor/coupons-page__main.png`.
+ *
+ * Dates are **offsets in days from the run**, never literals, for the reason
+ * `seedNotifications` gives about its own times: the export was drawn when
+ * "today" sat before 12 Sep 2026, so its EARLYBIRD row is Active with an end
+ * date that has since passed. Offsets keep the mix the page needs — several
+ * running, one scheduled, one expired — whenever the seed happens to be run.
+ *
+ * **Eight of them belong to Simon Simorangkir**, whose six courses are the
+ * ones the instructor surfaces demo against, so his page lands on the export's
+ * own footer exactly: "Showing 1–5 of 8 coupons", across two pages. The last
+ * three go to other instructors so the table is not a Simon-only fixture, and
+ * so the course filter has something to filter.
+ *
+ * Two of the export's rows keep their codes and lose their prices:
+ * `PYTHON30` and `REACTPRO` are drawn at $62.99 and $64.99, which imply list
+ * prices the shipped catalog does not have ($89.99 and $99.99 against its
+ * $84.99 and $89.99). The catalog wins, the call the admin Categories page's
+ * percentages already settled — so the discount is reproduced and the price is
+ * whatever it really works out to.
+ *
+ * `startsAt` sits well in the past on every running code on purpose: a coupon
+ * can only be redeemed by an order placed while it was live, and the seeded
+ * orders span two years, so a code that started last week would have almost
+ * nothing to show.
+ *
+ * **The redemption limits are scaled to this seed, not copied from the
+ * export.** Its caps run 150–500 against a platform doing ~400 orders in
+ * total, which would leave every bar on the page 3% full and saying nothing —
+ * the figure is the instructor's own choice, so the honest version of "212 of
+ * 500" here is a cap somebody running this catalog would plausibly set. The
+ * counts underneath are real either way: each one is `CouponRedemption` rows
+ * against real orders, which is what that model's docstring demands.
+ */
+export const couponSeeds: {
+  code: string
+  courseSlug: string
+  discountType: "PERCENT" | "FIXED_PRICE"
+  /** Percent when PERCENT; ignored for FIXED_PRICE. */
+  percentOff: number
+  /** Dollars when FIXED_PRICE; ignored for PERCENT. */
+  price: number
+  redemptionLimit: number | null
+  startsInDays: number
+  endsInDays: number | null
+}[] = [
+  // -- Simon Simorangkir --------------------------------------------------
+  {
+    code: "LAUNCH40",
+    courseSlug: "mastering-illustration",
+    discountType: "PERCENT",
+    percentOff: 40,
+    price: 0,
+    redemptionLimit: 40,
+    startsInDays: -300,
+    endsInDays: 21,
+  },
+  {
+    code: "EARLYBIRD",
+    courseSlug: "mastering-illustration",
+    discountType: "PERCENT",
+    percentOff: 60,
+    price: 0,
+    redemptionLimit: 20,
+    startsInDays: -420,
+    endsInDays: 9,
+  },
+  {
+    // The export's Scheduled row, and the reason the status pill needs a third
+    // colour at all.
+    code: "FRIENDS25",
+    courseSlug: "mastering-illustration",
+    discountType: "PERCENT",
+    percentOff: 25,
+    price: 0,
+    redemptionLimit: 30,
+    startsInDays: 16,
+    endsInDays: 120,
+  },
+  {
+    code: "FIGMA30",
+    courseSlug: "design-systems-in-figma",
+    discountType: "PERCENT",
+    percentOff: 30,
+    price: 0,
+    redemptionLimit: 60,
+    startsInDays: -240,
+    endsInDays: 48,
+  },
+  {
+    // The one FIXED_PRICE code, so the column the dialog's second radio card
+    // writes is exercised by something.
+    code: "UXKICKOFF",
+    courseSlug: "ux-research-fundamentals",
+    discountType: "FIXED_PRICE",
+    percentOff: 0,
+    price: 19.99,
+    redemptionLimit: 45,
+    startsInDays: -180,
+    endsInDays: 66,
+  },
+  {
+    // No limit and no end date: the bar has no denominator to fill against,
+    // which is the state `redemptionFraction` draws as an empty track.
+    code: "COLOUR20",
+    courseSlug: "colour-theory-for-designers",
+    discountType: "PERCENT",
+    percentOff: 20,
+    price: 0,
+    redemptionLimit: null,
+    startsInDays: -150,
+    endsInDays: null,
+  },
+  {
+    // Expired, so the fourth tab has something in it.
+    // Expired, so the fourth tab has something in it — and on a course with
+    // real sales behind it, so the row shows a used-up code rather than an
+    // empty bar. `icon-design-fundamentals` was the obvious home by name and
+    // the wrong one by date: it publishes twelve days before the run, so a
+    // code that started ten months ago would predate the course it discounts.
+    code: "FIGMAEARLY",
+    courseSlug: "design-systems-in-figma",
+    discountType: "PERCENT",
+    percentOff: 35,
+    price: 0,
+    redemptionLimit: 25,
+    startsInDays: -300,
+    endsInDays: -20,
+  },
+  {
+    code: "ILLUSPRO",
+    courseSlug: "advanced-illustration-techniques",
+    discountType: "PERCENT",
+    percentOff: 45,
+    price: 0,
+    redemptionLimit: 12,
+    startsInDays: -60,
+    endsInDays: 35,
+  },
+  // -- Other instructors ---------------------------------------------------
+  {
+    code: "PYTHON30",
+    courseSlug: "python-for-everybody",
+    discountType: "PERCENT",
+    percentOff: 30,
+    price: 0,
+    redemptionLimit: 30,
+    startsInDays: -240,
+    endsInDays: 48,
+  },
+  {
+    code: "REACTPRO",
+    courseSlug: "the-complete-react-bootcamp",
+    discountType: "PERCENT",
+    percentOff: 35,
+    price: 0,
+    redemptionLimit: 25,
+    startsInDays: -180,
+    endsInDays: 66,
+  },
+  {
+    code: "MLSTART20",
+    courseSlug: "machine-learning-a-z",
+    discountType: "PERCENT",
+    percentOff: 20,
+    price: 0,
+    redemptionLimit: 35,
+    startsInDays: -200,
+    endsInDays: 90,
+  },
+]

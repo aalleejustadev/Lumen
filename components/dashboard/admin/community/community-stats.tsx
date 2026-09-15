@@ -1,4 +1,4 @@
-import { AdminCountCard } from "@/components/dashboard/admin/admin-count-card"
+import { CountCard } from "@/components/dashboard/count-card"
 import { communityStatCards } from "@/lib/config/admin-community"
 import type { CommunityStats as Stats } from "@/lib/admin/community"
 
@@ -19,7 +19,7 @@ function CommunityStats({ stats }: { stats: Stats }) {
   return (
     <div className="grid gap-4.5 sm:grid-cols-2 xl:grid-cols-4">
       {communityStatCards.map(({ key, label, icon }) => (
-        <AdminCountCard
+        <CountCard
           key={key}
           icon={icon}
           value={counts.format(stats[key])}
