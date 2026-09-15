@@ -1266,21 +1266,38 @@ async function seedPayouts(
 ) {
   const rows = [...instructors.values()]
 
+  // Two destinations each, not one: `payout-settings-page.png` draws a bank
+  // marked **Primary** above a PayPal marked **Backup**, and a page whose
+  // whole subject is a fallback chain would have nothing to say with a single
+  // row. The pair also gives the Edit dialog's "use as my primary" switch
+  // something to actually do — with one method it is forced on and inert.
   await db.payoutMethod.createMany({
-    data: rows.map((instructor, index) => ({
-      id: `${SEED}pm_${instructor.slug}`,
-      instructorId: instructor.id,
-      type: (index % 4 === 3 ? "PAYPAL" : "BANK_TRANSFER") as
-        "PAYPAL" | "BANK_TRANSFER",
-      label:
-        index % 4 === 3
-          ? `${instructor.slug}@lumen.co`
-          : ["Revolut Bank", "Wise", "Chase", "N26"][index % 4]!,
-      last4: index % 4 === 3 ? null : String(4000 + index * 7).slice(-4),
-      role: "PRIMARY" as const,
-      verifiedAt: ago(200 * DAY),
-      createdAt: ago(220 * DAY),
-    })),
+    data: rows.flatMap((instructor, index) => [
+      {
+        id: `${SEED}pm_${instructor.slug}`,
+        instructorId: instructor.id,
+        type: "BANK_TRANSFER" as const,
+        label: ["Barclays", "Revolut Bank", "Wise", "Chase", "N26"][index % 5]!,
+        last4: String(4000 + index * 7).slice(-4),
+        currency: index % 5 === 0 ? "gbp" : "usd",
+        role: "PRIMARY" as const,
+        verifiedAt: ago(200 * DAY),
+        createdAt: ago(220 * DAY),
+      },
+      {
+        id: `${SEED}pm_${instructor.slug}_backup`,
+        instructorId: instructor.id,
+        type: "PAYPAL" as const,
+        label: `${instructor.slug}@lumen.co`,
+        // A PayPal address *is* the identifier, so there is no last-4 to
+        // render — see `methodDescription`, which draws a different second
+        // line for each type because the export does.
+        last4: null,
+        role: "BACKUP" as const,
+        verifiedAt: ago(180 * DAY),
+        createdAt: ago(190 * DAY),
+      },
+    ]),
   })
 
   const firstOfMonth = (monthsBack: number) =>

@@ -1119,6 +1119,73 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     `name` at all, and neither the learner's nor the console's account card
     draws it — that export predates the split, and reproducing it would put
     the same value on two of this mode's own pages.
+  - `components/dashboard/instructor/settings/` (payout files) +
+    `/dashboard/instructor/settings/payouts`, from `payout-settings-page.png`:
+    `payout-settings-form.tsx` (client — the list, both dialogs' open state,
+    the receipt switch and the submit, since one pending flag belongs to all
+    of them), `payout-method-row.tsx`, `payout-method-dialog.tsx`,
+    `payouts-format.ts`, composed by `settings-payouts.tsx`.
+    `lib/instructor-payouts.ts` reads, `lib/config/instructor-payouts.ts` is
+    every word the page says, `lib/actions/instructor-payouts.ts` is the three
+    writes. **Nothing on it is demo data and it needed no migration** —
+    `PayoutMethod` and `Instructor`'s three payout columns were already shaped
+    for this export, docstrings and all. Measured at DPR 2: the settings
+    shell's usual 922px card on 30px padding, a 20px/700 card title over a
+    15px lead held to a **580px measure** (the export wraps after "next
+    scheduled" inside an 862px box, so padding alone will not reproduce it),
+    15px/700 section headings, 72px method rows on a 14px gap with 20px sides,
+    a 38px `--hover` tile 16px from a 15px/600 title over a 13px muted line,
+    a 22px role pill and a 54 x 34 `shadow-sm` Edit button, a 40px dashed Add,
+    a 76px bordered receipt row and a **40px** submit.
+    Seven things decide what it means:
+    - **The schedule row is read-only and the export says so** — a "Fixed"
+      pill where every other row carries a control. `payoutDayOfMonth` and
+      `minimumPayoutCents` are therefore rendered and written nowhere: they
+      are a platform rule, and they are the same two columns the Help Center's
+      payout answers quote, so what an instructor reads and what this row
+      draws cannot disagree. Per-instructor schedules belong in the console if
+      they ever become editable — an instructor picking their own payout day
+      would let them outrun the `PayoutRun` batch.
+    - **Nothing talks to a payment processor.** Lumen has Stripe for checkout
+      but no Connect, so `PayoutMethod.externalRef` stays null and a new method
+      is **unverified** — which the row says out loud rather than claiming a
+      verification nothing performed. That is also why the dialog asks for the
+      **last four digits** rather than an account number, which the model's own
+      note forbids storing. Wire `externalRef`/`verifiedAt` to Connect's
+      external-account flow when it lands; nothing above them changes.
+    - **Exactly one method is PRIMARY, enforced in a transaction.** Promoting
+      one demotes the rest in the same `$transaction`, the first method added
+      is promoted whatever the switch said (there is nothing for a lone method
+      to fall back *to*, so the switch is forced on and inert), and removing
+      the primary promotes the next by age rather than leaving methods with no
+      primary — a state the money has no way to read.
+    - **Every write resolves the instructor from the session and scopes the
+      row by it** (`where: { id, instructorId }`), never by id alone. Method
+      ids reach the browser, and an action trusting the one it was handed would
+      let any instructor repoint another's bank account — the check
+      `ownsPaymentMethod` makes on the billing page, done inline here because
+      the ownership is a plain foreign key.
+    - **The two dialogs have no export**, so they are built from
+      `new-category__dialog_admin.png`'s vocabulary (478px, 30px padding, 44px
+      fields, the 46 x 26 switch) — and **Remove lives inside Edit**, because
+      the export draws no remove affordance and a list you can only add to is
+      the gap the profile page's URL rows already document. No Cancel, per the
+      standing dialog rule.
+    - **The methods apply immediately; the receipt switch waits for Save.**
+      That split is the export's (it draws a submit under the switch and a
+      dialog behind Edit) and it is the profile page's already — the avatar
+      applies on pick while the fields wait, so a bank account typed into a
+      dialog is not lost to a stray click.
+    - Progress is tracked **per control** (`busy: { kind }`), not per page —
+      the `courses-list.tsx` rule, so saving the switch does not spin the
+      dialog's submit.
+  - **The seed now writes two payout methods per instructor**, a PRIMARY bank
+    and a BACKUP PayPal, where it wrote one. The export draws exactly that
+    pair, and a page whose subject is a fallback chain has nothing to say with
+    a single row — it also leaves the dialog's "use as my primary" switch
+    forced on and inert. The primary keeps the old `seed_pm_<slug>` id, which
+    is what the seeded `Payout` rows reference. **Re-run `npm run db:seed` to
+    see it.**
   - `/dashboard/instructor/notifications` is real and needed no new machinery:
     the feed has been audience-parameterised since it was built, and
     `lib/config/notification-feed.ts` already carried the INSTRUCTOR category
