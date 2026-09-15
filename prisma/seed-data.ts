@@ -442,10 +442,16 @@ export const featuredLearnerSeeds: {
   role: string
   status: "ACTIVE" | "PENDING" | "INACTIVE" | "SUSPENDED"
   plan: "free" | "business"
+  /** Supplied headshots, reused for the same named people the way
+   *  `course-player.ts`' `knownAvatars` does — the Messages exports draw a
+   *  face on every row, and only these two have one. Everybody else falls
+   *  back to initials; this is not a stock-photo integration. */
+  image?: string
 }[] = [
   {
     name: "Nadia Rahman",
     email: "nadia.rahman@example.com",
+    image: "/testimonials/nadia-rahman.png",
     country: "GB",
     role: "user",
     status: "ACTIVE",
@@ -462,6 +468,7 @@ export const featuredLearnerSeeds: {
   {
     name: "Priya Nadar",
     email: "priya.nadar@example.com",
+    image: "/testimonials/priya-nadar.png",
     country: "BR",
     role: "admin",
     status: "ACTIVE",
@@ -1334,5 +1341,211 @@ export const learnerNotificationSeeds: {
     body: "Save 30% on the annual Lumen Business plan this week",
     minutesAgo: 60 * 50,
     unread: false,
+  },
+]
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+/** One line of a seeded transcript. `minutesBefore` is measured back from the
+ *  thread's own last message, so a whole conversation slides as one. */
+export type ThreadMessageSeed = {
+  from: "instructor" | "learner"
+  body: string
+  minutesBefore: number
+}
+
+/**
+ * Simon Simorangkir's inbox, verbatim from
+ * `ui-design/light/dashboard/instructor/messages-page.png` — its four rows in
+ * its own order (20m / 1h / 4h / 1d), its two unread pills (1 and 3), and the
+ * three-message transcript it draws open.
+ *
+ * The four learners are the first four of `featuredLearnerSeeds`, which is not
+ * a coincidence: the export's own list is drawn from the same demo pool as
+ * `users-page__admin.png`'s, so the two screens agree about who these people
+ * are.
+ *
+ * Every thread is about **Mastering Illustration**, which is the course the
+ * export names under each name — and the seed grants the enrolment behind each
+ * pair, because `resolvePairing` is what authorises a conversation and a
+ * seeded thread that rendered read-only would contradict the page it is
+ * demonstrating.
+ */
+export const instructorThreadSeeds: {
+  learnerEmail: string
+  /** Age of the last message — the row's right-hand column. */
+  agoMinutes: number
+  /** Counted back from the end; the rest of the thread reads as seen. */
+  unreadForInstructor: number
+  messages: ThreadMessageSeed[]
+}[] = [
+  {
+    learnerEmail: "nadia.rahman@example.com",
+    agoMinutes: 20,
+    unreadForInstructor: 1,
+    messages: [
+      {
+        from: "learner",
+        body: "The anchor-point tip changed how I trace shapes!",
+        minutesBefore: 30,
+      },
+      {
+        from: "instructor",
+        body: "So glad it clicked. Keep practicing the pen tool daily.",
+        minutesBefore: 18,
+      },
+      {
+        from: "learner",
+        body: "Thank you! That tip really helped.",
+        minutesBefore: 0,
+      },
+    ],
+  },
+  {
+    learnerEmail: "omar.farouk@example.com",
+    agoMinutes: 60,
+    unreadForInstructor: 3,
+    messages: [
+      {
+        from: "instructor",
+        body: "Nice work on the vector exercise — the curves are much cleaner this week.",
+        minutesBefore: 180,
+      },
+      {
+        from: "learner",
+        body: "Thanks! I redid the whole thing with the pen tool instead of the pencil.",
+        minutesBefore: 42,
+      },
+      {
+        from: "learner",
+        body: "One thing I got stuck on: combining two overlapping shapes.",
+        minutesBefore: 20,
+      },
+      {
+        from: "learner",
+        body: "Does the shape builder work in the free trial, or is that a paid tool?",
+        minutesBefore: 0,
+      },
+    ],
+  },
+  {
+    learnerEmail: "priya.nadar@example.com",
+    agoMinutes: 4 * 60,
+    unreadForInstructor: 0,
+    messages: [
+      {
+        from: "instructor",
+        body: "Section three is live — start with the gesture drawing warm-up before the lesson.",
+        minutesBefore: 90,
+      },
+      {
+        from: "learner",
+        body: "Posting my first attempt 🙌",
+        minutesBefore: 0,
+      },
+    ],
+  },
+  {
+    learnerEmail: "liam.smith@example.com",
+    agoMinutes: 24 * 60,
+    unreadForInstructor: 0,
+    messages: [
+      {
+        from: "learner",
+        body: "Is there a recommended tablet for the later sections?",
+        minutesBefore: 200,
+      },
+      {
+        from: "instructor",
+        body: "Anything with pressure sensitivity is fine — don't buy new hardware for this course.",
+        minutesBefore: 35,
+      },
+      { from: "learner", body: "Got it, thanks!", minutesBefore: 0 },
+    ],
+  },
+]
+
+/**
+ * A learner's inbox, verbatim from
+ * `ui-design/light/dashboard/student/messages-page.png` — its three rows in
+ * its own order (30m / 2h / 1d), its single unread pill (2) and the transcript
+ * it draws open.
+ *
+ * Written for **every demo learner and every admin account**, the way
+ * `seedNotifications` writes its feed and for that module's reason: the
+ * account a developer signs in with is usually their own, and an inbox nobody
+ * can reach demonstrates nothing.
+ *
+ * `courseSlug: null` means "whichever course this instructor teaches" — only
+ * Simon's thread names one, because Mastering Illustration is the course both
+ * exports put under the name.
+ */
+export const learnerThreadSeeds: {
+  instructorName: string
+  courseSlug: string | null
+  agoMinutes: number
+  unreadForLearner: number
+  messages: ThreadMessageSeed[]
+}[] = [
+  {
+    instructorName: "Simon Simorangkir",
+    courseSlug: "mastering-illustration",
+    agoMinutes: 30,
+    unreadForLearner: 2,
+    messages: [
+      {
+        from: "instructor",
+        body: "Hi! Welcome to the Illustration cohort 👋",
+        minutesBefore: 29,
+      },
+      {
+        from: "learner",
+        body: "Thanks Simon! Excited to start.",
+        minutesBefore: 26,
+      },
+      {
+        from: "instructor",
+        body: "Great question — yes, all core tools are available in the trial. I'll cover advanced masking next lesson.",
+        minutesBefore: 0,
+      },
+    ],
+  },
+  {
+    instructorName: "Maya Okonkwo",
+    courseSlug: null,
+    agoMinutes: 2 * 60,
+    unreadForLearner: 0,
+    messages: [
+      {
+        from: "learner",
+        body: "Should I submit the project before or after the quiz?",
+        minutesBefore: 55,
+      },
+      {
+        from: "instructor",
+        body: "Don't forget the assignment is due Friday — the quiz can wait until after it.",
+        minutesBefore: 0,
+      },
+    ],
+  },
+  {
+    instructorName: "Dr. Elias Vance",
+    courseSlug: null,
+    agoMinutes: 24 * 60,
+    unreadForLearner: 0,
+    messages: [
+      {
+        from: "learner",
+        body: "Here's my write-up for the module three exercise.",
+        minutesBefore: 140,
+      },
+      {
+        from: "instructor",
+        body: "Your project submission looks great!",
+        minutesBefore: 0,
+      },
+    ],
   },
 ]

@@ -100,10 +100,14 @@ export const dashboardNav: DashboardNavGroup[] = [
         badge: 12,
       },
       {
+        // Real, since `/dashboard/messages` landed: the badge is counted in
+        // `app/(dashboard)/layout.tsx` and passed down through `navCounts`,
+        // the way Wishlist's and Notifications' are. The placeholder `badge`
+        // is gone with it — Discussions above still carries one, because
+        // nothing counts that yet.
         title: "Messages",
         href: "/dashboard/messages",
         icon: MailIcon,
-        badge: 5,
       },
     ],
   },

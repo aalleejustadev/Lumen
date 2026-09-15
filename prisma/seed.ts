@@ -57,8 +57,11 @@ import {
   pendingCourseSeeds,
   promotionOptOutInstructorSlugs,
   promotionSeeds,
+  instructorThreadSeeds,
+  learnerThreadSeeds,
   reportedReviewSeeds,
   requiredCategorySlugs,
+  type ThreadMessageSeed,
 } from "./seed-data"
 
 const db = new PrismaClient({
@@ -171,6 +174,10 @@ async function clearSeededRows() {
   await db.contentReport.deleteMany({ where: seeded })
   // Cascades to `discussion`, `discussion_reply` and `topic_moderator`.
   await db.communityTopic.deleteMany({ where: seeded })
+  // Cascades to `conversation_participant` and `message`. Cleared explicitly
+  // because a `Conversation` has no owner to cascade from — deleting the
+  // accounts below takes the participants and leaves the thread behind.
+  await db.conversation.deleteMany({ where: seeded })
   await db.auditLog.deleteMany({ where: seeded })
   await db.refund.deleteMany({ where: seeded })
   await db.instructorEarning.deleteMany({ where: seeded })
@@ -773,6 +780,7 @@ async function seedLearners() {
       name: seed.name,
       email: seed.email,
       emailVerified: seed.status !== "PENDING",
+      image: seed.image ?? null,
       role: seed.role,
       status: seed.status,
       country: seed.country,
@@ -2131,6 +2139,261 @@ async function seedNotifications(
 }
 
 // ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+/**
+ * The two Messages exports, made real —
+ * `ui-design/light/dashboard/instructor/messages-page.png` and its learner
+ * twin. Nothing in the app emits a conversation yet, so this is the stand-in
+ * `seedAuditLog` and `seedNotifications` already are for their own sources,
+ * and for the same reason: an inbox of nothing leaves the search, the thread
+ * and the composer with nothing to do.
+ *
+ * Four things about it are load-bearing:
+ *
+ *  - **It grants the enrolment behind every pair it writes.** `resolvePairing`
+ *    is what authorises a conversation, and a seeded thread whose composer
+ *    rendered read-only would contradict the page it exists to demonstrate.
+ *    The grants are `ADMIN_GRANT` rather than `PURCHASE` — no order was
+ *    placed, and saying otherwise would put a sale in the ledger that never
+ *    happened. Existing enrolments are left alone.
+ *  - **One thread is two inboxes.** Nadia's conversation with Simon is a row
+ *    in *his* list and a row in *hers*; `MessageAudience` is what sorts them,
+ *    so the seed writes each conversation once and both sides get it.
+ *  - **Learner threads go to every admin too**, concatenated rather than
+ *    folded into one capped query — `seedNotifications` records why: an admin
+ *    is also a learner, and the account a developer signs in with is usually
+ *    a real one whose cuid sorts nowhere near the `seed_` ids.
+ *  - **Unread is a `lastReadAt` placed between two messages**, never a stored
+ *    count, because that is the only thing the page reads —
+ *    `ConversationParticipant`'s own docstring asks for exactly this.
+ */
+async function seedConversations(
+  instructors: Map<string, InstructorRow>,
+  courses: CourseRow[]
+) {
+  const courseBySlug = new Map(courses.map((course) => [course.slug, course]))
+  const coursesByInstructor = new Map<string, CourseRow[]>()
+  for (const course of courses) {
+    const list = coursesByInstructor.get(course.instructorId) ?? []
+    list.push(course)
+    coursesByInstructor.set(course.instructorId, list)
+  }
+
+  const conversations: Prisma.ConversationCreateManyInput[] = []
+  const participants: Prisma.ConversationParticipantCreateManyInput[] = []
+  const messages: Prisma.MessageCreateManyInput[] = []
+  const grants: Prisma.EnrollmentCreateManyInput[] = []
+  const granted = new Set<string>()
+
+  /**
+   * Writes one thread and the enrolment that legitimises it.
+   *
+   * `unreadFor` names the side that has *not* caught up: their `lastReadAt`
+   * lands just before the first of the trailing messages they have yet to see,
+   * and the other side's is set past the end.
+   */
+  function thread(options: {
+    key: string
+    instructorUserId: string
+    learnerUserId: string
+    course: CourseRow
+    agoMinutes: number
+    unread: number
+    unreadFor: "instructor" | "learner"
+    lines: ThreadMessageSeed[]
+  }) {
+    const {
+      key,
+      instructorUserId,
+      learnerUserId,
+      course,
+      agoMinutes,
+      unread,
+      unreadFor,
+      lines,
+    } = options
+    if (instructorUserId === learnerUserId) return
+
+    const conversationId = `${SEED}conv_${key}`
+    const lastMessageAt = ago(agoMinutes * 60 * 1000)
+    const sentAt = (line: ThreadMessageSeed) =>
+      new Date(lastMessageAt.getTime() - line.minutesBefore * 60 * 1000)
+
+    conversations.push({
+      id: conversationId,
+      courseId: course.id,
+      lastMessageAt,
+      createdAt: sentAt(lines[0]!),
+    })
+
+    lines.forEach((line, index) => {
+      messages.push({
+        id: `${conversationId}_m${index}`,
+        conversationId,
+        senderId: line.from === "instructor" ? instructorUserId : learnerUserId,
+        body: line.body,
+        sentAt: sentAt(line),
+      })
+    })
+
+    // A second past the newest message: "read everything".
+    const caughtUp = new Date(lastMessageAt.getTime() + 1000)
+    // A second before the *unread*-th-from-last message **the other side
+    // sent**. Counting raw trailing rows instead was wrong wherever a thread
+    // ends with a reply in the middle: your own message is never unread
+    // against you, so a transcript of [them, you, them] can only ever carry
+    // two unread for you, and the naive index made it one.
+    let behind = caughtUp
+    if (unread > 0) {
+      const theirs = lines.filter((line) =>
+        unreadFor === "instructor"
+          ? line.from === "learner"
+          : line.from === "instructor"
+      )
+      const first = theirs[theirs.length - unread]
+      if (first) behind = new Date(sentAt(first).getTime() - 1000)
+    }
+
+    participants.push(
+      {
+        id: `${conversationId}_p_i`,
+        conversationId,
+        userId: instructorUserId,
+        lastReadAt: unreadFor === "instructor" ? behind : caughtUp,
+      },
+      {
+        id: `${conversationId}_p_l`,
+        conversationId,
+        userId: learnerUserId,
+        lastReadAt: unreadFor === "learner" ? behind : caughtUp,
+      }
+    )
+
+    const grantKey = `${learnerUserId}:${course.id}`
+    if (!granted.has(grantKey)) {
+      granted.add(grantKey)
+      grants.push({
+        id: `${SEED}enr_msg_${key}`,
+        userId: learnerUserId,
+        courseId: course.id,
+        source: "ADMIN_GRANT",
+        progressPercent: Math.floor(rng() * 80) + 10,
+        createdAt: ago(30 * DAY),
+      })
+    }
+  }
+
+  // -- Simon's inbox, from the instructor export ---------------------------
+  const flagshipCourse = courseBySlug.get("mastering-illustration")
+  const flagship = instructors.get(instructorSlug("Simon Simorangkir"))
+
+  if (flagshipCourse && flagship) {
+    const learners = await db.user.findMany({
+      where: {
+        email: { in: instructorThreadSeeds.map((seed) => seed.learnerEmail) },
+      },
+      select: { id: true, email: true },
+    })
+    const learnerByEmail = new Map(
+      learners.map((learner) => [learner.email, learner.id])
+    )
+
+    for (const [index, seed] of instructorThreadSeeds.entries()) {
+      const learnerUserId = learnerByEmail.get(seed.learnerEmail)
+      if (!learnerUserId) continue
+      thread({
+        key: `ins_${pad(index, 2)}`,
+        instructorUserId: flagship.userId,
+        learnerUserId,
+        course: flagshipCourse,
+        agoMinutes: seed.agoMinutes,
+        unread: seed.unreadForInstructor,
+        unreadFor: "instructor",
+        lines: seed.messages,
+      })
+    }
+  }
+
+  // -- A learner's inbox, from the student export --------------------------
+  //
+  // The four featured learners already have a Simon thread from the block
+  // above, so `thread` is asked for the other two; everybody else gets all
+  // three. Ordered queries, so a re-run writes the same rows — the
+  // determinism rule the seeded PRNG enforces everywhere else.
+  const admins = await db.user.findMany({
+    where: { role: "admin" },
+    orderBy: { id: "asc" },
+    select: { id: true, email: true },
+  })
+  const featuredEmails = instructorThreadSeeds.map((seed) => seed.learnerEmail)
+  const featuredLearners = await db.user.findMany({
+    where: { email: { in: featuredEmails } },
+    orderBy: { id: "asc" },
+    select: { id: true, email: true },
+  })
+
+  // **Admins and the export's own four, and nobody else.** Every learner
+  // thread with Simon is also a row in *his* inbox, and the instructor export
+  // draws exactly four — so handing one to the wider demo pool would quietly
+  // double the list that export is the reference for. The four already have
+  // theirs from the block above, which leaves admins as the only accounts this
+  // adds to Simon's list: on a clean seed that is Priya Nadar, who is one of
+  // the four, so his inbox lands on the drawn four exactly. A developer's own
+  // admin account adds one more, which is the same trade `seedNotifications`
+  // makes and the honest consequence of one thread being two inboxes.
+  const featured = new Set(featuredEmails)
+  const recipients = [...admins, ...featuredLearners].filter(
+    (user, index, list) =>
+      list.findIndex((other) => other.id === user.id) === index
+  )
+
+  for (const [recipientIndex, recipient] of recipients.entries()) {
+    for (const [seedIndex, seed] of learnerThreadSeeds.entries()) {
+      const profile = instructors.get(instructorSlug(seed.instructorName))
+      if (!profile) continue
+
+      const course = seed.courseSlug
+        ? courseBySlug.get(seed.courseSlug)
+        : coursesByInstructor.get(profile.id)?.[0]
+      if (!course) continue
+
+      // Simon's thread with a featured learner is already written above, with
+      // the instructor export's own transcript — writing a second would give
+      // one pair two threads about one course, which `startConversation`
+      // deliberately refuses to do.
+      if (
+        seed.courseSlug === "mastering-illustration" &&
+        featured.has(recipient.email)
+      ) {
+        continue
+      }
+
+      thread({
+        key: `lrn_${pad(recipientIndex, 2)}_${pad(seedIndex, 2)}`,
+        instructorUserId: profile.userId,
+        learnerUserId: recipient.id,
+        course,
+        agoMinutes: seed.agoMinutes,
+        unread: seed.unreadForLearner,
+        unreadFor: "learner",
+        lines: seed.messages,
+      })
+    }
+  }
+
+  // Enrolments first: a conversation is *about* a course, and the rule behind
+  // it has to be true before the thread exists rather than after.
+  await db.enrollment.createMany({ data: grants, skipDuplicates: true })
+  await db.conversation.createMany({ data: conversations })
+  await db.conversationParticipant.createMany({ data: participants })
+  await db.message.createMany({ data: messages })
+
+  return { threads: conversations.length, messages: messages.length }
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 
@@ -2190,6 +2453,11 @@ async function main() {
   const notifications = await seedNotifications(instructors, courses)
   console.log(
     `notifications     ${notifications.admin} admin, ${notifications.learner} learner`
+  )
+
+  const conversations = await seedConversations(instructors, courses)
+  console.log(
+    `conversations     ${conversations.threads} threads, ${conversations.messages} messages`
   )
 
   await seedPayouts(instructors, netByInstructor)

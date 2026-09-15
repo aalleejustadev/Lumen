@@ -7,6 +7,7 @@ import { InstructorSidebar } from "@/components/dashboard/instructor/instructor-
 import { getSession } from "@/lib/auth"
 import { canTeach } from "@/lib/instructor"
 import { getUnreadCount } from "@/lib/notification-feed"
+import { getUnreadMessageCount } from "@/lib/messages"
 import { instructorNavCounts } from "@/lib/config/instructor-nav"
 
 /**
@@ -54,7 +55,10 @@ export default async function InstructorLayout({
   // same cookie the other two shells read — so a "collapse the sidebar"
   // preference follows you across all three.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
-  const unreadNotifications = await getUnreadCount("INSTRUCTOR")
+  const [unreadNotifications, unreadMessages] = await Promise.all([
+    getUnreadCount("INSTRUCTOR"),
+    getUnreadMessageCount("INSTRUCTOR"),
+  ])
 
   return (
     <SidebarProvider
@@ -68,7 +72,7 @@ export default async function InstructorLayout({
     >
       <InstructorSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
-        navCounts={instructorNavCounts(unreadNotifications)}
+        navCounts={instructorNavCounts(unreadNotifications, unreadMessages)}
       />
       <SidebarInset>
         <InstructorHeader

@@ -7,6 +7,7 @@ import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { getSession } from "@/lib/auth"
 import { getCartCount, getWishlistCount } from "@/lib/cart"
 import { getUnreadCount } from "@/lib/notification-feed"
+import { getUnreadMessageCount } from "@/lib/messages"
 import { canBecomeInstructor, canTeach } from "@/lib/instructor"
 
 /**
@@ -48,6 +49,7 @@ export default async function DashboardLayout({
     showInstructorCta,
     teaches,
     unreadNotifications,
+    unreadMessages,
   ] = await Promise.all([
     getCartCount(),
     getWishlistCount(),
@@ -57,6 +59,7 @@ export default async function DashboardLayout({
     // control cannot offer a mode the guard would then refuse.
     canTeach(user),
     getUnreadCount("LEARNER"),
+    getUnreadMessageCount("LEARNER"),
   ])
 
   return (
@@ -80,6 +83,9 @@ export default async function DashboardLayout({
           // for any number it is given, and "0 unread" is noise.
           ...(unreadNotifications > 0
             ? { "/dashboard/notifications": unreadNotifications }
+            : {}),
+          ...(unreadMessages > 0
+            ? { "/dashboard/messages": unreadMessages }
             : {}),
         }}
       />

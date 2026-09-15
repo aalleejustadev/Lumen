@@ -137,11 +137,16 @@ export const instructorNav: DashboardNavGroup[] = [
     title: "General",
     items: [
       {
+        // Real: the inbox is audience-parameterised the way the feed is, so
+        // this mode's threads come out of the same query path as the
+        // learner's — see `lib/messages.ts`. The badge is counted in
+        // `app/(instructor)/layout.tsx`; the placeholder `badge` is gone with
+        // it, because a row with a real source must not also carry a number
+        // nobody counted.
         title: "Messages",
         href: "/dashboard/instructor/messages",
         icon: MailIcon,
-        built: false,
-        badge: 5,
+        built: true,
       },
       {
         // Real: the feed is already audience-parameterised, so this mode's
@@ -199,13 +204,21 @@ export const instructorNav: DashboardNavGroup[] = [
  */
 export function instructorNavCounts(
   /** Unread rows in the instructor's own feed — see `getUnreadCount`. */
-  unreadNotifications = 0
+  unreadNotifications = 0,
+  /** Unread messages in the threads about courses this account teaches — see
+   *  `getUnreadMessageCount`. */
+  unreadMessages = 0
 ): Record<string, number> {
   // Omitted at zero rather than passed as 0: `NavRow` draws a badge for any
   // number it is given, and "0 unread" is noise.
-  return unreadNotifications > 0
-    ? { "/dashboard/instructor/notifications": unreadNotifications }
-    : {}
+  return {
+    ...(unreadNotifications > 0
+      ? { "/dashboard/instructor/notifications": unreadNotifications }
+      : {}),
+    ...(unreadMessages > 0
+      ? { "/dashboard/instructor/messages": unreadMessages }
+      : {}),
+  }
 }
 
 /**

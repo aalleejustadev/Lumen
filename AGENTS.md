@@ -2259,6 +2259,131 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   the export's own shape by construction: 12 rows, **4 unread**, four
   categories showing a count of 1 and Billing showing none, and one actor row
   with a pending Accept/Decline.
+- `components/dashboard/messages/` — the **Messages** surface, shared by the
+  learner's `/dashboard/messages` and the instructor's
+  `/dashboard/instructor/messages`. Built to
+  `ui-design/light/dashboard/instructor/messages-page.png` and
+  `ui-design/light/dashboard/student/messages-page.png`, which are **one
+  drawing at two sets of copy** — measured landmark for landmark and identical
+  on every one of them, down to the 619px card — so it is one component with an
+  `audience`, the arrangement the notification feed already has.
+  `messages-page.tsx` composes, `conversation-list.tsx` is the left column,
+  `message-thread.tsx` the right, `new-message-dialog.tsx` the one control
+  neither export draws. `lib/messages.ts` reads, `lib/config/messages.ts` is
+  every word the pages say, `lib/actions/messages.ts` is the four writes.
+  **Nothing on it is demo data and it needed no migration** — `Conversation`,
+  `ConversationParticipant` and `Message` were already shaped for it,
+  docstrings and all, and `ConversationParticipant`'s own note ("never a stored
+  integer, which drifts the first time a write fails halfway") is exactly how
+  unread is counted. The seed wrote none of them, so `seedConversations` is new.
+  Measured off the exports at DPR 2 and verified against the render, which
+  lands on every one: the dashboard's usual page inset and a header block
+  *pixel-identical* to `courses-page__admin.png`'s (so it is that page's, not a
+  second measurement), then a **619px** card split by a `--border` rule into a
+  **320px** conversation column and the thread. The list is a 72px search band
+  over 72px rows on `--border-subtle` dividers, a 44px avatar 12px from a 15px
+  name over a 14px muted preview, with a 12px age and a 20px unread pill
+  stacked at the trailing edge; the selected row is `--hover`, sampled exactly
+  (#efefec). The thread's three bands are drawn at three *different* insets and
+  that is not a slip — each is symmetric in itself: a 68px header on 20px
+  sides (four pixels shorter than the list's own search band, so the two rules
+  genuinely do not line up), a transcript on 22px padding with 14px between
+  bubbles, and a 72px composer on 18px sides holding a 40px attach button, a
+  44px field and a 44px send button. A bubble is `rounded-xl` on 16px/12px
+  padding with 15px copy over a right-aligned 12px timestamp; incoming is white
+  inside a `--border` hairline and outgoing is solid `--primary` with none,
+  which is why the two measure 67px and 65px against identical content.
+  Eight things decide what the surface means:
+  - **`resolvePairing` is the whole permission rule, and it lives in one
+    place.** An instructor may write to somebody enrolled in a course they
+    teach, and a learner to the instructor of a course they are enrolled in —
+    the same sentence read from either end, so it is one function. The
+    New-message dialog's list, the composer's writable flag and every write in
+    `lib/actions/messages.ts` all consult it, which is what stops the page
+    offering a conversation the action would then refuse; it is the
+    arrangement `canTeach` has with the instructor shell's guard. The test is
+    an `Enrollment` row on one side and `Course.instructorId` on the other,
+    never a role string.
+  - **The audience is derived, not stored.** A thread carries `courseId` and
+    the course carries its instructor, so which side you are standing on is a
+    fact the rows already answer; an `audience` column would be a second
+    answer free to disagree. That is what keeps the two inboxes apart for an
+    account that is routinely both — an instructor enrolled in somebody else's
+    course sees those threads in the *learner* shell.
+  - **Losing enrolment closes a thread; it does not delete one.** A refund
+    revokes the enrolment that authorised the pair, so the composer goes inert
+    with the reason on it while the history stays readable. `sendMessage`
+    re-checks the pairing on **every** send rather than once when the thread
+    was made.
+  - **"New message" is the one control neither export draws**, and it is added
+    because without it the surface cannot be entered: both exports open on an
+    inbox that already has conversations and nothing else in the app starts
+    one. It sits in the **page header row** rather than the search band, where
+    `notifications-feed.tsx` already puts a page's own controls — every element
+    inside the card is measured, and a button in that band would have taken
+    40px out of a field drawn at the column's full 287px. Its list is the
+    messaging rule made visible, one row per (person, course), and it loads
+    when the dialog opens, the arrangement `payout-run-dialog.tsx` records.
+  - **Selection and search live in the URL; nothing else does.** Both change
+    which rows exist, which happens in SQL, so an open thread is a link you can
+    paste and the back button walks it — the split `users-table.tsx` makes
+    between its filters and its Columns menu. The search matches the
+    counterpart's name, the course title **and the message bodies**, because a
+    field advertising search that only decorated would be the promise
+    `dashboard-search.tsx` refuses to make.
+  - **The green dot is `Session`, and says so.** It is the only thing on the
+    page with no table behind it; Better Auth refreshes a live session's
+    `updatedAt` daily, which is why `/dashboard/admin/users` already reads that
+    table for "Active this week". So the dot means *active today* and its
+    tooltip says exactly that rather than claiming a real-time presence nothing
+    here implements.
+  - **The paperclip is inert.** `MediaOwnerType.MESSAGE_ATTACHMENT` exists but
+    no upload path to it does, so it is drawn disabled with the reason on it —
+    the treatment the Help Center gives "Open Discussions", and the promise
+    every unbuilt sidebar row refuses to make.
+  - **The read is three waves, not eight round trips.** Each Prisma call is a
+    network hop, so the list and the reader's own participant rows go together,
+    and then the unread `groupBy`, the presence query, the thread's messages
+    and `resolvePairing` all go together. The inbox unread total is *summed
+    from* the per-conversation counts rather than counted again, and
+    `resolvePairing` asks about both candidates' enrolments in one query
+    because which of the two is the learner is decided from that same row.
+- **Both Messages rows carry a real badge now**, counted in each shell's layout
+  and passed down through `navCounts` the way Wishlist's and Notifications' are;
+  the placeholder `badge: 5` is gone from both nav configs. The instructor row
+  flipped to `built: true`, and the learner's had been a live link onto a 404
+  since the shell was built. Discussions keeps its placeholder in both, because
+  nothing counts that yet.
+- **Don't put a component in a config module the server imports.**
+  `lib/config/messages.ts` first held a lucide icon per empty state, and
+  `app/(dashboard)/layout.tsx` reaches that module transitively through
+  `getUnreadMessageCount`. It builds, typechecks and lints cleanly — and it put
+  `lucide-react` in the *layout's* server graph, which measurably slowed every
+  route under the shell. The icon is chosen in `messages-page.tsx` instead,
+  which is the same conclusion `settings-nav-card.tsx`' wrappers reach from the
+  other direction ("a function cannot be serialized across the server→client
+  boundary"), and the rule is simply: a config module shared with the server
+  holds data, never components.
+- **The seed writes the inbox** (`seedConversations`, from
+  `instructorThreadSeeds` / `learnerThreadSeeds`). Nothing in the app emits a
+  conversation yet, so this is the stand-in `seedAuditLog` and
+  `seedNotifications` already are. Four things about it are load-bearing:
+  it **grants the enrolment behind every pair it writes** (`ADMIN_GRANT`, not
+  `PURCHASE` — no order was placed), because a seeded thread whose composer
+  rendered read-only would contradict the page it exists to demonstrate;
+  **one thread is two inboxes**, so each conversation is written once and the
+  audience sorts them; learner threads go to **admins and the export's own four
+  demo learners and nobody else**, because every learner thread with Simon is
+  also a row in *his* list and the instructor export draws exactly four — on a
+  clean seed his inbox lands on those four exactly, and a developer's own admin
+  account adds the one more that `seedNotifications` already trades for; and
+  **unread is a `lastReadAt` placed before the Nth-from-last message the other
+  side sent**, never a stored count — counting raw trailing rows was wrong
+  wherever a transcript ends `[them, you, them]`, which is exactly the learner
+  export's. The two featured learners with supplied headshots
+  (`nadia-rahman.png`, `priya-nadar.png`) now get them, the way
+  `course-player.ts`' `knownAvatars` reuses the same named people; everybody
+  else keeps initials. **Re-run `npm run db:seed` to see it.**
 - `lib/config/countries.ts` — the codes behind the Country column and the Add
   new user select. `User.country` stores ISO-3166 alpha-2 and the English names
   are **computed** through `Intl.DisplayNames`, the call `locale.ts` makes for
