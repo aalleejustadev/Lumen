@@ -35,7 +35,15 @@ export type DashboardNavItem = {
    * overridden by a live count from a layout.
    */
   tag?: string
-  items?: { title: string; href: string }[]
+  /**
+   * A row with children, drawn with a chevron. `built` on a *child* is the
+   * same flag as on the row itself and defaults to built — an unbuilt child
+   * renders as an inert sub-row rather than a link onto a 404, which is what
+   * lets a settings group ship one section at a time (the instructor's
+   * Settings has Profile built and three to come). A child of an unbuilt
+   * parent is inert whatever it says.
+   */
+  items?: { title: string; href: string; built?: boolean }[]
   /**
    * False when `href` has no route yet. `NavRow` renders such a row as inert
    * text rather than a link, the same treatment `settingsNav`'s own flag gives

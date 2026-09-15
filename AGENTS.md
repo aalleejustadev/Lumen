@@ -1038,21 +1038,75 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     `AdminHeader` gives about the console. **There is no "Exit instructor
     mode" row** and no upgrade card: the switch *is* the way out (unlike the
     console, which has none), and the promo sells a learner plan.
-  - **Only Dashboard and Notifications are built; the other twelve rows carry
-    an explicit `built: false`.** The flag defaults to *built*, so a row left
-    without it silently renders as a live link onto a 404 — which is exactly
-    what happened on the first pass and is worth knowing before adding a row.
-    Each unbuilt row has an export of its own waiting in
+  - **Dashboard, Notifications, Settings and Help Center are built; the
+    remaining rows carry an explicit `built: false`.** The flag defaults to
+    *built*, so a row left without it silently renders as a live link onto a
+    404 — which is exactly what happened on the first pass and is worth knowing
+    before adding a row. Each unbuilt row has an export of its own waiting in
     `ui-design/light/dashboard/instructor/`, and the hrefs listed there are
     what those routes must be called.
   - **The Settings row's four children point at
     `/dashboard/instructor/settings/*`, not the learner's.** Those pages live
     in the other shell and would drop you out of the mode, which is the leak
-    the whole arrangement exists to prevent. The sidebar **footer's** account
-    menu is still the learner's, though — every row in it (Profile, Account,
-    Billing, Help) is a personal-account surface that already exists, where the
-    instructor equivalents do not. Point it at an `instructorAccountMenu` when
-    those four land.
+    the whole arrangement exists to prevent. They are **derived from
+    `instructorSettingsNav`** rather than listed again, so the sidebar and the
+    sections card cannot disagree about what the sections are — the
+    arrangement `lib/config/dashboard.ts` already has with `settingsNav`. Only
+    Profile is built, which is why **`DashboardNavItem.items` gained its own
+    `built` flag**: the parent row is live while three quarters of it is still
+    to come, and `NavRowWithChildren` resolves both flags
+    (`built && (child.built ?? true)`) so an unbuilt child stays an inert
+    sub-row in the expanded list *and* a disabled item in the rail's flyout.
+    A child of an unbuilt parent is inert whatever it says, which is the
+    behaviour the console's Platform Settings relied on before this.
+    The sidebar **footer's** account menu is still the learner's, though —
+    Account, Billing and Help are personal-account surfaces that only exist
+    over there. Point it at an `instructorAccountMenu` when the other three
+    settings sections land.
+  - `components/dashboard/instructor/settings/` +
+    `app/(instructor)/dashboard/instructor/settings/` —
+    `/dashboard/instructor/settings/*`, from `profile-page.png`. The shell is
+    a layout (`instructor-settings-nav.tsx` is the sections card;
+    `/settings` itself redirects to `/profile`, the export's first section),
+    and `lib/config/instructor-settings.ts` is the copy. Measured off that
+    export at DPR 2 the shell is **pixel-identical to the learner's and the
+    console's** — the nav card runs x=69→527 (229px), the form card
+    x=581→2427 (923px), a 27px gutter, a 1179px content column — so those
+    numbers are *reused* from the other two layouts rather than re-derived,
+    for the reason the console's own note gives.
+  - **The sections card is one component now, not three.**
+    `components/dashboard/settings/settings-nav-card.tsx` holds the geometry
+    all three exports draw identically; `settings-nav.tsx`,
+    `admin-settings-nav.tsx` and `instructor-settings-nav.tsx` are one line
+    each, binding their own list. The lists stay separate because the sections
+    differ — the learner has Billing, the admin Platform Controls, the
+    instructor Payout settings. Account's icon is `ShieldCheckIcon` in all
+    three, against three exports that all draw a scalloped badge: one glyph
+    for "Account" across the modes beat matching any one drawing alone.
+    **All three wrappers must keep `"use client"`.** A nav item's `icon` is a
+    component, i.e. a function, and a function cannot be serialized across the
+    server→client boundary — so a Server Component wrapper handing the list to
+    the client card throws *"Only plain objects can be passed to Client
+    Components"* at request time. It builds and typechecks cleanly either way,
+    which is what makes it worth writing down. Each wrapper imports its own
+    list on the client side, where the prop never crosses a boundary at all.
+  - **`/dashboard/instructor/settings/profile` renders the learner's card,
+    unchanged.** That export draws the same avatar, Username, Email, Bio and
+    URL list as `setting-profile-page.png`, over the same `User` row — a
+    profile belongs to a *person*, not a mode, so a second copy could only
+    drift from `lib/actions/profile.ts` for no difference on screen. It is the
+    arrangement `/dashboard/admin/settings/account` already makes. Three
+    things follow: **Full name leads the form** though this export does not
+    draw it (the standing "Profile owns identity, in every mode" rule);
+    **every field is inline editable, Email included**, against an export that
+    draws it as a disabled `<select>` pointing at a page that does not exist —
+    changing it is still `lib/email-change.ts`' confirmation flow, the same
+    one both other modes call; and the bio is **`User.bio`, not
+    `Instructor.bio`** — that one-liner and `Instructor.about` belong to the
+    teaching profile and are edited where a course is. `updateProfile`
+    revalidates `/dashboard` as a layout, which already covers this shell, so
+    a new name or picture reaches the instructor sidebar's footer without a
+    navigation.
   - `/dashboard/instructor/notifications` is real and needed no new machinery:
     the feed has been audience-parameterised since it was built, and
     `lib/config/notification-feed.ts` already carried the INSTRUCTOR category

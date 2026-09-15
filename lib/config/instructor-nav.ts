@@ -19,6 +19,7 @@ import type {
   CommandPaletteItem,
   DashboardNavGroup,
 } from "@/lib/config/dashboard"
+import { instructorSettingsNav } from "@/lib/config/instructor-settings"
 
 /**
  * The instructor workspace's navigation, from
@@ -37,8 +38,8 @@ import type {
  * workspaces belonging to the same person, and the switch is how you move
  * between them. See `workspaceModes`.
  *
- * Dashboard, Notifications and Help Center are `built` today. **The other
- * eleven carry an explicit `built: false`** — the flag defaults to *built*, so a row
+ * Dashboard, Notifications, Settings and Help Center are `built` today.
+ * **The rest carry an explicit `built: false`** — the flag defaults to *built*, so a row
  * left without it silently renders as a live link onto a 404. They are listed because the export draws them and because that is what says what
  * the workspace will hold; `NavRow` renders an unbuilt row as inert text
  * rather than a link onto a 404, the flag `settingsNav` and `adminNav` use.
@@ -157,23 +158,28 @@ export const instructorNav: DashboardNavGroup[] = [
         // The chevron row, as in both other sidebars. Its four sections are
         // the four instructor settings exports — `profile-page.png`,
         // `account-page.png`, `payout-settings-page.png` and
-        // `notification-settings-page.png`. They are listed unbuilt rather
-        // than pointed at the learner's `/dashboard/settings/*`: those pages
-        // live in the other shell and would drop you out of this mode, which
-        // is exactly the leak this whole arrangement exists to prevent.
+        // `notification-settings-page.png` — and they point at this mode's own
+        // `/dashboard/instructor/settings/*` rather than the learner's: those
+        // pages live in the other shell and would drop you out of this mode,
+        // which is exactly the leak this whole arrangement exists to prevent.
+        //
+        // The children are **derived from `instructorSettingsNav`** rather
+        // than listed again here, so the sidebar and the sections card on
+        // `/dashboard/instructor/settings/profile` cannot disagree about what
+        // the sections are or where they live — the arrangement
+        // `lib/config/dashboard.ts` already has with `settingsNav`. Profile is
+        // built; the other three carry their own `built: false` and render as
+        // inert sub-rows, which is why the parent row is live while three
+        // quarters of it is still to come.
         title: "Settings",
         href: "/dashboard/instructor/settings",
         icon: SettingsIcon,
-        built: false,
-        items: [
-          { title: "Profile", href: "/dashboard/instructor/settings/profile" },
-          { title: "Account", href: "/dashboard/instructor/settings/account" },
-          { title: "Payouts", href: "/dashboard/instructor/settings/payouts" },
-          {
-            title: "Notifications",
-            href: "/dashboard/instructor/settings/notifications",
-          },
-        ],
+        built: true,
+        items: instructorSettingsNav.map(({ title, href, built }) => ({
+          title,
+          href,
+          built,
+        })),
       },
       {
         title: "Help Center",

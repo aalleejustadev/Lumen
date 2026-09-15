@@ -167,11 +167,15 @@ function NavRowWithChildren({
   const childActive = item.items?.some((child) => pathname === child.href)
   const active = pathname === item.href || childActive
   const [open, setOpen] = React.useState(Boolean(childActive))
-  // A parent whose own route hasn't landed has no built children either — the
-  // admin console's Platform Settings is the case. The chevron and the four
-  // section names still render, because that is the shape the export draws and
-  // it says what the console will hold; only the links are withheld.
+  // A parent whose own route hasn't landed has no built children either. The
+  // chevron and the section names still render, because that is the shape the
+  // exports draw and it says what the mode will hold; only the links are
+  // withheld. A *child* can also be unbuilt on its own while the parent is
+  // live — the instructor's Settings ships Profile with three sections still
+  // to come — so each row resolves both flags.
   const built = item.built ?? true
+  const childBuilt = (child: { built?: boolean }) =>
+    built && (child.built ?? true)
 
   if (state === "collapsed" && !isMobile) {
     return (
@@ -204,7 +208,7 @@ function NavRowWithChildren({
             <DropdownMenuGroup>
               <DropdownMenuLabel>{item.title}</DropdownMenuLabel>
               {item.items?.map((child) =>
-                built ? (
+                childBuilt(child) ? (
                   <DropdownMenuItem
                     key={child.href}
                     render={<Link href={child.href} />}
@@ -257,7 +261,7 @@ function NavRowWithChildren({
         <SidebarMenuSub className="mt-px mr-0 gap-px border-border pr-0">
           {item.items?.map((child) => (
             <SidebarMenuSubItem key={child.href}>
-              {built ? (
+              {childBuilt(child) ? (
                 <SidebarMenuSubButton
                   isActive={pathname === child.href}
                   render={<Link href={child.href} />}
