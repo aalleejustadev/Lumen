@@ -210,9 +210,7 @@ export const FEED_SEARCH_MAX = 100
 /** Where each mode's gear button goes — its own notification *preferences*. */
 export const feedSettingsHref: Record<NotificationAudience, string> = {
   LEARNER: "/dashboard/settings/notifications",
-  // Instructor settings do not exist yet; the learner's are the closest
-  // real destination and are the same person's account either way.
-  INSTRUCTOR: "/dashboard/settings/notifications",
+  INSTRUCTOR: "/dashboard/instructor/settings/notifications",
   ADMIN: "/dashboard/admin/settings/notifications",
 }
 

@@ -1186,6 +1186,51 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     forced on and inert. The primary keeps the old `seed_pm_<slug>` id, which
     is what the seeded `Payout` rows reference. **Re-run `npm run db:seed` to
     see it.**
+  - `/dashboard/instructor/settings/notifications`, from
+    `notification-settings-page.png` — **this mode's own export**, which the
+    learner's and the console's notification settings were both built against
+    first, finally rendering on the screen it was drawn for.
+    `instructor-notifications-form.tsx` is the only client piece and
+    `settings-notifications.tsx` its card, on the same 922px / 30px-padding
+    geometry as the other three sections; `lib/config/instructor-notifications.ts`
+    is the copy, `lib/instructor-notifications.ts` reads and
+    `lib/actions/instructor-notifications.ts` writes. **The layout is shared;
+    the options are not** — every measurement is `notifications-form.tsx`'
+    (18px/700 headings, 33px radio pitch, 77px rows on a 12px gap, the
+    inverted radio, the 46 x 26 switch), reused rather than re-derived, and
+    only the words inside differ. Three things decide those words:
+    - **The four rows are the INSTRUCTOR categories in
+      `lib/config/notification-feed.ts`** — Courses, Students, Community,
+      Earnings — the same move `adminEmailNotifications` makes against the
+      console's attention queues. This page decides what an instructor is
+      *emailed* about and the feed is what actually happened, so two
+      vocabularies would let somebody switch a category off and still not
+      explain why it kept arriving. That list's fifth category, **Messages, is
+      the radio's middle option rather than a fifth switch**, exactly as the
+      learner's page treats its own DIRECT_MESSAGES.
+    - **`securityEmails` is the learner's column reused, not duplicated** —
+      the call the admin form already made. All three forms render it.
+    - The action **re-checks `canTeach`**, the same function the shell's layout
+      guards with, so the two cannot disagree; the learner's needs only a
+      session. The export's "Use different settings for my mobile devices"
+      checkbox is not built, for the reason the learner's page records.
+  - **`User` gained the instructor notification columns**, and a migration
+    (`instructor_notification_preferences`) — the only part of this section
+    that needed one. **`instructorNotifyAbout` reuses the `NotifyAbout` enum**
+    rather than getting a third type, which is the opposite call from
+    `AdminNotifyAbout` and for the same reason stated the other way round: the
+    admin's middle member is NEEDS_ACTION, which only a platform operator has,
+    where these three mean the same to an instructor as to a learner. The
+    *column* is still separate, as are the four `instructor*Emails` booleans:
+    one account is usually both, and silencing your teaching mail must not
+    silence the lesson reminders for a course you are enrolled in. All default
+    **on** — unlike the learner set there is no promotional row to justify an
+    off-by-default.
+  - **All four instructor settings sections are built**, so
+    `instructorSettingsNav`'s `built` flag is now `true` everywhere; it stays
+    in the type for the reason `settingsNav`'s does. `feedSettingsHref.INSTRUCTOR`
+    now points at this page instead of the learner's, which is what its own
+    TODO was waiting for.
   - `/dashboard/instructor/notifications` is real and needed no new machinery:
     the feed has been audience-parameterised since it was built, and
     `lib/config/notification-feed.ts` already carried the INSTRUCTOR category

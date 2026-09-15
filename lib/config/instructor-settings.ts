@@ -26,9 +26,11 @@ export type InstructorSettingsNavItem = {
   /**
    * False until the route exists. `settings-nav-card.tsx` renders an unbuilt
    * row as inert text rather than a `Link` onto a 404 — the same flag
-   * `settingsNav`, `adminSettingsNav` and `instructorNav` all use. Only
-   * Notifications is still to come; its export is waiting in
-   * `ui-design/light/dashboard/instructor/notification-settings-page.png`.
+   * `settingsNav`, `adminSettingsNav` and `instructorNav` all use. All four
+   * sections are built, so the flag currently changes nothing — it stays for
+   * the reason `settingsNav`'s does: it is what lets a fifth section be listed
+   * here (and so appear in the sidebar, which derives its Settings children
+   * from this list) before its route lands.
    */
   built: boolean
 }
@@ -74,7 +76,7 @@ export const instructorSettingsNav: InstructorSettingsNavItem[] = [
     title: "Notifications",
     href: "/dashboard/instructor/settings/notifications",
     icon: BellIcon,
-    built: false,
+    built: true,
   },
 ]
 

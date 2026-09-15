@@ -39,9 +39,19 @@ enum Interest {
 // Identity, roles and access
 // ---------------------------------------------------------------------------
 
-/// `User.notifyAbout` — the "Notify me about…" radio on
-/// `/dashboard/settings/notifications`. `lib/config/notifications.ts` owns the
-/// labels these three values render as.
+/// `User.notifyAbout` and `User.instructorNotifyAbout` — the "Notify me about…"
+/// radio on the learner's and the instructor's notification settings.
+/// `lib/config/notifications.ts` and `lib/config/instructor-notifications.ts`
+/// own the labels these three values render as on each page.
+///
+/// **Two columns, one enum** — the opposite call from `AdminNotifyAbout`
+/// below, and for the same reason stated the other way round: the members
+/// here mean exactly the same thing to a learner and to an instructor
+/// (mentions and direct messages are mentions and direct messages, whether
+/// they come from a classmate or a student), so a second identical type would
+/// be duplication. The *columns* are still separate, because the answers are:
+/// one account is usually both, and silencing your teaching mail should not
+/// silence your own courses'.
 enum NotifyAbout {
   ALL_ACTIVITY
   DIRECT_MESSAGES
@@ -172,6 +182,41 @@ model User {
   adminReportEmails       Boolean          @default(true)
   /// Payout runs, failed transfers and refund activity.
   adminPayoutEmails       Boolean          @default(true)
+
+  /// The instructor workspace's own notification preferences, from
+  /// `/dashboard/instructor/settings/notifications`.
+  ///
+  /// Separate columns rather than a reuse of the learner set above, for the
+  /// reason the admin block gives: they answer a different question. The
+  /// learner rows are about the courses this person *takes*; these are about
+  /// the courses they *teach*, the students in them and the money they earn.
+  /// An account is very often both, so the two sets coexist — turning your
+  /// teaching mail off must not also stop the lesson reminders for a course
+  /// you are enrolled in.
+  ///
+  /// The four map one-for-one onto the INSTRUCTOR categories in
+  /// `lib/config/notification-feed.ts` — Courses, Students, Community and
+  /// Earnings — so what an instructor is *emailed* about and what the feed
+  /// *reports* cannot drift into two different vocabularies. Its fifth
+  /// category, Messages, is the `instructorNotifyAbout` radio's middle option
+  /// rather than a switch, exactly as it is on the learner's page.
+  ///
+  /// `securityEmails` is deliberately **not** duplicated here either: it is
+  /// about the account itself, which everybody has, so all three forms render
+  /// that same column.
+  ///
+  /// Defaults are all on. Unlike the learner set there is no promotional row
+  /// to justify an off-by-default — every one of these is a fact about this
+  /// person's own business on the platform.
+  instructorNotifyAbout     NotifyAbout    @default(DIRECT_MESSAGES)
+  /// Reviews, approvals and status changes on the courses they teach.
+  instructorCourseEmails    Boolean        @default(true)
+  /// New enrolments, questions and reviews from their students.
+  instructorStudentEmails   Boolean        @default(true)
+  /// Replies and mentions in discussions on their courses.
+  instructorCommunityEmails Boolean        @default(true)
+  /// Sales, payouts and failed transfers.
+  instructorEarningEmails   Boolean        @default(true)
   /// The Stripe Customer this account's payments and saved cards hang off.
   ///
   /// Checkout used to pass a bare `customer_email`, which meant Stripe made a
@@ -184,14 +229,14 @@ model User {
   /// Unique, so two rows can never claim the same Stripe customer, and
   /// nullable because it is *Stripe's* id: a blank `STRIPE_SECRET_KEY` (or a
   /// key rotation to a different account) must not stop the app booting.
-  stripeCustomerId        String?          @unique
-  sessions                Session[]
-  accounts                Account[]
+  stripeCustomerId          String?        @unique
+  sessions                  Session[]
+  accounts                  Account[]
   // Populated once this user actually starts teaching — see `Instructor`.
-  instructorProfile       Instructor?
-  cartItems               CartItem[]
-  wishlistItems           WishlistItem[]
-  orders                  Order[]
+  instructorProfile         Instructor?
+  cartItems                 CartItem[]
+  wishlistItems             WishlistItem[]
+  orders                    Order[]
 
   // Learning
   enrollments   Enrollment[]
