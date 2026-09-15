@@ -964,6 +964,13 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     rail's behaviour has to land on both at once. The two sidebars share the
     `sidebar_state` cookie too, so a collapse preference follows you across
     them.
+- **The account menu offers "Admin console" in the learner *and* instructor
+  shells.** It only ever appeared in the learner one, because
+  `app/(instructor)/layout.tsx` never passed `isAdmin` down — the menu's own
+  logic already handled it. The console is a mode you enter from wherever you
+  are, so hiding the way in on one of the two left it reachable only by typing
+  the URL. Both shells pass it now; the console's own form still ignores it,
+  for the reason below.
 - **`account-menu.tsx` has two forms, picked by `adminMode`.** In the student
   shell it is the five learner rows plus "Admin console" for an account with
   the role (`access-admin-console__admin.png`); inside the console it is the
@@ -2259,6 +2266,156 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   the export's own shape by construction: 12 rows, **4 unread**, four
   categories showing a count of 1 and Billing showing none, and one actor row
   with a pending Accept/Decline.
+- `components/dashboard/discussions/` — the **Discussions** surface, shared by
+  the learner's `/dashboard/discussions` and the instructor's
+  `/dashboard/instructor/discussions`. Built to the two `discussions-page.png`
+  exports, which draw the **same feed** — the same five threads by the same
+  five authors — and differ only in what you may do with it, so it is one
+  component with an `audience`, the arrangement the notification feed and the
+  inbox already have. `discussions-board.tsx` (client — the header buttons, the
+  topic pills, the scope switch, the list, the pager and the dialog's open
+  state), `discussion-card.tsx`, `discussion-stats.tsx` (a Server Component
+  passed in as `children`), `moderation-banner.tsx`,
+  `new-discussion-dialog.tsx`. `lib/discussions.ts` reads,
+  `lib/config/discussions.ts` is every word, `lib/actions/discussions.ts` is
+  the three writes. **Nothing is demo data and neither page needed a
+  migration** — `CommunityTopic`, `Discussion` and `DiscussionLike` were
+  already shaped for these exports, docstrings and all.
+  Measured at DPR 2: the shells' usual page inset, a four-up **72px** stat row
+  on a 14px gap, a 68.5px moderation strip, 35px rounded-full topic pills
+  opposite a 37px All/Mine/Unanswered switch, then **148px** cards on a 12px
+  gap with 22px padding — a 43px avatar, a 15px/700 name beside the author's
+  role pill, an 18px/700 title over a 15px muted body, 13px chips, and a
+  right-hand column of reply count over like count over the `⋯`.
+  - **The audience does not narrow the feed** beyond topic visibility. What it
+    changes is the chrome: the learner loses the stat row, the strip, the two
+    compose buttons, the switch and the row menu, and gains the header note.
+  - **Visibility is enforced in SQL.** `STAFF_ONLY` topics never reach an
+    account without a teaching profile — that is the whole reason the column
+    exists — so a hand-edited `?topic=instructor-lounge` returns nothing rather
+    than a filtered-out page. Verified: the Instructor Lounge pill is on
+    Simon's page and absent from a learner's.
+  - **The instructor's four tiles describe what they are responsible for** —
+    topics they moderate plus threads they wrote — not the whole community.
+    That is the export's own lead ("Topics you run for your cohorts") and it is
+    what makes "Awaiting your reply" mean anything. The *list* is deliberately
+    wider: it is the community, with **Mine** as the filter that narrows it.
+  - **"Awaiting your reply" and the Unanswered tab are one definition** — a
+    published thread nobody has replied to. Two numbers for one idea is how
+    they end up disagreeing on screen.
+  - **Replies are read off `Discussion.replyCount`**, not a `count()` over
+    `discussion_reply` — that table still has no rows, because the seed sets
+    the counter rather than materialising ~18,000 of them. The admin Community
+    page already reads it the same way, so one thread cannot report two reply
+    counts on two screens.
+  - **A topic pill with no threads is dropped.** A filter that can only ever
+    return nothing is the dead affordance every unbuilt sidebar row refuses;
+    the currently selected one stays so a pasted link still reads back its own
+    filter, and the compose dialog keeps the **full** list, because a topic
+    nobody has posted in yet is exactly where a first thread goes.
+  - **The reply count is not a button.** There is no thread view yet, so a
+    control that opened nothing would be the promise this codebase refuses;
+    point the card at `/dashboard/discussions/[id]` when that page lands. The
+    heart *is* real — `DiscussionLike` is the truth and `Discussion.likeCount`
+    its cache (the model says so), so the row and the counter move in one
+    transaction and a double click cannot inflate it.
+  - **Pinning is gated per topic**, on `TopicModerator.canPin` — the admin
+    Community dialog's own caption says "Moderators act only inside this
+    topic", so a teaching profile alone is not enough and the menu cannot reach
+    across somebody else's cohort.
+  - **Neither export draws a compose dialog, and one is built anyway.** Both of
+    the instructor export's header buttons are primary actions, and a primary
+    action that opens nothing is the 404 the codebase's own rule refuses — the
+    same reason the inbox got its New-message dialog. **Announce is not a
+    second design**: it is the same dialog with the Announcements topic chosen
+    for you, which is what the word means. It drops Cancel per the standing
+    rule.
+- `components/dashboard/discussions/discussion-thread.tsx` —
+  `/dashboard/discussions/[id]` and `/dashboard/instructor/discussions/[id]`,
+  from `ui-design/light/dashboard/instructor/discussion-page__individual.png`.
+  **One component for both modes**, because that export draws nothing an
+  instructor gets and a learner does not; the audience only decides where
+  "Back to discussions" points.
+  Measured at DPR 2: a **760px** column at the shells' usual page inset —
+  left-aligned, not centred, which is what it draws — a back link above a
+  760 x 326 thread card on 32px padding, then a "Replies" heading, a composer
+  row, and 104px reply cards **inset 52px** so their 40px avatars sit in the
+  gutter beside them. The title is 24px/700 over 16px body paragraphs, closed
+  by a hairline above a 36px heart pill and the reply count.
+  - **The tinted reply is a staff reply, not your own.** The export tints
+    exactly one — the instructor's — and both readings fit a page drawn for
+    that instructor. Staff wins because it says the same thing to everyone: a
+    learner opening a thread wants to spot the answer, where a highlight that
+    followed the viewer would mean something different to each of them.
+  - **The body is split on blank lines**, so the export's two paragraphs are
+    two elements. The first runs at full strength and the rest muted, which is
+    what a lede looks like and what it draws.
+  - **Both hearts are real, and they are two actions.** `LikeTargetType` exists
+    precisely so an id never has to be resolved to a table by guessing. Each is
+    optimistic and settles on what the server reports; each moves its counter
+    in the same transaction as the row, because the counter is a cache of that
+    table and three surfaces read it.
+  - **Everyone who can read a thread can reply** — the learner page's own
+    promise, and the line that separates replying from *starting* a thread. A
+    locked thread is the one refusal (`Discussion.isLocked`), and the composer
+    says so rather than vanishing.
+  - **The per-reply "Reply" focuses the composer and mentions the author.**
+    `DiscussionReply.parentId` would carry real nesting, but the export draws
+    none, so a second level of card would be designing past it.
+  - **Visibility is enforced by id as well as by filter** — a thread in a
+    `STAFF_ONLY` topic answers `notFound()` rather than leaking a title before
+    deciding.
+- **Role pills across the app are `userRoleBadge`, including here.** Both
+  discussion exports tint them differently from every other surface: Admin is a
+  solid dark pill rather than the console's orange, and **Student is the same
+  violet as Instructor**, which means the pill distinguishes nothing in a
+  thread where students are most of the replies. Delegating is the call
+  `auditRoleBadge` already made, for the reason recorded there — two surfaces
+  must not tint the same word two ways — and a neutral Student is what the
+  Users page settled.
+- **The Discussions moderation banner stays inside the instructor's own mode.**
+  It pointed at `/dashboard/admin/reviews`, which is wrong twice over: an
+  instructor cannot open the console at all (`app/(admin)/layout.tsx` answers
+  `notFound()` without the role), and that queue lists **every** report on the
+  platform rather than theirs. Both halves are fixed:
+  - **The count is scoped to what they moderate** — open reports on published
+    threads in topics they hold a `TopicModerator` seat in. A report on a
+    *reply* resolves to the thread that holds it, because the thread is what
+    the page can open. `reportedDiscussionIds` is wrapped in React `cache`, the
+    way `getSession` is: the tile and the filter both ask, and without it the
+    whole walk ran twice per request.
+  - **Review filters the list behind it** (`?scope=reported`) instead of
+    navigating away. That adds a **fourth segment** to a switch the export
+    draws with three — shown only when something is reported, or when it is the
+    filter currently applied, so the control is exactly as drawn whenever the
+    banner itself is absent. A banner that promises a destination has to have
+    one, and a filter you cannot see or leave is worse than a visible segment.
+- **The seed materialises replies now that a thread has a page.**
+  `seedCommunity` wrote `replyCount` and no `DiscussionReply` rows, which was
+  right while the only reader was the admin Community page's count columns and
+  became wrong the moment the thread page shipped — every thread would have
+  opened on "12 replies" and an empty list. All ~18,000 are written, the
+  counter stays the number of rows, and the Community page's figures do not
+  move. Two things about it:
+  - **Who replies is a wider pool than who may start a thread.**
+    `learnersCanStartThreads: false` is what makes Announcements
+    staff-authored; it says nothing about who may answer. Drawing replies from
+    the *thread* pool made every reply in that topic staff-written, which the
+    thread page then tinted end to end and lost the distinction the tint exists
+    to draw. A `STAFF_ONLY` topic is the exception, for its own reason.
+  - **A reply never predates the thread it answers**, and never lands in the
+    future — the clamp `seedCoupons` needs for its own dates.
+- **The seed now writes tags and hearts on every thread, and leaves some
+  unanswered.** `seedCommunity` only had to satisfy the admin Community page's
+  two count columns, so `tags` was `[]` and `likeCount` was 0 — which left two
+  of the discussion card's four lines blank. `discussionTagPool` supplies the
+  second chip (the topic's own name is *not* in it; the card draws that from
+  the relation, so storing it would be the same fact twice). `UNANSWERED_RATE`
+  leaves ~9% of threads with no replies, because at zero the "Awaiting your
+  reply" tile and the Unanswered tab are two dead controls. **The replies it
+  takes off them are returned to `remainder`**, so `threads + sum(replyCount)`
+  is still exactly the export's post figure — verified per topic against
+  124/1940, 862/9410, 318/4220, 406/3180, 96/1120 and 8/64.
 - `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
   from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
   `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New

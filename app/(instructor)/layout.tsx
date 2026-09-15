@@ -72,11 +72,13 @@ export default async function InstructorLayout({
     >
       <InstructorSidebar
         user={{ name: user.name, email: user.email, image: user.image }}
+        isAdmin={user.role === "admin"}
         navCounts={instructorNavCounts(unreadNotifications, unreadMessages)}
       />
       <SidebarInset>
         <InstructorHeader
           user={{ name: user.name, email: user.email, image: user.image }}
+          isAdmin={user.role === "admin"}
           unreadNotifications={unreadNotifications}
         />
         {children}

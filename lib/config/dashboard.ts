@@ -94,10 +94,13 @@ export const dashboardNav: DashboardNavGroup[] = [
     title: "Community",
     items: [
       {
+        // Real since `/dashboard/discussions` landed — it had been a live
+        // link onto a 404. The placeholder `badge: 12` is gone with it:
+        // nothing counts unread threads, and a count of threads is not work
+        // waiting on anybody.
         title: "Discussions",
         href: "/dashboard/discussions",
         icon: MessagesSquareIcon,
-        badge: 12,
       },
       {
         // Real, since `/dashboard/messages` landed: the badge is counted in

@@ -1727,3 +1727,50 @@ export const couponSeeds: {
     endsInDays: 90,
   },
 ]
+
+/**
+ * A tag per topic for the Discussions feed, drawn beside the topic's own chip.
+ *
+ * `discussions-page.png` shows two chips on most cards — the topic
+ * ("Announcements", "Q&A") and something about the cohort ("Illustration",
+ * "React") — so this pool supplies the second. The topic's name is
+ * deliberately **not** in here: the card draws that from the relation, and
+ * storing it as a tag too would be the same fact in two places, free to drift
+ * the first time a topic is renamed.
+ */
+export const discussionTagPool: Record<string, string[]> = {
+  announcements: ["Illustration", "React", "Python", "UX", "Cohort 12"],
+  "q-and-a": ["React", "TypeScript", "Figma", "Pen tool", "Module 4"],
+  challenges: ["Weekly", "Illustration", "Gradient mesh", "Icons"],
+  showcase: ["Final projects", "UX", "Illustration", "Portfolio"],
+  "instructor-lounge": ["Teaching", "Curriculum", "Payouts"],
+  // Not "Rules": the card already draws the topic's own name as the
+  // first chip, so it would read "Rules & Guidelines · Rules".
+  "rules-and-guidelines": ["Moderation", "Conduct"],
+  "career-advice": ["Portfolio", "Interviews", "Freelance"],
+}
+
+/**
+ * Reply bodies for the community threads, cycled at random.
+ *
+ * `discussion-page__individual.png` draws four replies under its thread, so
+ * the detail page needs rows rather than the counter `seedCommunity` used to
+ * write on its own. They are deliberately generic: a reply that answered its
+ * thread specifically would have to be authored 18,000 times, and a thread
+ * whose replies visibly ignore it reads worse than one whose replies are
+ * plausible small talk.
+ */
+export const replyBodies: string[] = [
+  "This is exactly what I needed — thank you for writing it up.",
+  "Following. I ran into the same thing on the last module.",
+  "Great question. I had to read it twice before it clicked.",
+  "Posting my attempt below, feedback welcome 🙌",
+  "Worked for me after I restarted and cleared the cache.",
+  "Could you share the file you used? Happy to compare notes.",
+  "Same here — the second approach is much easier to follow.",
+  "Adding to this: the shortcut in lesson 4 saves a lot of time.",
+  "Thanks, this cleared up something I'd been stuck on all week.",
+  "Noted — I'll try it tonight and report back.",
+  "Really helpful, especially the part about naming layers.",
+  "I think the docs are out of date here, this is the current way.",
+]

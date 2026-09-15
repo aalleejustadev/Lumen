@@ -58,6 +58,8 @@ import {
   promotionOptOutInstructorSlugs,
   promotionSeeds,
   couponSeeds,
+  discussionTagPool,
+  replyBodies,
   instructorThreadSeeds,
   learnerThreadSeeds,
   reportedReviewSeeds,
@@ -89,6 +91,13 @@ const REVENUE_SHARE_BPS = 7000
  */
 const REFUND_RATE = 0.021
 const REFUND_WINDOW_DAYS = 30
+/**
+ * How many community threads are left with no replies at all. The instructor
+ * Discussions page's "Awaiting your reply" tile and its Unanswered tab both
+ * read exactly this state, and at zero they are two dead controls.
+ */
+const UNANSWERED_RATE = 0.09
+
 /** Demo learner accounts, on top of the featured eight from the export. */
 const LEARNER_COUNT = 500
 /** How far back the oldest demo signup sits. */
@@ -1975,6 +1984,7 @@ async function seedCommunity(
 ) {
   const topics: Prisma.CommunityTopicCreateManyInput[] = []
   const discussions: Prisma.DiscussionCreateManyInput[] = []
+  const replies: Prisma.DiscussionReplyCreateManyInput[] = []
   const moderators: Prisma.TopicModeratorCreateManyInput[] = []
   const reports: Prisma.ContentReportCreateManyInput[] = []
 
@@ -2019,6 +2029,20 @@ async function seedCommunity(
     // A staff-post-only topic is written by staff; everywhere else it is the
     // learners, which is what the pill on the row is telling you.
     const writers = seed.learnersCanStartThreads ? authorPool : staffPool
+    /**
+     * **Who replies is a wider pool than who may start a thread.**
+     * `learnersCanStartThreads: false` is what makes Announcements
+     * staff-authored — it says nothing about who may answer, and a learner
+     * certainly may. Drawing replies from `writers` made every reply in that
+     * topic staff-written, which the thread page then tinted end to end and
+     * lost the very distinction the tint exists to draw. A staff-only topic is
+     * the exception: somebody who cannot see the Instructor Lounge cannot post
+     * in it either.
+     */
+    const repliers =
+      seed.visibility === "STAFF_ONLY"
+        ? staffPool
+        : [...authorPool, ...staffPool]
     const replyBudget = Math.max(0, seed.postCount - seed.threadCount)
     const base = Math.floor(replyBudget / Math.max(1, seed.threadCount))
     let remainder = replyBudget - base * seed.threadCount
@@ -2040,18 +2064,79 @@ async function seedCommunity(
         authorId: pick(writers),
         title: pass === 0 ? subject : `${subject} (${pass + 1})`,
         body: `${subject} — opening the thread so we can keep the discussion in one place.`,
-        tags: [],
+        // **Tags and hearts, which the list draws on every card.** Both were
+        // left empty when this seed only had to satisfy the admin Community
+        // page's two count columns; `discussions-page.png` draws a chip row
+        // and a like count per thread, so a feed of untagged, unliked threads
+        // would leave two of the card's four lines blank. The topic's own name
+        // is *not* among them — `discussion-card.tsx` draws that chip from the
+        // relation, so storing it here would be the same fact twice.
+        tags: discussionTagPool[seed.slug]
+          ? [pick(discussionTagPool[seed.slug]!)]
+          : [],
+        // Loosely tracks the reply count, the way a busy thread really does,
+        // with enough spread that the column is not a constant.
+        likeCount: Math.floor((base + extra) * (1.5 + rng() * 4)),
         isPinned: n === 0 && !seed.learnersCanStartThreads,
         replyCount: base + extra,
         status: "PUBLISHED",
         createdAt: ago(Math.floor(rng() * 280) * DAY + n * HOUR),
       })
     }
+    // **A few threads are left unanswered**, which is what the instructor
+    // page's "Awaiting your reply" tile and its Unanswered tab are *for* —
+    // every thread carrying at least `base` replies made both of them
+    // permanently zero. The replies taken off them are not lost: they go into
+    // `remainder` and are settled below, so `threads + sum(replyCount)` is
+    // still exactly the export's post figure.
+    const written = discussions.slice(discussions.length - seed.threadCount)
+    for (const row of written) {
+      // Never the pinned first thread — a pinned announcement with no replies
+      // reads as a mistake rather than a fresh question.
+      if (row.isPinned) continue
+      if (rng() >= UNANSWERED_RATE) continue
+      remainder += row.replyCount as number
+      row.replyCount = 0
+      row.likeCount = Math.floor(rng() * 4)
+    }
+
     // Anything the jitter left unspent goes on the first thread, so
     // `threads + sum(replyCount)` is exactly the export's post figure.
     if (remainder > 0 && discussions.length > 0) {
       const first = discussions[discussions.length - seed.threadCount]
       if (first) first.replyCount = (first.replyCount as number) + remainder
+    }
+
+    // -- the replies themselves ---------------------------------------------
+    //
+    // **Materialised now that a thread has a page.** This seed used to write
+    // `replyCount` and no rows, which was right while the only reader was the
+    // admin Community page's two count columns — and became wrong the moment
+    // `discussion-page__individual.png` shipped, because every thread would
+    // have opened on "12 replies" and an empty list. The counter stays the
+    // number of rows written, so it is still the cache the model calls it and
+    // the Community page's figures do not move.
+    for (const row of written) {
+      const count = row.replyCount as number
+      const opened = (row.createdAt as Date).getTime()
+      for (let r = 0; r < count; r += 1) {
+        const author = pick(repliers)
+        replies.push({
+          id: `${row.id}_r${pad(r, 4)}`,
+          discussionId: row.id as string,
+          authorId: author,
+          body: pick(replyBodies),
+          likeCount: Math.floor(rng() * 14),
+          // Spread through the days after the thread opened, and never into
+          // the future — a reply cannot predate the thread it answers.
+          createdAt: new Date(
+            Math.min(
+              NOW.getTime(),
+              opened + Math.floor(rng() * 20 * DAY) + r * HOUR
+            )
+          ),
+        })
+      }
     }
 
     // --- moderators --------------------------------------------------------
@@ -2113,12 +2198,19 @@ async function seedCommunity(
   for (let i = 0; i < discussions.length; i += 500) {
     await db.discussion.createMany({ data: discussions.slice(i, i + 500) })
   }
+  // After the threads they hang off — `DiscussionReply.discussion` is a
+  // required relation — and chunked for the same bind-parameter reason, with
+  // ~18,000 of them to write.
+  for (let i = 0; i < replies.length; i += 1000) {
+    await db.discussionReply.createMany({ data: replies.slice(i, i + 1000) })
+  }
   await db.topicModerator.createMany({ data: moderators })
   await db.contentReport.createMany({ data: reports })
 
   return {
     topics: topics.length,
     threads: discussions.length,
+    replies: replies.length,
     moderators: moderators.length,
     reports: reports.length,
   }
@@ -2645,7 +2737,8 @@ async function main() {
   const community = await seedCommunity(learners, instructors, admins)
   console.log(
     `community         ${community.topics} topics, ${community.threads} threads, ` +
-      `${community.moderators} moderator rows, ${community.reports} reports`
+      `${community.replies} replies, ${community.moderators} moderator rows, ` +
+      `${community.reports} reports`
   )
 
   const promotions = await seedPromotions(categories)

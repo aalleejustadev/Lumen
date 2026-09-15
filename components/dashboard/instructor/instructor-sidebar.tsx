@@ -50,9 +50,13 @@ import { type MenuUser } from "@/lib/user"
  */
 function InstructorSidebar({
   user,
+  isAdmin,
   navCounts,
 }: {
   user: MenuUser
+  /** Whether this account carries the admin role — the account menu offers
+   *  "Admin console" on the strength of it. See `AccountMenu`. */
+  isAdmin?: boolean
   /** Live counts from the layout, keyed by href — see `instructorNavCounts`. */
   navCounts?: Record<string, number>
 }) {
@@ -97,7 +101,7 @@ function InstructorSidebar({
         </SidebarContent>
 
         <SidebarFooter className="px-3 pt-5 pb-5 group-data-[collapsible=icon]:px-0">
-          <SidebarUser user={user} />
+          <SidebarUser user={user} isAdmin={isAdmin} />
         </SidebarFooter>
       </Sidebar>
     </TooltipProvider>

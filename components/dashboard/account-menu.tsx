@@ -27,16 +27,19 @@ type Placement = React.ComponentProps<typeof DropdownMenuContent>
  *
  * It has two forms, one per shell, and `adminMode` picks between them:
  *
- *  - The student shell's, from `access-admin-console__admin.png` — the five
- *    learner rows, then "Admin console" for an account that has the role.
+ *  - The **learner and instructor shells'**, from
+ *    `access-admin-console__admin.png` — the five learner rows, then "Admin
+ *    console" for an account that has the role. Both shells pass `isAdmin`:
+ *    the console is a mode you enter from wherever you are, so hiding the way
+ *    in on one of the two would have made it reachable only by typing the URL.
  *  - The admin console's, from `exit-admin-mode__admin.png` — a shorter list
  *    (Billing, Notifications and Help Center are learner surfaces) ending in
  *    "Exit admin mode", which is the way *out* of the console and so the
  *    counterpart of the entry above rather than a second copy of it.
  *
- * `isAdmin` is only consulted in the student form: inside the console the
- * role is already established by the route guard, so an "Admin console" row
- * there would link the page to itself.
+ * `isAdmin` is ignored only in the console's own form: in there the role is
+ * already established by the route guard, so an "Admin console" row would link
+ * the page to itself.
  */
 function AccountMenu({
   user,

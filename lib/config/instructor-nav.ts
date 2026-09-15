@@ -102,11 +102,15 @@ export const instructorNav: DashboardNavGroup[] = [
         badge: 9,
       },
       {
+        // Real: `CommunityTopic`, `Discussion` and `DiscussionLike` were
+        // already shaped for `discussions-page.png`, so the surface needed no
+        // migration — see `lib/discussions.ts`. The placeholder badge is gone
+        // with it; nothing counts unread threads, and a count of threads is
+        // not work waiting on anybody.
         title: "Discussions",
         href: "/dashboard/instructor/discussions",
         icon: MessagesSquareIcon,
-        built: false,
-        badge: 12,
+        built: true,
       },
     ],
   },

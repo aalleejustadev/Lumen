@@ -30,9 +30,12 @@ import { initialsOf, type MenuUser } from "@/lib/user"
  */
 function InstructorHeader({
   user,
+  isAdmin,
   unreadNotifications = 0,
 }: {
   user: MenuUser
+  /** Whether this account carries the admin role — see `AccountMenu`. */
+  isAdmin?: boolean
   /** Unread rows in this mode's feed, counted in `app/(instructor)/layout.tsx`. */
   unreadNotifications?: number
 }) {
@@ -70,6 +73,7 @@ function InstructorHeader({
 
         <AccountMenu
           user={user}
+          isAdmin={isAdmin}
           triggerClassName="cursor-pointer rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           trigger={
             <Avatar className="size-9.5">
