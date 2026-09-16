@@ -34,10 +34,12 @@ const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"]
  */
 function QuizPage({
   quiz,
-  courseSlug,
+  courseHref,
 }: {
   quiz: CourseQuiz
-  courseSlug: string
+  /** The course page to return to, already carrying the origin that brought
+   *  the visitor here — see `learningCourseHref`. */
+  courseHref: string
 }) {
   const [index, setIndex] = React.useState(0)
   const [answers, setAnswers] = React.useState<Record<number, number>>({})
@@ -45,7 +47,6 @@ function QuizPage({
 
   const total = quiz.questions.length
   const question = quiz.questions[index]
-  const backHref = `/dashboard/learning/${courseSlug}`
   const isLast = index === total - 1
 
   if (submitted) {
@@ -53,7 +54,7 @@ function QuizPage({
       <QuizResults
         quiz={quiz}
         answers={answers}
-        courseSlug={courseSlug}
+        courseHref={courseHref}
         onRetake={() => {
           setAnswers({})
           setIndex(0)
@@ -68,7 +69,7 @@ function QuizPage({
   return (
     <div className="mx-auto w-full max-w-[718px]">
       <Link
-        href={backHref}
+        href={courseHref}
         className="flex w-fit items-center gap-2.5 text-[15px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeftIcon className="size-4.5" />

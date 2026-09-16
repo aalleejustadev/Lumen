@@ -61,9 +61,11 @@ function LessonMarker({ lesson }: { lesson: PlayerLesson }) {
 function LessonRow({
   lesson,
   courseSlug,
+  via,
 }: {
   lesson: PlayerLesson
   courseSlug: string
+  via?: string
 }) {
   const className = cn(
     "flex items-center gap-3.5 px-4 py-3",
@@ -94,7 +96,7 @@ function LessonRow({
 
   return (
     <Link
-      href={`/dashboard/learning/${courseSlug}/quiz/${lesson.quizSlug}`}
+      href={`/dashboard/learning/${courseSlug}/quiz/${lesson.quizSlug}${via ? `?via=${via}` : ""}`}
       className={cn(className, "hover:bg-hover")}
     >
       {body}
@@ -117,9 +119,14 @@ function LessonRow({
 function CourseCompletionCard({
   sections,
   courseSlug,
+  via,
 }: {
   sections: PlayerSection[]
   courseSlug: string
+  /** Where the visitor came from, carried onto the quiz rows so an instructor
+   *  previewing does not lose that fact by opening one — see
+   *  `lib/course-return.ts`. */
+  via?: string
 }) {
   const totals = courseTotals(sections)
   const openSection = sections.find((section) =>
@@ -206,6 +213,7 @@ function CourseCompletionCard({
                     key={lesson.title}
                     lesson={lesson}
                     courseSlug={courseSlug}
+                    via={via}
                   />
                 ))}
               </AccordionContent>

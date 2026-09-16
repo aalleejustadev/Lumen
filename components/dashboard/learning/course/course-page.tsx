@@ -7,6 +7,7 @@ import { CourseTabs } from "@/components/dashboard/learning/course/course-tabs"
 import { CourseVideoPlayer } from "@/components/dashboard/learning/course/course-video-player"
 import { StudyProgressCard } from "@/components/dashboard/learning/course/study-progress-card"
 import type { CoursePlayerCourse } from "@/lib/config/course-player"
+import type { learningReturnLink } from "@/lib/course-return"
 
 /**
  * `/dashboard/learning/[slug]` — the enrolled course page, from
@@ -24,8 +25,24 @@ import type { CoursePlayerCourse } from "@/lib/config/course-player"
  * Neither column sticks: the export shows both scrolling together, and the
  * right column is tall enough here that pinning it would trap the syllabus
  * mid-scroll on shorter viewports.
+ *
+ * **The back link is a prop, not a constant.** This page has two kinds of
+ * visitor — a student who bought the course, and an instructor who pressed
+ * *Preview as student* on its manage page — and the route resolves which,
+ * because only the server can check that an instructor really owns the course
+ * before offering a link into their own shell. See `lib/course-return.ts`.
  */
-function CoursePage({ course }: { course: CoursePlayerCourse }) {
+function CoursePage({
+  course,
+  backLink,
+  via,
+}: {
+  course: CoursePlayerCourse
+  backLink: ReturnType<typeof learningReturnLink>
+  /** The origin, carried through to the quiz rows so the chain survives one
+   *  level down — see `learningCourseHref`. */
+  via?: string
+}) {
   const currentLesson =
     course.sections
       .flatMap((section) => section.lessons)
@@ -34,11 +51,11 @@ function CoursePage({ course }: { course: CoursePlayerCourse }) {
   return (
     <div>
       <Link
-        href="/dashboard/learning"
+        href={backLink.href}
         className="flex w-fit items-center gap-2.5 text-[15px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeftIcon className="size-4.5" />
-        Back to courses
+        {backLink.label}
       </Link>
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start xl:grid-cols-[minmax(0,1fr)_576px]">
@@ -66,6 +83,7 @@ function CoursePage({ course }: { course: CoursePlayerCourse }) {
           <CourseCompletionCard
             sections={course.sections}
             courseSlug={course.slug}
+            via={via}
           />
         </div>
       </div>

@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
-import { CourseArt } from "@/components/dashboard/admin/courses/course-art"
+import { CourseArt } from "@/components/dashboard/course-art"
 import { CourseReviewActions } from "@/components/dashboard/admin/courses/course-review-actions"
 import {
   formatSubmittedAt,
@@ -17,9 +17,9 @@ import {
 import {
   awaitsDecision,
   changeReasonLabels,
-  courseStatusBadge,
   courseViewCopy,
 } from "@/lib/config/admin-courses"
+import { courseStatusBadge } from "@/lib/config/course-status"
 import type { CourseReview } from "@/lib/admin/courses"
 import type { ChangeReason } from "@/lib/generated/prisma/client"
 import { cn } from "@/lib/utils"

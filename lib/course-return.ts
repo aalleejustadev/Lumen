@@ -60,3 +60,78 @@ export function courseReturnLink({
     label: "Back to course",
   }
 }
+
+// ---------------------------------------------------------------------------
+// The enrolled course page's own "Back to …"
+// ---------------------------------------------------------------------------
+
+/**
+ * The second seam of exactly the same kind, and it is here rather than in a
+ * module of its own for this file's own stated reason — one place to spell
+ * "where did you come from", so a third caller cannot invent a third query
+ * string for it.
+ *
+ * `/dashboard/learning/[slug]` now has two kinds of visitor: a student who
+ * bought the course, and an **instructor previewing their own** through
+ * *Preview as student* on `/dashboard/instructor/courses/[slug]`. Its back
+ * link was hard-coded at `/dashboard/learning`, which dropped the instructor
+ * into the student shell's My Learning — a page about courses they bought,
+ * reached from a page about a course they teach.
+ *
+ * So the origin rides along as `?via=manage` and the page resolves its own
+ * back link from it, the arrangement `courseReturnLink` above already uses.
+ */
+export const PREVIEW_VIA = "manage"
+
+/** *Preview as student*, on the instructor's manage page. */
+export function previewAsStudentHref(courseSlug: string) {
+  return `/dashboard/learning/${courseSlug}?via=${PREVIEW_VIA}`
+}
+
+/**
+ * `/dashboard/learning/[slug]`'s own back link.
+ *
+ * **`canManage` is resolved server-side and is not optional**, because `via`
+ * comes off the URL and nothing else about it can be trusted: without that
+ * check a student who hand-edited `?via=manage` would be handed a link into
+ * the instructor shell, which answers `notFound()` for them — a dead link,
+ * which is the one thing every surface here refuses to render. It is the same
+ * posture `courseReturnLink` takes when it insists `from` name a real course.
+ *
+ * The label says **Exit preview** rather than "Back to …". The instructor
+ * arrived by pressing *Preview as student* and the page they are looking at is
+ * otherwise indistinguishable from what a student sees, so naming the way out
+ * after the mode they are in tells them something "Back to course management"
+ * would not.
+ */
+export function learningReturnLink({
+  courseSlug,
+  via,
+  canManage,
+}: {
+  courseSlug: string
+  via?: string
+  canManage: boolean
+}) {
+  if (via === PREVIEW_VIA && canManage) {
+    return {
+      href: `/dashboard/instructor/courses/${courseSlug}`,
+      label: "Exit preview",
+    }
+  }
+  return { href: "/dashboard/learning", label: "Back to courses" }
+}
+
+/**
+ * The course page's own URL with the origin preserved — what the quiz rows in
+ * the completion accordion link at, and what the quiz page's "Back to course"
+ * returns to. Without it the chain breaks one level down: an instructor who
+ * opened a quiz from a preview would come back to the course page having lost
+ * the fact that they were previewing, and the next click would drop them into
+ * the student shell after all.
+ */
+export function learningCourseHref(courseSlug: string, via?: string) {
+  return via === PREVIEW_VIA
+    ? previewAsStudentHref(courseSlug)
+    : `/dashboard/learning/${courseSlug}`
+}

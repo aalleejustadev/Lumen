@@ -39,3 +39,38 @@ export function compactAgo(then: Date, now: Date): string {
   const age = compactAge(then, now)
   return age === "now" ? "just now" : `${age} ago`
 }
+
+/**
+ * "Today", "2 days ago", "3 weeks ago", "1 month ago" — the *prose* ladder,
+ * beside the compact one above.
+ *
+ * Two vocabularies rather than one because the exports draw two: a queue whose
+ * rows are minutes old says "48m ago" (`Q&A-page.png`), while a review or an
+ * activity line reaching back weeks says "3 weeks ago"
+ * (`course-reviews__tab.png`, `manage-course.png`). Compacting the second to
+ * "3w ago" reads as a timestamp rather than a sentence, and expanding the
+ * first to "48 minutes ago" is what `compactAge` exists to avoid.
+ *
+ * It began inside `lib/instructor-course-manage.ts` and moved here the moment
+ * the enrolled course page needed the same ladder for its reviews — which is
+ * the whole reason this module exists, stated in its own header.
+ */
+export function longAgo(then: Date, now: Date): string {
+  const elapsed = Math.max(0, now.getTime() - then.getTime())
+  const DAY = 24 * 60 * 60 * 1000
+
+  if (elapsed < DAY) return "Today"
+  const days = Math.floor(elapsed / DAY)
+  if (days === 1) return "Yesterday"
+  if (days < 7) return `${days} days ago`
+  if (days < 30) {
+    const weeks = Math.floor(days / 7)
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`
+  }
+  if (days < 365) {
+    const months = Math.max(1, Math.floor(days / 30))
+    return `${months} ${months === 1 ? "month" : "months"} ago`
+  }
+  const years = Math.floor(days / 365)
+  return `${years} ${years === 1 ? "year" : "years"} ago`
+}

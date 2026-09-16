@@ -79,6 +79,14 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     `categories-list.tsx`), the avatar swapping to a spinner while signing out
     (`sidebar-user.tsx`, `user-menu.tsx`), and the toast that follows. Route
     changes are covered by `NavigationProgress`, not by this prop.
+  - **A `Button` that renders a `Link` needs `nativeButton={false}`.** Base UI
+    asserts that a component acting as a button really is a `<button>`, so
+    `<Button render={<Link/>}>` without it logs "A component that acts as a
+    button expected a native `<button>`… Rendering a non-`<button>` removes
+    native button semantics" on every render — a console error, not a crash, so
+    it survives a typecheck, a lint *and* a build, which is exactly how two of
+    them shipped on the manage page. Every other call site in the repo pairs
+    the two; grep `render={<Link` before adding one.
   - **Local fix in `button.tsx`, `toggle.tsx`, `tabs.tsx`, `accordion.tsx`:** none of the generated interactive variants set `cursor-pointer` — a native `<button>` defaults to the plain arrow cursor, not a pointer, so every `Button`, `Toggle`/`ToggleGroupItem`, `TabsTrigger` and `AccordionTrigger` showed the wrong cursor on hover. One line added per file (plus `disabled:cursor-not-allowed`/`aria-disabled:cursor-not-allowed` alongside the existing `disabled:opacity-50`). `npx shadcn@latest add <name>` will revert any of these; re-apply.
 - `components/shared/` — pieces used by more than one surface (`logo.tsx`, `theme-toggle.tsx`).
 - `components/marketing/` — the marketing site (`site-header.tsx`, `hero-section.tsx`, `stats-section.tsx`, sections, footer). Sections own their own backdrop; page-level files just stack sections.
@@ -1101,8 +1109,9 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     `AdminHeader` gives about the console. **There is no "Exit instructor
     mode" row** and no upgrade card: the switch *is* the way out (unlike the
     console, which has none), and the promo sells a learner plan.
-  - **Dashboard, Notifications, Settings and Help Center are built; the
-    remaining rows carry an explicit `built: false`.** The flag defaults to
+  - **Dashboard, My Courses, Q&A, Discussions, Coupons, Messages,
+    Notifications, Settings and Help Center are built; the remaining rows carry
+    an explicit `built: false`.** The flag defaults to
     *built*, so a row left without it silently renders as a live link onto a
     404 — which is exactly what happened on the first pass and is worth knowing
     before adding a row. Each unbuilt row has an export of its own waiting in
@@ -2551,6 +2560,310 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     the course beside it — so no "(2)" suffix is added.
   - **`CourseLesson.order` is 0-based**, so the lesson label is `order + 1`;
     without it every question read "Lesson 0 · Introduction".
+- `components/dashboard/instructor/courses/` — **My Courses** at
+  `/dashboard/instructor/courses`, from
+  `ui-design/light/dashboard/instructor/my-courses-page.png`:
+  `courses-board.tsx` (client — the title's Create Course button, the tabs, the
+  search, the row stack and the pager, since one pending flag belongs to all of
+  them), `my-course-row.tsx`, `course-row-actions.tsx`, `courses-stats.tsx` (a
+  **Server Component passed in as `children`**, so four cards and their icons
+  stay off the bundle — `coupons-page.tsx`' arrangement), `courses-format.ts`,
+  composed by `my-courses-page.tsx`. `lib/instructor-courses.ts` reads and
+  `lib/config/instructor-courses.ts` is every word the page says. **Nothing on
+  it is demo data, it needed no migration and it has no writes** — `Course`
+  already carried every column the export asks for, docstrings and all
+  (`CourseStatus`' own note names this page), and every control on it either
+  filters or navigates.
+  Measured off that export at DPR 2 and verified against the render: a header
+  block **pixel-identical** to `coupons-page__main.png`'s (so it is that page's,
+  not a second measurement), a four-up `CountCard` row on a 16px gap, a **42px**
+  segmented track (`--track`, `p-1`, 34px items) opposite a **220 x 42** search
+  field, then **126px** rows on 16px padding — the **150 x 92** thumbnail, not
+  the type, sets the height — 18px to a 17px/700 title, a 20px pill 12px past
+  it, a 14px meta line, an optional 7px bar in a 340px group, and a trailing 85
+  x 38 button 10px from a 38px `⋯`. Rows stack on a 16px `gap` against the 14px
+  the export measures between hairlines, for the reason `wishlist-row.tsx`
+  records about `Card`'s `ring`.
+  Six things decide what the page means, and the export settles none of them:
+  - **A meta chip is dropped when it has nothing to say**, which is what
+    reproduces the export's two row shapes *without* a status test: a course
+    that has never been live has no students, no rating and no revenue, so its
+    line collapses to the lesson count and the updated stamp exactly as drawn.
+    The rule Platform Overview's attention queues already follow.
+  - **The progress bar is the half that _is_ status-led.** The export draws it
+    on Draft and In review and not on Published, at 100% as readily as at 45%,
+    so the test is "has this course ever been live" rather than "is it
+    finished" — `hasBeenLive`, which the button's label reads too. **"% built"
+    is published lessons over total**, which is exactly what
+    `CourseLesson.isPublished` exists to answer; nothing softer would be more
+    than decoration.
+  - **Students is `Course.enrollmentCount`** — the counter the catalog, the
+    sale page and `top-courses-card.tsx` already draw — and the KPI tile is the
+    **sum of that same column**, the arrangement the admin Community page's
+    Threads tile records. **Avg. rating is weighted by `reviewsCount`** and
+    renders an em dash until something is rated. **Revenue is the instructor's
+    own net** over `InstructorEarning`, excluding REVERSED: a refunded sale's
+    share went back with the money, the reading `admin-reports.ts` settles for
+    "Platform share".
+  - **Drafts is DRAFT _and_ NEEDS_CHANGES.** `CourseStatus` has six members and
+    the export names three, so a course the console sent back has to land
+    somewhere — it is back in the instructor's hands and its pill still says
+    "Needs changes", where giving it no tab would make the most urgent course on
+    the account reachable only from All. REJECTED and ARCHIVED get no tab:
+    neither is work, and a tab that is empty on almost every account is worse
+    than an All that holds them.
+  - **The tabs and the search write to the URL; nothing else does** — the split
+    `users-table.tsx` makes between its filters and its Columns menu. The search
+    is debounced and resets from the URL by adjusting state during render, the
+    pattern `users-toolbar.tsx` records. A hand-edited `?page=99` is corrected
+    against the real page count with one extra read rather than left to draw
+    "Showing 491–490 of 4".
+  - **The row's primary button is two controls sharing one slot.** On a course
+    that has been live it is **Manage**, a plain link to
+    `/dashboard/instructor/courses/[slug]`; on one that has not it is
+    **Continue editing**, which renders disabled with the reason on it, as does
+    the header's **Create Course**, because there is no authoring flow —
+    `/dashboard/instructor/courses/new` is still `built: false`. That flag is
+    read off `instructorNav` **in the route** rather than written down again,
+    so both light up together the day that row flips; it is resolved on the
+    server so four groups of lucide icons never reach the board's bundle, the
+    rule `lib/config/messages.ts` learned the hard way. `hasBeenLive` is the
+    one test that picks between them, and it is the same test the manage page's
+    own read makes before it will render at all. The `⋯` beside the button
+    carries the destinations that depend on neither: the sale page (disabled on
+    a course that has never been published, the treatment
+    `user-row-actions.tsx` gives "View profile" for a learner), and this
+    course's Q&A and Coupons through the `?course=` filters those two pages
+    already parse.
+- `components/dashboard/instructor/courses/manage/` — **the manage page** at
+  `/dashboard/instructor/courses/[slug]`, from
+  `ui-design/light/dashboard/instructor/manage-course.png`: `manage-header.tsx`,
+  `manage-stats.tsx`, `manage-sections.tsx` (the three groups of rows),
+  `course-health-card.tsx`, `activity-card.tsx` and `publish-toggle.tsx`,
+  composed by `manage-course-page.tsx`. `lib/instructor-course-manage.ts` reads,
+  `lib/config/instructor-course-manage.ts` is every word the page says and every
+  row icon, `lib/actions/instructor-course-manage.ts` is the one write.
+  **Nothing on it is demo data and it needed no migration** — every figure comes
+  out of a table that already existed.
+  It is a **Server Component all the way down except the publish button**, which
+  is the opposite arrangement from `courses-board.tsx` next door: nothing else
+  here has state, so the route's whole client bundle is one button and its
+  dialog.
+  Measured off that export at DPR 2: the shell's usual 32px page inset, a back
+  link (`leading-none`, or the inherited 1.5 line box drops the whole header
+  5px), a 96 x 64 thumbnail 20px from the title, a four-up stat row 24px under
+  the header, then **Manage** 30px below and a two-column grid — fluid left, a
+  **576px** right column, a 22px gutter, the two right cards 18px apart. Rows
+  are flush 64px on `--border-subtle` hairlines inside a zero-padding card, both
+  right-hand cards are `p-5` with a 16px/700 title, the health bars are 7px on
+  the card's full 536px content width, and the activity tiles are 30px.
+  Eight things decide what the page means, and the export settles none of them:
+  - **The page is only for a course that has been live.** My Courses sends
+    Manage here and Continue editing to the authoring flow, so a draft's
+    destination is that wizard — and every block here assumes a course with
+    students. `notFound()` otherwise, which deliberately cannot be told apart
+    from "not yours" or "no teaching profile": the read scopes its `where` by
+    `instructorId` rather than checking ownership afterwards, the console's
+    reasoning about not distinguishing "you may not see this" from "there is
+    nothing here".
+  - **Preview as student opens `/dashboard/learning/[slug]`, the _enrolled_
+    course page** — the player, the syllabus and the four tabs somebody sees
+    after buying — not `/dashboard/courses/[slug]`, the sale page. An
+    instructor previewing their own course wants to see what they teach rather
+    than the pitch. It links unconditionally rather than going inert on an
+    unpublished course: that page does not gate on status, and an archived
+    course is precisely one whose owner may still want to look at it. Making
+    that link work at all needed `lib/course-player.ts`, below, and getting
+    back out of it needed `lib/course-return.ts`' second seam.
+  - **The Manage heading sits above the grid, not in the left cell.** Measured,
+    the export's Course health card begins level with the left column's first
+    group label, ~30px above where a heading inside that cell would let it
+    start. It is `course-page.tsx`' own call about its `h1`, read the other way.
+  - **A row is a link only when its destination exists**, and renders with no
+    chevron otherwise — `attention-list.tsx`' rule. Two of the eight go
+    somewhere today: **Q&A** and **Coupons**, through the `?course=` filters
+    those pages already parse and already resolve against the caller's own
+    courses, so a link built here can only ever narrow what they would have
+    shown anyway. Which rows are live is resolved in the route off
+    `instructorNav` (each row names the nav href that owns it), so Students,
+    Reviews and Analytics become links on their own the day those flip.
+  - **Revenue is the instructor's own net**, excluding REVERSED, which is the
+    identical figure My Courses' row draws for this course — two screens under
+    one label must not show two numbers. **Students is
+    `Course.enrollmentCount`**, the counter the catalog and the sale page
+    already draw, not a `count()` over `enrollment`.
+  - **The three health bars each needed a definition.** Completion rate is
+    `Enrollment.completedAt` over enrolments; **Avg. watch time is the mean of
+    `Enrollment.progressPercent`**, which is not a stand-in for watch time but
+    *is* it (that column's own docstring says it is computed from watch seconds
+    against lesson duration); quiz pass rate is `QuizAttempt.passed` over
+    submitted attempts, and it is **the one metric with no writer** — there is
+    no scoring flow, so it reads null and the bar says "No data yet" rather than
+    claiming 0%, which would be a far worse lie than an absence. The whole row
+    is dropped on a course with no quiz lessons.
+  - **Recent activity is a merged view of four tables, not a stored log** —
+    enrolments in the last day, the newest reviews and questions, the week's
+    earnings. An activity model would be a second copy of facts `Enrollment`,
+    `CourseReview`, `CourseQuestion` and `InstructorEarning` already hold, the
+    reasoning `Discussion.replyCount` records from the other side. Timestamps
+    are written on the **server** and cross as strings, for `audit-format.ts`'
+    reason.
+  - **Unpublish writes ARCHIVED, not DRAFT**, which is what that word means —
+    `courseStatusBadge`' own note says an archived course "is simply no longer
+    on sale", where DRAFT would claim it was never finished and drop it into My
+    Courses' Drafts tab beside work that genuinely is unfinished. **Republish
+    goes straight back to PUBLISHED** without a second trip through the
+    console's queue: the course was approved once and there is no editor, so it
+    only re-lists something the platform already said yes to — and it is what
+    makes Unpublish safe to offer at all. Only the unpublish direction is
+    confirmed, the split `maintenance-dialog.tsx` makes. `publishedAt` is left
+    alone on both paths, because the catalog's "new this month" and the Reports
+    chart count from it. The action refuses anything not in the state it
+    expects, the rule `admin-courses.ts`' `decide()` states.
+  - **The toggle calls `router.refresh()` as well as the action's
+    `revalidatePath`.** That call names `/dashboard` as a *layout*, which
+    reaches My Courses and the catalog — but this page is in the `(instructor)`
+    route group and shares no layout with `/dashboard`, so its own header pill
+    and stats would not move without the refresh.
+  `getManageCoursePage` is wrapped in React `cache` because `generateMetadata`
+  and the render both read it and, unlike `fetch`, a Prisma call is not deduped
+  for free — the call `getAttentionFacts` already makes for the console.
+- `lib/course-player.ts` — **the resolver behind `/dashboard/learning/[slug]`,
+  over two catalogs.** That page and the sale page beside it read
+  `lib/config/browse-courses.ts`; every instructor surface reads the database.
+  The two do not overlap completely and deliberately so — `seedDeveloperWorkspace`'s
+  courses are kept out of the student catalog because "a course with no authored
+  `CourseDetail` is a sale page that cannot render" — so **Preview as student
+  404'd for exactly the courses an instructor owns**, which is how the gap was
+  found. The order is the whole design:
+  - **The static catalog wins.** `mastering-illustration` is hand-authored to
+    match `course-page__part{1,2}.png` and the three tab exports down to the
+    copy, and every other catalog slug has a generated `CourseDetail` that the
+    sale page, My Learning and the quiz page already read. Letting the database
+    shadow any of it would quietly re-render surfaces built to match an export.
+    **Nothing that rendered before this renders differently.**
+  - **The database is the fallback**, and it builds the *same*
+    `CoursePlayerCourse` through the *same* `buildSections` / `buildQuizzes` /
+    `buildEncouragement` / `buildSuitFor` — which is why those four are now
+    exported from `lib/config/course-player.ts` rather than reimplemented. Two
+    builders would be two answers to "what does a lesson row say".
+    `buildSuitFor` was narrowed from a whole `BrowseCourse` to the three fields
+    it reads, so a course with no catalog row can call it.
+  - Three things the database answers better than the generator did, and they
+    are read rather than invented: **questions** are real `CourseQuestion` rows
+    with their real replies (a reply is tagged `Instructor` by matching
+    `Instructor.userId`, not by a role string), **reviews** are real
+    `CourseReview` rows, and **progress** is the *viewer's own* `Enrollment` —
+    absent for an instructor previewing, so the page opens at zero rather than
+    borrowing somebody else's. `answered` is the stored
+    `answeredByInstructor`, never `replies.length`, the distinction `lib/qa.ts`
+    records.
+  - **The quiz route resolves through it too** (`getEnrolledCourseQuiz`), or a
+    quiz row on a database-only course would be a chevron onto a 404.
+  - `art` is `categoryGradients[Category.accentColor]`, whose values are the
+    same `from-X to-Y` vocabulary `browse-courses.ts`' own `artCycle` uses, so
+    one course cannot wear two tiles on two screens.
+  - **This is a swap of the source, not of the surface** — the half of the swap
+    `course-player.ts`' header has always called for ("once there is" an
+    `Enrollment` model). The catalog half is much larger: Browse Courses, the
+    sale page and My Learning all read those config files, and none of them was
+    touched.
+- **`lib/course-return.ts` gained a second seam: the enrolled course page's own
+  back link.** That page now has two kinds of visitor — a student who bought
+  the course, and an instructor who pressed **Preview as student** — and its
+  back link was hard-coded at `/dashboard/learning`, so previewing dropped an
+  instructor into the student shell's My Learning: a page about courses they
+  bought, reached from a page about a course they teach. It is the same problem
+  that module was written for, so it is solved the same way rather than with a
+  second vocabulary — the file's own header already said both directions live
+  there "so a new caller can't invent a fourth spelling".
+  - `previewAsStudentHref` writes `?via=manage`; `learningReturnLink` resolves
+    it; `learningCourseHref` carries it onto the quiz rows. **All three live in
+    that one module.**
+  - **`canManage` is resolved server-side and is not optional.** `via` comes
+    off the URL, so a student who hand-edited `?via=manage` would otherwise be
+    handed a link into the instructor shell, which answers `notFound()` for
+    them — a dead link, the one thing every surface here refuses to render.
+    `canManageCourse` (`lib/instructor.ts`) is that check: the profile's id
+    against `Course.instructorId`, the same test `getManageCoursePage` makes,
+    reduced to one indexed lookup because the back link needs the answer and
+    none of the thirteen figures that page reads. It is only asked when the
+    query claims a preview, so an ordinary student's visit costs no extra
+    query.
+  - **The origin is threaded one level deeper than it first appears to need.**
+    A quiz opened from a previewed course returns to the course page, and if
+    that link dropped `via` the next click would land in the student shell
+    after all — so `CourseCompletionCard` takes it and the quiz route rebuilds
+    the course href from it. `QuizPage`/`QuizResults` take a `courseHref`
+    rather than a `courseSlug` for that reason: the route owns the spelling.
+  - **The label is "Exit preview", not "Back to …".** Every other back link in
+    the app names its destination, but this page is otherwise indistinguishable
+    from what a student sees, so naming the mode the instructor is in tells
+    them something the destination's name would not.
+- **`longAgo` moved into `lib/relative-time.ts`.** It was local to
+  `lib/instructor-course-manage.ts` until the enrolled course page needed the
+  same "3 weeks ago" ladder for its reviews — which is the reason that module
+  exists, stated in its own header. It sits beside `compactAge`/`compactAgo`
+  as the deliberate *second* vocabulary: a queue whose rows are minutes old
+  says "48m ago", while a review reaching back weeks says "3 weeks ago", and
+  compacting the second reads as a timestamp rather than a sentence.
+- **The seed now gives enrolments somewhere to be.** Two figures on the health
+  card were structurally 0% before this page existed and nothing had noticed:
+  `seedPurchases` rolled `Math.floor(rng() * 101)` and wrote `completedAt` only
+  at exactly 100, which is one roll in a hundred — so at `SEED_MAX` nothing ever
+  completed and **Completion rate read 0% on every course in the catalog**. It
+  rolls the share first now (a quarter finish, the rest spread under it).
+  `seedDeveloperWorkspace`'s `ADMIN_GRANT` rows carried no `progressPercent` at
+  all, so **Avg. watch time read 0%** on the one account a developer signs in
+  with — the same gap that function's own ratings were added to close. They take
+  the fixed ladder in `ownerProgress` (`prisma/seed-data.ts`), which lands those
+  courses on 40% completion and 67% watch time and does not move between runs.
+  `completedAt` follows from progress being 100 and is never set independently,
+  so the card's two bars cannot tell different stories about one enrolment.
+  **Re-run `npm run db:seed` to see it.**
+- **`courseStatusBadge` moved to `lib/config/course-status.ts`.** Both
+  `courses-page__admin.png` and `my-courses-page.png` draw the same six words
+  in the same slot, and **two surfaces must not tint the same word two ways** —
+  the call `auditRoleBadge` already made about the role pill. One thing changed
+  with the move: **Draft is `--warning`, not the neutral tint**, read off the
+  instructor export because it is the only one of the two that draws a Draft
+  pill (the console's queue excludes drafts outright). That leaves Draft and
+  Needs changes sharing an amber and told apart by the word, the call the Users
+  table settled for Inactive and Suspended.
+- **`CourseArt` moved to `components/dashboard/course-art.tsx`**, out of
+  `components/dashboard/admin/courses/`, for the reason `count-card.tsx`' own
+  note gives in the other direction: its third caller is an instructor row, and
+  reaching across into the console's directory would tie that row to a redesign
+  of the console. Nothing about it changed.
+- **The seed gives the developer's workspace a draft and an in-review course.**
+  `seedDeveloperWorkspace` wrote two PUBLISHED courses, which was right while
+  Q&A was the only surface hanging off it and became wrong the moment My
+  Courses shipped: its Drafts tab, its In review tab and its "% built" bar all
+  exist only for a course that has not gone live, so a developer's own account
+  opened with three dead controls. `ownerCourseSeeds` gained `status` and
+  `publishedLessons` — the draft is 5 of 11 lessons live, which lands the bar on
+  the export's own 45%, and the in-review course is 100%, because you submit a
+  finished course. Four things about it:
+  - **Only published courses take enrolments and become Q&A anchors.** A
+    question needs a student and a student needs a course that was on sale;
+    anchoring one to a draft would put a learner inside something nobody could
+    have bought. The published pair therefore stay **first** in the list, since
+    `ownerQuestionSeeds.courseIndex` addresses it by position.
+  - **The unshipped pair are recent and the published pair are not**, which is
+    what gives `updatedAt desc` — the order the page sorts on — something to
+    sort, and the export's "Updated 4 hours ago" shape something to render.
+  - It also writes **reviews** for the published pair, because without them the
+    star chip and the Avg. rating tile both drew an em dash on the one account
+    a developer actually signs in with. `Course.rating`/`reviewsCount` are then
+    set from the rows that landed — **a counter is the number of rows written**,
+    the rule `CourseQuestion.voteCount` learned the hard way.
+  - That roll-up write passes **`updatedAt` explicitly**. It is an `@updatedAt`
+    column, so leaving it out stamped the housekeeping write onto the very
+    column My Courses sorts on and draws: every seeded course opened "Updated 1
+    minute ago" and the list came back in run order. **Re-run `npm run db:seed`
+    to see any of it.**
+  - Revenue is still absent on those rows, and correctly so: their enrolments
+    are `ADMIN_GRANT`, so no order was placed and nothing was earned.
 - `lib/relative-time.ts` — the shared `compactAge` / `compactAgo`. Messages,
   Discussions and Q&A all draw the export's compact form ("48m ago", "3h ago",
   "1d ago") where `date-fns`' `formatDistanceToNow` says "51 minutes ago", and

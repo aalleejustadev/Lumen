@@ -1,5 +1,6 @@
 import { cache } from "react"
 
+import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
 
 /**
@@ -86,4 +87,32 @@ export const canTeach = cache(async function canTeach(user: {
 }) {
   if (user.role === "instructor") return true
   return (await getInstructorProfile(user.id)) !== null
+})
+
+/**
+ * Whether the signed-in account is the instructor who **owns** this course,
+ * which is a narrower question than `canTeach` and the one the enrolled course
+ * page's back link asks: an instructor previewing their own course may be sent
+ * back to its manage page, and nobody else may, because
+ * `/dashboard/instructor/courses/[slug]` answers `notFound()` for a course
+ * that is not theirs.
+ *
+ * It is the same test `getManageCoursePage` makes — the profile's id against
+ * `Course.instructorId` — reduced to one indexed lookup, because the back link
+ * needs the answer and none of the thirteen figures that page reads.
+ */
+export const canManageCourse = cache(async function canManageCourse(
+  courseSlug: string
+) {
+  const session = await getSession()
+  if (!session) return false
+
+  const profile = await getInstructorProfile(session.user.id)
+  if (!profile) return false
+
+  const course = await db.course.findFirst({
+    where: { slug: courseSlug, instructorId: profile.id },
+    select: { id: true },
+  })
+  return course !== null
 })

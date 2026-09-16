@@ -1,4 +1,8 @@
-import { browseCourses, type BrowseCourse } from "@/lib/config/browse-courses"
+import {
+  browseCourses,
+  type BrowseCourse,
+  type CourseLevel,
+} from "@/lib/config/browse-courses"
 import {
   getCourseDetail,
   type CourseReview,
@@ -535,7 +539,7 @@ const flagshipPlayers: Record<string, PlayerExtras> = {
 
 /** Bands rather than a single line, so a course barely started and one nearly
  *  finished don't get the same congratulation. */
-function buildEncouragement(title: string, progress: number) {
+export function buildEncouragement(title: string, progress: number) {
   if (progress >= 100) {
     return `Course complete! 🎉 ${title} is done — your certificate is waiting in the Certificates tab.`
   }
@@ -548,17 +552,32 @@ function buildEncouragement(title: string, progress: number) {
   return `Welcome aboard! 🎉 ${title} starts with the first lesson below — press play whenever you're ready.`
 }
 
-function buildSuitFor(course: BrowseCourse) {
-  const topic = course.title.toLowerCase()
+/**
+ * Takes the three fields it actually reads rather than a whole
+ * `BrowseCourse`, so `lib/course-player.ts` can call it for a course that
+ * exists only as database rows and has no row in the static catalog at all.
+ * One implementation, for the reason every "the two can't drift" note in this
+ * codebase gives.
+ */
+export function buildSuitFor({
+  title,
+  level,
+  category,
+}: {
+  title: string
+  level: CourseLevel
+  category: string
+}) {
+  const topic = title.toLowerCase()
   const audience =
-    course.level === "Beginner" || course.level === "All Levels"
+    level === "Beginner" || level === "All Levels"
       ? "Beginners, newbies & amateurs"
-      : `${course.level} learners ready to go deeper`
+      : `${level} learners ready to go deeper`
 
   return [
-    `Anyone who wants to start their career & get paid for their ${course.category.toLowerCase()} skills.`,
+    `Anyone who wants to start their career & get paid for their ${category.toLowerCase()} skills.`,
     `${audience} in the field of ${topic}.`,
-    `Anyone that needs to add "${course.title}" to their portfolio.`,
+    `Anyone that needs to add "${title}" to their portfolio.`,
     `People who learn best by building alongside the lessons rather than reading about them.`,
   ]
 }
@@ -570,7 +589,7 @@ function buildSuitFor(course: BrowseCourse) {
  * accordion's per-section "N done" counts add up from — so a section is
  * partially complete exactly where the running total lands inside it.
  */
-function buildSections(
+export function buildSections(
   sections: CourseSection[],
   completedLessons: number
 ): PlayerSection[] {
@@ -689,7 +708,7 @@ function buildQuiz(sectionTitle: string, count: number): CourseQuiz {
   }
 }
 
-function buildQuizzes(sections: CourseSection[]): CourseQuiz[] {
+export function buildQuizzes(sections: CourseSection[]): CourseQuiz[] {
   return sections.flatMap((section) =>
     section.lessons
       .filter((lesson) => lesson.type === "quiz")

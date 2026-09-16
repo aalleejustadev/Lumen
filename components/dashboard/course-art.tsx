@@ -7,8 +7,13 @@ import {
 import { cn } from "@/lib/utils"
 
 /**
- * A course's artwork, for the review queue's 120 x 74 thumbnail and the course
- * view's 4:1 banner.
+ * A course's artwork — the review queue's 120 x 74 thumbnail, the course
+ * view's 4:1 banner, and My Courses' 150 x 92 row thumbnail.
+ *
+ * It sits here rather than in `components/dashboard/admin/courses/`, where it
+ * started, for the reason `count-card.tsx` gives about its own move: the third
+ * caller is in the *instructor* shell, and an instructor row reaching across
+ * into the console's directory would tie it to a redesign of the console.
  *
  * `Course.thumbnailUrl` is honoured when it is set, and it will be once
  * instructor image upload exists. Until then every course falls back to the

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/pagination"
 import { toast } from "@/components/ui/toast"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { CourseArt } from "@/components/dashboard/admin/courses/course-art"
+import { CourseArt } from "@/components/dashboard/course-art"
 import { RequestChangesDialog } from "@/components/dashboard/admin/courses/request-changes-dialog"
 import {
   approveCourse,
@@ -27,10 +27,10 @@ import {
   adminCoursesCopy,
   awaitsDecision,
   COURSES_PAGE_SIZE,
-  courseStatusBadge,
   courseTabs,
   isCoursesFiltered,
 } from "@/lib/config/admin-courses"
+import { courseStatusBadge } from "@/lib/config/course-status"
 import type { CoursesPage, CoursesQuery, CoursesTab } from "@/lib/admin/courses"
 import { cn } from "@/lib/utils"
 

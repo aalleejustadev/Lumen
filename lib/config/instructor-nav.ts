@@ -58,10 +58,14 @@ export const instructorNav: DashboardNavGroup[] = [
         built: true,
       },
       {
+        // Real: `Course` already carried every column
+        // `my-courses-page.png` asks for, so the surface needed no migration
+        // — see `lib/instructor-courses.ts`. It carries no badge: a count of
+        // your own courses is not work waiting on anybody.
         title: "My Courses",
         href: "/dashboard/instructor/courses",
         icon: BookOpenTextIcon,
-        built: false,
+        built: true,
       },
       {
         // The one row the export tags rather than counts — a green outlined

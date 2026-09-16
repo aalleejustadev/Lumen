@@ -26,13 +26,14 @@ const PASS_PERCENT = 80
 function QuizResults({
   quiz,
   answers,
-  courseSlug,
+  courseHref,
   onRetake,
 }: {
   quiz: CourseQuiz
   /** Question index -> the option index chosen. Missing = skipped. */
   answers: Record<number, number>
-  courseSlug: string
+  /** The course page to return to, origin and all — see `learningCourseHref`. */
+  courseHref: string
   onRetake: () => void
 }) {
   const total = quiz.questions.length
@@ -45,7 +46,7 @@ function QuizResults({
   return (
     <div className="mx-auto w-full max-w-[718px]">
       <Link
-        href={`/dashboard/learning/${courseSlug}`}
+        href={courseHref}
         className="flex w-fit items-center gap-2.5 text-[15px] text-muted-foreground hover:text-foreground"
       >
         <RotateCcwIcon className="size-4.5 -scale-x-100" />
@@ -139,7 +140,7 @@ function QuizResults({
 
           <Button
             nativeButton={false}
-            render={<Link href={`/dashboard/learning/${courseSlug}`} />}
+            render={<Link href={courseHref} />}
             className="h-10 gap-2 px-6 font-semibold"
           >
             Back to course

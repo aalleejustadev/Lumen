@@ -67,6 +67,7 @@ import {
   questionReplyBodies,
   questionSubjects,
   ownerCourseSeeds,
+  ownerProgress,
   ownerQuestionSeeds,
   reportedReviewSeeds,
   requiredCategorySlugs,
@@ -1344,7 +1345,14 @@ async function seedPurchases(
 
   await db.enrollment.createMany({
     data: enrollments.map(({ id, userId, courseId, orderId, paidAt }) => {
-      const progress = Math.floor(rng() * 101)
+      // **A quarter of them finish.** `completedAt` is written *because*
+      // progress is 100 and never independently, so the two can never tell
+      // different stories about one enrolment — but a flat `rng() * 101` puts
+      // exactly 100 one roll in a hundred, so at `SEED_MAX` nothing ever
+      // completed and the manage page's **Completion rate** bar read 0% on
+      // every course in the catalog. The share is rolled first and the partial
+      // ones spread under it.
+      const progress = rng() < 0.25 ? 100 : Math.floor(rng() * 100)
       return {
         id,
         userId,
@@ -3068,6 +3076,7 @@ async function seedDeveloperWorkspace(
   const replies: Prisma.CourseQuestionReplyCreateManyInput[] = []
   const votes: Prisma.CourseQuestionVoteCreateManyInput[] = []
   const enrollments: Prisma.EnrollmentCreateManyInput[] = []
+  const reviews: Prisma.CourseReviewCreateManyInput[] = []
 
   for (const [ownerIndex, owner] of owners.entries()) {
     // `Instructor.userId` is nullable, and an instructor answer needs an
@@ -3086,8 +3095,19 @@ async function seedDeveloperWorkspace(
       // Unique per owner, because `Course.slug` is: two developers sharing a
       // database would otherwise collide on the second one's first course.
       const slug = ownerIndex === 0 ? seed.slug : `${seed.slug}-${ownerIndex}`
+      const status = seed.status ?? "PUBLISHED"
+      const live = status === "PUBLISHED"
+      // The catalog publishes backwards from today; the two unshipped courses
+      // are recent instead, which is what puts them where My Courses sorts
+      // (`updatedAt desc`) and gives its "Updated 4 hours ago" shape something
+      // to render.
       const publishedAt = ago((30 + courseIndex * 20) * DAY)
+      const touchedAt = live ? publishedAt : ago((courseIndex - 1) * 6 * HOUR)
       const minutes = seed.lessons.length * 9
+      // What the "% built" bar reads — see `ownerCourseSeeds`. A submitted
+      // course has every lesson live, which is the state its own In-review row
+      // is drawn in.
+      const publishedLessons = seed.publishedLessons ?? seed.lessons.length
 
       await db.course.create({
         data: {
@@ -3107,13 +3127,22 @@ async function seedDeveloperWorkspace(
           requirements: ["No prior experience needed."],
           learningOutcomes: seed.lessons,
           videoHours: Math.max(1, Math.round(minutes / 60)),
-          status: "PUBLISHED",
-          submittedAt: new Date(publishedAt.getTime() - 6 * DAY),
-          publishedAt,
-          createdAt: publishedAt,
+          status,
+          // A draft was never submitted to anybody; an in-review course was,
+          // which is what the console's queue orders on.
+          submittedAt: live
+            ? new Date(publishedAt.getTime() - 6 * DAY)
+            : status === "IN_REVIEW"
+              ? ago(2 * DAY)
+              : null,
+          publishedAt: live ? publishedAt : null,
+          createdAt: live ? publishedAt : ago(20 * DAY),
+          updatedAt: touchedAt,
           lessonCount: seed.lessons.length,
           totalDurationMinutes: minutes,
-          enrollmentCount: Math.min(learners.length, SEED_MAX),
+          // Nobody can be enrolled in a course that has never been on sale, so
+          // the counter and the rows below agree at zero.
+          enrollmentCount: live ? Math.min(learners.length, SEED_MAX) : 0,
           sections: {
             create: {
               id: `${SEED}sec_own_${key}`,
@@ -3126,8 +3155,8 @@ async function seedDeveloperWorkspace(
                   type: "VIDEO" as const,
                   durationMinutes: 9,
                   order,
-                  isPublished: true,
-                  isPreview: order === 0,
+                  isPublished: order < publishedLessons,
+                  isPreview: live && order === 0,
                 })),
               },
             },
@@ -3143,6 +3172,11 @@ async function seedDeveloperWorkspace(
         instructorId: owner.id,
         publishedAt,
       })
+      // **Only published courses become Q&A anchors and take enrolments.** A
+      // question needs a student, and a student needs a course that was on
+      // sale; anchoring one to a draft would put a learner inside something
+      // nobody could have bought.
+      if (!live) continue
       own.push({
         id,
         lessonIds: seed.lessons.map(
@@ -3154,13 +3188,73 @@ async function seedDeveloperWorkspace(
       // the distinction `seedConversations` already draws about its own
       // enrolments. It is what makes these learners askers rather than
       // strangers to the course.
-      for (const learner of cap(learners)) {
+      const ratings: number[] = []
+      for (const [seat, learner] of cap(learners).entries()) {
+        const enrollmentId = `${SEED}enr_own_${key}_${learner.id.slice(-6)}`
+        // **Progress is spread across the seats rather than left at the
+        // column default**, because it is what the manage page's Course health
+        // card averages for **Avg. watch time** — a pool of grants at 0 draws
+        // an empty bar on the one account a developer actually signs in with,
+        // which is the same gap the ratings below were added to close.
+        // `completedAt` follows from 100 and nothing else, and is clamped to
+        // now for the reason `seedCoupons` clamps its own dates.
+        const progress = ownerProgress[seat % ownerProgress.length]!
+        const enrolledAt = new Date(publishedAt.getTime() + DAY)
         enrollments.push({
-          id: `${SEED}enr_own_${key}_${learner.id.slice(-6)}`,
+          id: enrollmentId,
           userId: learner.id,
           courseId: id,
           source: "ADMIN_GRANT",
-          createdAt: new Date(publishedAt.getTime() + DAY),
+          progressPercent: progress,
+          completedAt:
+            progress === 100
+              ? new Date(
+                  Math.min(NOW.getTime(), enrolledAt.getTime() + 21 * DAY)
+                )
+              : null,
+          createdAt: enrolledAt,
+        })
+
+        // Roughly two thirds of them leave one, which is what lights the row's
+        // star chip and the Avg. rating tile on My Courses. Without any, both
+        // draw an em dash on the one account a developer actually signs in
+        // with — the same reason this whole function exists.
+        if (seat % 3 === 2) continue
+        const copy = pick(REVIEW_BODIES)
+        const rating = rng() < 0.7 ? 5 : 4
+        ratings.push(rating)
+        reviews.push({
+          id: `${SEED}rv_own_${key}_${pad(seat, 2)}`,
+          courseId: id,
+          userId: learner.id,
+          enrollmentId,
+          rating,
+          title: copy.title,
+          body: copy.body,
+          createdAt: ago((7 + seat * 5) * DAY),
+        })
+      }
+
+      // **The counters are the rows that were written**, never the figure the
+      // seed asked for — the rule `CourseQuestion.voteCount` learned the hard
+      // way. A learner pool smaller than the cap simply produces fewer.
+      if (ratings.length > 0) {
+        await db.course.update({
+          where: { id },
+          data: {
+            // Written back explicitly: `updatedAt` is `@updatedAt`, so leaving
+            // it out would stamp this housekeeping write onto the column My
+            // Courses sorts on and draws — every seeded course would open
+            // "Updated 1 minute ago" and the list would be in run order.
+            updatedAt: touchedAt,
+            reviewsCount: ratings.length,
+            rating:
+              Math.round(
+                (ratings.reduce((sum, value) => sum + value, 0) /
+                  ratings.length) *
+                  10
+              ) / 10,
+          },
         })
       }
     }
@@ -3216,6 +3310,7 @@ async function seedDeveloperWorkspace(
   }
 
   await db.enrollment.createMany({ data: enrollments })
+  await db.courseReview.createMany({ data: reviews })
   await db.courseQuestion.createMany({ data: questions })
   await db.courseQuestionReply.createMany({ data: replies })
   await db.courseQuestionVote.createMany({ data: votes })

@@ -73,6 +73,25 @@ export const seededCourseSlugs = [
  * student catalog, and a course nobody authored a `CourseDetail` for would be
  * a sale page that cannot render.
  */
+/**
+ * The developer's own catalog — see `seedDeveloperWorkspace`.
+ *
+ * **Two of the four have never been live**, which is not decoration: My
+ * Courses draws a Drafts tab, an In review tab and a "% built" bar that only
+ * exist for a course that has not shipped, and a workspace of two published
+ * courses leaves all three with nothing to say. It is the call
+ * `ownerQuestionSeeds` already makes by answering two of its four questions.
+ *
+ * `publishedLessons` is what the bar reads: `CourseLesson.isPublished` over
+ * the course's lessons, which is the figure that column exists to answer. The
+ * in-review course has all of them live, because you submit a finished course
+ * — which is exactly what the export draws on its own In-review row (100%
+ * built).
+ *
+ * The published pair stay **first**, because `ownerQuestionSeeds.courseIndex`
+ * addresses this list by position and a question belongs to a course somebody
+ * can be enrolled in.
+ */
 export const ownerCourseSeeds: {
   slug: string
   title: string
@@ -81,6 +100,10 @@ export const ownerCourseSeeds: {
   level: CourseLevel
   priceCents: number
   listPriceCents: number
+  /** Where the course sits on My Courses. Absent means PUBLISHED. */
+  status?: "DRAFT" | "IN_REVIEW"
+  /** How many of `lessons` are live. Absent means all of them. */
+  publishedLessons?: number
   lessons: string[]
 }[] = [
   {
@@ -112,7 +135,64 @@ export const ownerCourseSeeds: {
       "A release you can repeat",
     ],
   },
+  {
+    slug: "typography-for-product-teams",
+    title: "Typography for Product Teams",
+    subtitle: "A type scale your engineers can actually build against.",
+    categorySlug: "design",
+    level: "Beginner",
+    priceCents: 3999,
+    listPriceCents: 8999,
+    status: "DRAFT",
+    // 5 of 11 — the bar reads 45%, which is the figure the export draws.
+    publishedLessons: 5,
+    lessons: [
+      "Introduction & course overview",
+      "Why a scale beats picking sizes",
+      "Choosing a ratio you can defend",
+      "Line height is a function of measure",
+      "Naming steps engineers will use",
+      "Auditing an existing product",
+      "Weights, and when to stop adding them",
+      "Type in dense interfaces",
+      "Handing the scale to a codebase",
+      "Keeping it alive after launch",
+      "Wrap-up & next steps",
+    ],
+  },
+  {
+    slug: "writing-technical-documentation",
+    title: "Writing Technical Documentation",
+    subtitle: "Docs people finish reading, and come back to.",
+    categorySlug: "development",
+    level: "Intermediate",
+    priceCents: 4499,
+    listPriceCents: 9499,
+    status: "IN_REVIEW",
+    lessons: [
+      "Introduction & course overview",
+      "Who is actually reading this",
+      "The four kinds of document",
+      "Writing a tutorial that works first time",
+      "Reference that answers one question",
+      "Keeping examples from rotting",
+      "Wrap-up & next steps",
+    ],
+  },
 ]
+
+/**
+ * How far each seat in the learner pool has got, in order — the values
+ * `seedDeveloperWorkspace` assigns its `ADMIN_GRANT` enrolments.
+ *
+ * It is a fixed ladder rather than a roll so that the figures a developer sees
+ * on `/dashboard/instructor/courses/[slug]` do not move between runs: at
+ * `SEED_MAX` it gives **40% completion** and a **67% average watch time**,
+ * which is the shape `manage-course.png` draws and a plausible one for a young
+ * course. The two 100s are the only enrolments that carry a `completedAt`,
+ * since that column follows from this one and never stands on its own.
+ */
+export const ownerProgress = [100, 72, 45, 100, 18] as const
 
 /**
  * The four questions waiting on the developer's own Q&A page.

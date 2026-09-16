@@ -54,42 +54,6 @@ export function isCoursesFiltered(query: CoursesQuery): boolean {
   return query.tab !== "all"
 }
 
-export type Badge = { label: string; className: string }
-
-/**
- * The status pill. Tints are a tenth-opacity semantic token behind that same
- * token as the text, rather than the export's literal hexes, so dark mode
- * follows — the choice `billing-transactions.tsx` documents. Sampled off the
- * export: In review is the blue `--accent-2`, Needs changes the amber
- * `--warning`, Published `--success`, Rejected `--destructive`.
- *
- * DRAFT never reaches the page (the query excludes it) and ARCHIVED is the one
- * state the export does not draw — it takes the neutral tint, because an
- * archived course is not a problem, it is simply no longer on sale.
- */
-export function courseStatusBadge(status: CourseStatus): Badge {
-  switch (status) {
-    case "IN_REVIEW":
-      return { label: "In review", className: "bg-accent-2/10 text-accent-2" }
-    case "NEEDS_CHANGES":
-      return {
-        label: "Needs changes",
-        className: "bg-warning/10 text-warning",
-      }
-    case "PUBLISHED":
-      return { label: "Published", className: "bg-success/10 text-success" }
-    case "REJECTED":
-      return {
-        label: "Rejected",
-        className: "bg-destructive/10 text-destructive",
-      }
-    case "ARCHIVED":
-      return { label: "Archived", className: "bg-hover text-muted-foreground" }
-    default:
-      return { label: "Draft", className: "bg-hover text-muted-foreground" }
-  }
-}
-
 /**
  * Whether a course still has a decision waiting on it. Only an `IN_REVIEW`
  * course draws Approve and Request changes in the export — the other three
