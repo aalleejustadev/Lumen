@@ -16,6 +16,197 @@ import type {
 } from "@/lib/config/browse-courses"
 
 // ---------------------------------------------------------------------------
+// How much the seed writes
+// ---------------------------------------------------------------------------
+
+/**
+ * **The seed is deliberately tiny.** Every collection it writes is capped at
+ * `SEED_MAX` rows, at the user's instruction — a development database you can
+ * read end to end in one screen beats one you have to query to understand.
+ *
+ * It is a *cap*, not a target: a list shorter than this is written whole. The
+ * cost is that several surfaces no longer reproduce the figures their exports
+ * were measured against — the admin Community page's 124/1940, 862/9410 …
+ * per-topic totals, the coupons footer's "Showing 1–5 of 8", the Users page's
+ * five-hundred-account KPI row. Those invariants are recorded against the
+ * *shape* of the seed rather than these volumes, so raising this number is all
+ * it takes to get them back.
+ */
+export const SEED_MAX = 5
+
+/**
+ * The slice of the published catalog the seed puts into the database.
+ *
+ * Curated rather than `browseCourses.slice(0, SEED_MAX)`, because the other
+ * seed lists address courses **by slug** — the featured Q&A questions, the
+ * coupons, the message threads — and an arbitrary five would silently drop
+ * most of them on the floor. These five are the ones that carry the authored
+ * demo content. Everything else in `lib/config/browse-courses.ts` still drives
+ * the student catalog, which reads the config rather than the database.
+ */
+export const seededCourseSlugs = [
+  "mastering-illustration",
+  "python-for-everybody",
+  "the-complete-react-bootcamp",
+  "design-systems-in-figma",
+  "advanced-illustration-techniques",
+]
+
+// ---------------------------------------------------------------------------
+// The developer's own workspace
+// ---------------------------------------------------------------------------
+
+/**
+ * Courses and questions for **whoever is signed in developing this**, rather
+ * than for the eight demo instructors.
+ *
+ * Every seeded surface hangs off `Course.instructorId`, so an account with an
+ * `Instructor` row and no courses opens Q&A, My Courses, Students and Coupons
+ * on their empty states — which is exactly what a developer with their own
+ * profile sees, and is the state this exists to fix. `seedDeveloperWorkspace`
+ * writes these for **every** non-seeded instructor profile, the call
+ * `seedNotifications` already makes about admin accounts ("the account a
+ * developer signs in with is usually their own"). The rows still carry the
+ * `seed_` prefix, so the next run reclaims them.
+ *
+ * The slugs are deliberately **not** in `browse-courses.ts`: that file is the
+ * student catalog, and a course nobody authored a `CourseDetail` for would be
+ * a sale page that cannot render.
+ */
+export const ownerCourseSeeds: {
+  slug: string
+  title: string
+  subtitle: string
+  categorySlug: string
+  level: CourseLevel
+  priceCents: number
+  listPriceCents: number
+  lessons: string[]
+}[] = [
+  {
+    slug: "studio-workflow-essentials",
+    title: "Studio Workflow Essentials",
+    subtitle: "Set up a repeatable process from brief to final handoff.",
+    categorySlug: "design",
+    level: "Beginner",
+    priceCents: 4999,
+    listPriceCents: 9999,
+    lessons: [
+      "Introduction & course overview",
+      "Setting up your workspace",
+      "From brief to moodboard",
+      "Handing off without a meeting",
+    ],
+  },
+  {
+    slug: "shipping-side-projects",
+    title: "Shipping Side Projects",
+    subtitle: "Finish the thing. A practical course on scope and momentum.",
+    categorySlug: "development",
+    level: "Intermediate",
+    priceCents: 5999,
+    listPriceCents: 11999,
+    lessons: [
+      "Why side projects stall",
+      "Cutting scope without cutting value",
+      "A release you can repeat",
+    ],
+  },
+]
+
+/**
+ * The four questions waiting on the developer's own Q&A page.
+ *
+ * `courseIndex` addresses `ownerCourseSeeds` by position rather than by slug,
+ * so renaming a course cannot orphan its questions. Two are answered and two
+ * are not, which is what gives the Unanswered tab, the Answered tab and the
+ * sidebar badge each something to show.
+ */
+export const ownerQuestionSeeds: {
+  courseIndex: number
+  title: string
+  body: string
+  answered: boolean
+  votes: number
+  agoMinutes: number
+  replies: {
+    from: "instructor" | "learner"
+    body: string
+    agoMinutes: number
+  }[]
+}[] = [
+  {
+    courseIndex: 0,
+    title: "Is the handoff checklist available as a download?",
+    body: "You mention a checklist in the handoff lesson but I cannot find it in the resources panel. Is it meant to be there?",
+    answered: false,
+    votes: 4,
+    agoMinutes: 38,
+    replies: [],
+  },
+  {
+    courseIndex: 0,
+    title: "Does this workflow hold up with a team of two?",
+    body: "Most of the examples are solo. Would the same process work if a second designer is picking up the file halfway through?",
+    answered: true,
+    votes: 9,
+    agoMinutes: 5 * 60,
+    replies: [
+      {
+        from: "learner",
+        body: "Curious about this too — we are a pair and keep stepping on each other's files.",
+        agoMinutes: 4 * 60,
+      },
+      {
+        from: "instructor",
+        body: "It does, with one change: name the handoff point explicitly rather than leaving it implied. Lesson 4 covers the checklist; the only addition for a pair is that whoever picks the file up owns the naming from that point on.",
+        agoMinutes: 3 * 60,
+      },
+      {
+        from: "learner",
+        body: "That is the bit we were missing. Thank you.",
+        agoMinutes: 2 * 60,
+      },
+    ],
+  },
+  {
+    courseIndex: 1,
+    title: "How small is too small for a first side project?",
+    body: "I keep starting things that are too big and then abandoning them. Is there a rule of thumb for scoping the first one?",
+    answered: true,
+    votes: 12,
+    agoMinutes: 26 * 60,
+    replies: [
+      {
+        from: "instructor",
+        body: 'If you cannot describe it in one sentence without an "and", it is too big. Ship that, then add the second sentence as version two.',
+        agoMinutes: 25 * 60,
+      },
+      {
+        from: "learner",
+        body: "The one-sentence test is brutal and correct.",
+        agoMinutes: 20 * 60,
+      },
+    ],
+  },
+  {
+    courseIndex: 1,
+    title: "Any advice on picking back up after a month away?",
+    body: "Life got in the way and the repo has gone cold. Is it better to restart or to try to remember where I was?",
+    answered: false,
+    votes: 2,
+    agoMinutes: 3 * 24 * 60,
+    replies: [
+      {
+        from: "learner",
+        body: "Not an answer, but writing a two-line note to yourself before you stop has saved me twice.",
+        agoMinutes: 2 * 24 * 60,
+      },
+    ],
+  },
+]
+
+// ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
 
@@ -64,6 +255,7 @@ export function requiredCategorySlugs(): string[] {
     ...new Set([
       ...Object.values(categorySlugByBrowseCategory),
       ...pendingCourseSeeds.map((seed) => seed.categorySlug),
+      ...ownerCourseSeeds.map((seed) => seed.categorySlug),
       ...promotionSeeds.flatMap((seed) => seed.categorySlugs),
     ]),
   ].sort()
@@ -1773,4 +1965,146 @@ export const replyBodies: string[] = [
   "Noted — I'll try it tonight and report back.",
   "Really helpful, especially the part about naming layers.",
   "I think the docs are out of date here, this is the current way.",
+]
+
+// ---------------------------------------------------------------------------
+// Course Q&A
+// ---------------------------------------------------------------------------
+
+/**
+ * Questions for `ui-design/light/dashboard/instructor/Q&A-page.png` and its
+ * thread page.
+ *
+ * The first three are the export's own rows, verbatim — including its
+ * `Q&A-page__individual.png` answer thread, which is the one place the
+ * instructor's voice is drawn. The rest are generated from this pool so the
+ * tabs, the course filter and the pager all have something to do; a Q&A queue
+ * of three rows would leave every control inert.
+ *
+ * `answeredByInstructor` is stated per seed rather than derived from whether
+ * any reply happens to be staff-written: it is the column the pill, both tabs
+ * and the sidebar badge read, and letting the seed and the app disagree about
+ * it is exactly the drift `createQuestionReply` writes it in a transaction to
+ * avoid.
+ */
+export const featuredQuestionSeeds: {
+  courseSlug: string
+  title: string
+  body: string
+  votes: number
+  answered: boolean
+  agoMinutes: number
+  /**
+   * `from: "instructor"` renders tinted and carries the Instructor pill.
+   * `agoMinutes` is how long ago the reply was posted, so the thread reads
+   * **downward from oldest** — the order the export draws (30m, 12m, 10m, 8m,
+   * 5m, 2m ago).
+   */
+  replies: {
+    from: "instructor" | "learner"
+    body: string
+    agoMinutes: number
+  }[]
+}[] = [
+  {
+    courseSlug: "mastering-illustration",
+    title: "Does the shape builder work the same in the free trial version?",
+    body: "I am on the trial and the shape builder panel looks different from the one in the video. Is it limited, or am I missing a setting?",
+    votes: 7,
+    answered: true,
+    agoMinutes: 48,
+    replies: [
+      {
+        from: "instructor",
+        body: "Great question — all core tools including the shape builder are available in the trial. The panel is collapsed by default; enable it under Window › Shape Builder.",
+        agoMinutes: 30,
+      },
+      {
+        from: "learner",
+        body: "Had the same issue. Enabling it from the Window menu fixed it for me too.",
+        agoMinutes: 12,
+      },
+      {
+        from: "learner",
+        body: "Worth noting the panel is under a different menu on older versions — check Object if you cannot find it.",
+        agoMinutes: 10,
+      },
+      {
+        from: "learner",
+        body: "Confirmed working on the trial here too. Thanks all.",
+        agoMinutes: 8,
+      },
+      {
+        from: "instructor",
+        body: "Glad it is sorted. I have added a note to the lesson resources so this is clearer next time.",
+        agoMinutes: 5,
+      },
+      {
+        from: "learner",
+        body: "This thread saved me an hour, appreciate it.",
+        agoMinutes: 2,
+      },
+    ],
+  },
+  {
+    courseSlug: "mastering-illustration",
+    title: "Which font pairing do you recommend for editorial illustration?",
+    body: "You mentioned pairing a grotesque with a serif but the file in the resources only has one font. Any specific pairing you would suggest?",
+    votes: 4,
+    answered: false,
+    agoMinutes: 180,
+    replies: [],
+  },
+  {
+    courseSlug: "python-for-everybody",
+    title:
+      "My exported SVG looks blurry in the browser — what am I doing wrong?",
+    body: "Exporting at the settings shown in the lesson, but the result is soft on a retina screen.",
+    votes: 12,
+    answered: true,
+    agoMinutes: 24 * 60,
+    replies: [
+      {
+        from: "instructor",
+        body: "That is the viewBox rather than the export — set it to the artboard size and the browser will scale it cleanly at any density.",
+        agoMinutes: 900,
+      },
+    ],
+  },
+]
+
+/** Generated questions, so the tabs and the pager have something to work
+ *  with. Cycled with a numeric suffix past the first pass, the way
+ *  `communityTopicSeeds.subjects` is. */
+export const questionSubjects: string[] = [
+  "How do I keep the layer list manageable on a long project?",
+  "Is there a shortcut for repeating the last transform?",
+  "What is the difference between the two export presets?",
+  "Should I flatten before handing off to a developer?",
+  "The colour picker looks different from the video — has it moved?",
+  "How long should I spend on thumbnails before committing?",
+  "Any tips for keeping line weight consistent at small sizes?",
+  "Which file format do you hand clients for print?",
+  "Can I follow along on a tablet, or do I need a desktop?",
+  "What is the recommended canvas size for the final project?",
+  "My brush pressure stopped registering halfway through — ideas?",
+  "Do you cover animating these illustrations later in the course?",
+]
+
+export const questionReplyBodies: string[] = [
+  "Good question — I ran into the same thing in module two.",
+  "Following, I would like to know this as well.",
+  "The lesson resources have a file that shows this, check the zip.",
+  "This worked for me once I restarted the app.",
+  "Adding a screenshot below in case it helps anyone else.",
+  "Thanks, that explains why mine looked different.",
+]
+
+/** The instructor's own answer on a generated question. Short on purpose —
+ *  the long, specific answer is the export's, above. */
+export const instructorAnswerBodies: string[] = [
+  "Good spot — I cover this in the next lesson, but the short version is below.",
+  "Yes, that is expected. Follow the steps in the lesson resources and it will line up.",
+  "That is a setting rather than a bug — check the panel under Window and it should appear.",
+  "Either approach works. I would use the first for anything you plan to hand off.",
 ]

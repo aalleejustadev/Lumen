@@ -95,11 +95,16 @@ export const instructorNav: DashboardNavGroup[] = [
         // sidebar's Discussions and Messages are still in. They become real
         // the way Wishlist's did: counted in the layout and passed down
         // through `navCounts`, keyed by href.
+        // Real: `CourseQuestion` and its two siblings were already shaped for
+        // `Q&A-page.png`, so the surface needed no migration — see
+        // `lib/qa.ts`. The badge is real too, and counted in
+        // `app/(instructor)/layout.tsx`: questions in this instructor's
+        // courses with no instructor answer yet, which is work waiting on
+        // them rather than a total.
         title: "Q&A",
         href: "/dashboard/instructor/qa",
         icon: MessageCircleQuestionMarkIcon,
-        built: false,
-        badge: 9,
+        built: true,
       },
       {
         // Real: `CommunityTopic`, `Discussion` and `DiscussionLike` were
@@ -215,7 +220,10 @@ export function instructorNavCounts(
   unreadNotifications = 0,
   /** Unread messages in the threads about courses this account teaches — see
    *  `getUnreadMessageCount`. */
-  unreadMessages = 0
+  unreadMessages = 0,
+  /** Questions in this instructor's courses still awaiting an answer — see
+   *  `getUnansweredQuestionCount`. */
+  unansweredQuestions = 0
 ): Record<string, number> {
   // Omitted at zero rather than passed as 0: `NavRow` draws a badge for any
   // number it is given, and "0 unread" is noise.
@@ -225,6 +233,9 @@ export function instructorNavCounts(
       : {}),
     ...(unreadMessages > 0
       ? { "/dashboard/instructor/messages": unreadMessages }
+      : {}),
+    ...(unansweredQuestions > 0
+      ? { "/dashboard/instructor/qa": unansweredQuestions }
       : {}),
   }
 }

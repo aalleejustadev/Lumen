@@ -1,10 +1,9 @@
 import { cache } from "react"
 
-import { formatDistanceStrict } from "date-fns"
-
 import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { getInstructorProfile } from "@/lib/instructor"
+import { compactAgo } from "@/lib/relative-time"
 import { initialsOf } from "@/lib/user"
 import {
   DISCUSSIONS_PAGE_SIZE,
@@ -88,7 +87,8 @@ export type DiscussionRow = {
   likeCount: number
   /** Whether the reader's own heart is on it. */
   liked: boolean
-  /** "2h ago" — formatted here; see the module note. */
+  /** "2h ago" — the export's own compact form, written here; see
+   *  `lib/relative-time.ts`. */
   age: string
   author: {
     name: string
@@ -279,7 +279,7 @@ export async function getDiscussionsPage(
       replyCount: row.replyCount,
       likeCount: row.likeCount,
       liked: liked.has(row.id),
-      age: `${formatDistanceStrict(row.createdAt, now)} ago`,
+      age: compactAgo(row.createdAt, now),
       author: {
         name: row.author.name,
         image: row.author.image,
@@ -501,7 +501,10 @@ export async function getDiscussionDetail(
       author: { select: { name: true, email: true, image: true, role: true } },
       replies: {
         where: { deletedAt: null },
-        orderBy: { createdAt: "asc" },
+        // **Newest first.** It is also the right slice to take: with `asc` the
+        // limit below kept the *oldest* N, so a thread that outgrew it would
+        // have hidden the end of the conversation rather than its beginning.
+        orderBy: { createdAt: "desc" },
         take: THREAD_REPLY_LIMIT,
         select: {
           id: true,
@@ -559,12 +562,12 @@ export async function getDiscussionDetail(
     likeCount: row.likeCount,
     liked: liked.has(row.id),
     replyCount: row.replyCount,
-    age: `${formatDistanceStrict(row.createdAt, now)} ago`,
+    age: compactAgo(row.createdAt, now),
     author: person(row.author),
     replies: row.replies.map((reply) => ({
       id: reply.id,
       body: reply.body,
-      age: `${formatDistanceStrict(reply.createdAt, now)} ago`,
+      age: compactAgo(reply.createdAt, now),
       likeCount: reply.likeCount,
       liked: liked.has(reply.id),
       // The export tints one reply, and it is the instructor's. Staff rather

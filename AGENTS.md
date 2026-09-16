@@ -96,9 +96,65 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
 - `prisma/seed.ts` + `prisma/seed-data.ts` — the platform seed
   (`npm run db:seed`), wired through `prisma7.config.ts`'s `migrations.seed`
   because Prisma 7 no longer runs it off the back of `migrate dev`. It is what
-  makes `/dashboard/admin` real: ~8,000 rows across categories, instructors,
-  courses, accounts, orders, the earnings ledger, moderation and uptime.
-  Four things about it are load-bearing:
+  makes `/dashboard/admin` real: categories, instructors, courses, accounts,
+  orders, the earnings ledger, moderation and uptime.
+  **It is deliberately tiny — every collection is capped at `SEED_MAX` (5).**
+  It used to write ~8,000 rows, which was right while the job was reproducing
+  the exports' own figures and became the wrong trade once the surfaces were
+  built: a development database you can read end to end beats one you have to
+  query to understand. Six things about it are load-bearing:
+  - **`SEED_MAX` is one knob and raising it is the whole undo.** Nothing was
+    deleted from `prisma/seed-data.ts` — `communityTopicSeeds` still carries
+    the 124/1940, 862/9410 … pairs the admin Community page was measured
+    against, `couponSeeds` still has its eleven codes — so the volumes are a
+    `cap()` at the point of use rather than a rewrite of the data. What it
+    costs: several surfaces no longer reproduce the figures their exports
+    draw (the Community page's per-topic counts, the coupons footer's
+    "Showing 1–5 of 8", the Users page's five-hundred-account KPI row), and
+    the pagers on most pages no longer have a second page. `cap()` is the
+    single helper so a new seed list cannot quietly opt out.
+    Three knobs sit beside it and are not the same thing: **`LEARNER_COUNT`
+    is 0** (the featured accounts already exceed the cap, so the generator is
+    idle rather than gone), **`SIGNUP_WINDOW_DAYS` is 90** where it was 540
+    (the catalog publishes over two years and `seedPurchases` refuses an order
+    that predates the course it bought — at 540 a five-account pool landed
+    almost entirely before the catalog existed and the seed wrote *one*
+    order), and a **basket is one course** so orders, enrolments and reviews
+    each stay inside the cap instead of multiplying out of it.
+  - **`seededCourseSlugs` is a curated five, not `browseCourses.slice(0, 5)`.**
+    The other seed lists address courses **by slug** — the featured Q&A
+    questions, the coupons, the message threads — so an arbitrary five would
+    silently drop most of the authored demo content on the floor. A slug that
+    names no course throws rather than vanishing. The full eighteen still
+    drive the student catalog, which reads `lib/config/browse-courses.ts`
+    rather than the database.
+  - **`seedDeveloperWorkspace` writes for whoever is developing this.** Every
+    instructor surface hangs off `Course.instructorId`, so a real account with
+    an `Instructor` row and no courses opens Q&A, My Courses, Students and
+    Coupons on their empty states — a correct rendering of an empty account
+    and a useless one to look at. It finds every instructor profile the seed
+    did **not** create and gives each two published courses (with lessons, so
+    a question can be anchored to one), enrolments for the whole learner pool,
+    and the four questions in `ownerQuestionSeeds` — two answered, two not, so
+    both tabs and the sidebar badge each have something to show. It is the
+    call `seedNotifications` already makes about admin accounts: the account a
+    developer signs in with is usually their own. The rows carry the `seed_`
+    prefix, so the next run reclaims them; the profile itself is never
+    touched, and a profile with no `userId` is skipped because an instructor
+    answer needs an account to be written by. Its course slugs are
+    deliberately **not** in `browse-courses.ts` — that file is the student
+    catalog, and a course with no authored `CourseDetail` is a sale page that
+    cannot render.
+  - **A counter is the number of rows written, never the figure the seed
+    asked for.** `CourseQuestion.voteCount` used to be copied straight out of
+    the seed data while the voters were drawn from the course's own enrolment
+    — which at `SEED_MAX` is often just the asker, so the seed wrote a
+    question claiming seven votes and no `CourseQuestionVote` rows at all.
+    The pool now falls back to the whole learner set and the counter is
+    assigned from the rows that actually landed. Worth knowing because the
+    same shape recurs: `Discussion.replyCount`, `Course.enrollmentCount` and
+    `Promotion`'s redemption counters are all caches of tables somebody can
+    count.
   - **Every row it writes carries a `seed_` id prefix and it deletes only
     those** before re-inserting, so it is re-runnable and cannot touch an
     account, cart or order a human made. Ids are supplied rather than left to
@@ -2365,6 +2421,14 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   - **Visibility is enforced by id as well as by filter** — a thread in a
     `STAFF_ONLY` topic answers `notFound()` rather than leaking a title before
     deciding.
+  - **Replies are newest first** (`orderBy: { createdAt: "desc" }`), at the
+    user's instruction. It is also the right slice to take: `THREAD_REPLY_LIMIT`
+    caps what the page loads, and under `asc` that cap kept the *oldest* N — so
+    a thread that outgrew it hid the end of its own conversation rather than the
+    beginning. **The Q&A thread is deliberately the other way round** and reads
+    oldest first, because `Q&A-page__individual.png` draws it that way (30m →
+    2m, the instructor's answer at the top): a discussion is a feed you rejoin,
+    where a question is an answer you read down to.
 - **Role pills across the app are `userRoleBadge`, including here.** Both
   discussion exports tint them differently from every other surface: Admin is a
   solid dark pill rather than the console's orange, and **Student is the same
@@ -2412,10 +2476,86 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   second chip (the topic's own name is *not* in it; the card draws that from
   the relation, so storing it would be the same fact twice). `UNANSWERED_RATE`
   leaves ~9% of threads with no replies, because at zero the "Awaiting your
-  reply" tile and the Unanswered tab are two dead controls. **The replies it
+  reply" tile and the Unanswered tab are two dead controls — and **the last
+  topic forces one if the roll has not produced any**, since at `SEED_MAX` a
+  9% chance across five threads usually comes up empty. That forcing needed a
+  second fix to mean anything: the leftover replies used to be handed to "the
+  first thread", which with one thread to a topic is the very thread just
+  zeroed, so they came straight back. They now go to the first thread that
+  still has replies, and are dropped if there is none. **The replies it
   takes off them are returned to `remainder`**, so `threads + sum(replyCount)`
   is still exactly the export's post figure — verified per topic against
   124/1940, 862/9410, 318/4220, 406/3180, 96/1120 and 8/64.
+- `components/dashboard/instructor/qa/` — the **Q&A** surface at
+  `/dashboard/instructor/qa` and `/dashboard/instructor/qa/[id]`, from
+  `ui-design/light/dashboard/instructor/Q&A-page.png` and
+  `Q&A-page__individual.png`: `qa-board.tsx` (client — the course filter, the
+  three tabs, the cards and the pager, since one optimistic vote state belongs
+  to all of them), `question-card.tsx`, `question-thread.tsx`, composed by the
+  two routes. `lib/qa.ts` reads, `lib/config/qa.ts` is every word the pages
+  say, `lib/actions/qa.ts` is the two writes. **Nothing on it is demo data and
+  it needed no migration** — `CourseQuestion`, `CourseQuestionReply` and
+  `CourseQuestionVote` were already shaped for these exports; the seed wrote
+  none of them, so `seedCourseQuestions` is new.
+  Measured off the exports at DPR 2: the instructor shell's usual page inset, a
+  42px segmented tab track opposite a 42px course filter, then **125px** cards
+  on a 12px gap — a 46px vote column at the leading edge (chevron over a bold
+  count over a 13px "votes"), a 17px/700 title over a one-line 14px body, and a
+  meta row of a 28px avatar, the author, the age, a course chip and the lesson
+  label, with the status pill stacked over the reply count at the trailing
+  edge. The thread is a **760px** left-aligned column: a back link, a card on
+  32px padding holding the lesson chip and reply count over a 24px/700 title,
+  the body, a hairline and the asked-by row opposite the vote pill, then a
+  "Replies" heading and reply cards inset beside their 40px avatars, closed by
+  the composer and **Post reply**.
+  Six things decide what it means:
+  - **The pill reads `answeredByInstructor`, not the reply count.** A question
+    with six learner replies and no instructor answer is still awaiting one —
+    that is what the column exists to say, what the Unanswered tab filters on
+    and what the sidebar badge counts.
+  - **Answering flips that column in the same transaction as the reply.** It is
+    read in four places, so leaving it to a later pass would mean a question
+    that has been answered still advertising "Awaiting reply" in all of them.
+    It is only ever set, never cleared: an answer given is not un-given when a
+    learner replies after it. Verified through the UI — posting on an unanswered
+    question moved the sidebar badge 10 → 9 and the tabs 12 → 13 / 10 → 9
+    without a navigation, which is what `revalidatePath(QA_LAYOUT_PATH,
+    "layout")` buys.
+  - **Both reads scope the question by the caller's own courses**, so a
+    question id from another instructor's cohort answers `notFound()` rather
+    than opening — the guard, not a check on a value from the client. Verified:
+    Simon's session on another instructor's question returns 404.
+  - **Replies read oldest first, against the Discussions thread's newest
+    first.** See the discussion-thread note above for why the two diverge.
+  - **The tabs, the course filter and the pager write to the URL; nothing else
+    does.** All three change which rows exist, which happens in SQL — the split
+    `users-table.tsx` makes between its filters and its Columns menu.
+    `parseQuestionsQuery` is the gate, and a hand-edited `?course=` can only
+    ever narrow, since the query is already scoped by `Course.instructorId`.
+  - **The list card stacks below `sm`.** Its trailing status column is ~170px
+    of `shrink-0`, which at 400px squeezed the title to a word a line; content
+    and status share a row from `sm` up (the export's arrangement) and stack
+    below it, with the pill beside the reply count rather than above it. The
+    course chip is an `inline-block` with the line height doing the centring
+    rather than an `inline-flex`, because a flex box cannot truncate its own
+    text and a long course title spilled out of a box pinned to 26px.
+- **The seed writes the Q&A** (`seedCourseQuestions`, from
+  `featuredQuestionSeeds` / `questionSubjects`). Three things about it:
+  - **A reply's time is measured from *now*, like the question**, not as an
+    offset from the question. The first form computed
+    `createdAt + (question.agoMinutes - line.agoMinutes)`, which inverted every
+    thread — it opened on its last reply instead of the instructor's answer.
+  - **Generated subjects are indexed by the running counter**, so the four
+    questions on one course are always four different ones. Two courses may
+    share a title, which is what a real catalogue looks like — the card draws
+    the course beside it — so no "(2)" suffix is added.
+  - **`CourseLesson.order` is 0-based**, so the lesson label is `order + 1`;
+    without it every question read "Lesson 0 · Introduction".
+- `lib/relative-time.ts` — the shared `compactAge` / `compactAgo`. Messages,
+  Discussions and Q&A all draw the export's compact form ("48m ago", "3h ago",
+  "1d ago") where `date-fns`' `formatDistanceToNow` says "51 minutes ago", and
+  three copies of the same ladder is three chances to disagree about what an
+  hour-old row says.
 - `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
   from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
   `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New
@@ -2629,7 +2769,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   the placeholder `badge: 5` is gone from both nav configs. The instructor row
   flipped to `built: true`, and the learner's had been a live link onto a 404
   since the shell was built. Discussions keeps its placeholder in both, because
-  nothing counts that yet.
+  nothing counts that yet. **The instructor's Q&A row is real too** — its
+  `badge: 9` placeholder is gone and `getUnansweredQuestionCount()` feeds it
+  through `instructorNavCounts`, which is what makes the number fall the moment
+  an answer is posted.
 - **Don't put a component in a config module the server imports.**
   `lib/config/messages.ts` first held a lucide icon per empty state, and
   `app/(dashboard)/layout.tsx` reaches that module transitively through

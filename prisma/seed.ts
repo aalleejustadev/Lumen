@@ -59,11 +59,19 @@ import {
   promotionSeeds,
   couponSeeds,
   discussionTagPool,
+  featuredQuestionSeeds,
+  instructorAnswerBodies,
   replyBodies,
   instructorThreadSeeds,
   learnerThreadSeeds,
+  questionReplyBodies,
+  questionSubjects,
+  ownerCourseSeeds,
+  ownerQuestionSeeds,
   reportedReviewSeeds,
   requiredCategorySlugs,
+  SEED_MAX,
+  seededCourseSlugs,
   type ThreadMessageSeed,
 } from "./seed-data"
 
@@ -98,10 +106,53 @@ const REFUND_WINDOW_DAYS = 30
  */
 const UNANSWERED_RATE = 0.09
 
-/** Demo learner accounts, on top of the featured eight from the export. */
-const LEARNER_COUNT = 500
-/** How far back the oldest demo signup sits. */
-const SIGNUP_WINDOW_DAYS = 540
+/** Generated Q&A questions per course, on top of the export's own three. */
+const QUESTIONS_PER_COURSE = 1
+
+/**
+ * **Every collection is capped at `SEED_MAX`.** One helper rather than a
+ * `.slice()` at each call site, so the cap is greppable and a new seed list
+ * cannot quietly opt out of it.
+ */
+function cap<T>(rows: readonly T[], max = SEED_MAX): T[] {
+  return rows.slice(0, max)
+}
+
+/**
+ * The published catalog rows the seed actually writes.
+ *
+ * Derived from `seededCourseSlugs` rather than sliced off the front of
+ * `browseCourses`, for the reason that list records: the other seeds address
+ * courses by slug. A slug that is not in the catalog is a typo worth stopping
+ * on rather than a course that silently never appears.
+ */
+const seededCourses = cap(
+  seededCourseSlugs.map((slug) => {
+    const course = browseCourses.find((row) => row.slug === slug)
+    if (!course) throw new Error(`seededCourseSlugs names no course ${slug}`)
+    return course
+  })
+)
+
+/**
+ * Demo learner accounts *generated* on top of the featured ones.
+ *
+ * Zero, because `featuredLearnerSeeds` already supplies more than `SEED_MAX`
+ * and those are the authored rows the exports draw. The generator stays —
+ * raise this to get a populated Users table back.
+ */
+const LEARNER_COUNT = 0
+/**
+ * How far back the oldest demo signup sits.
+ *
+ * Short, because the catalog publishes over *two years* and `seedPurchases`
+ * refuses an order that predates the course it bought. At the old 540 days a
+ * five-account pool landed almost entirely before the catalog existed, and the
+ * seed wrote a single order; inside 90 days every account can buy, and the
+ * "new signups" card still has a trailing month to compare against the one
+ * before it.
+ */
+const SIGNUP_WINDOW_DAYS = 90
 
 // ---------------------------------------------------------------------------
 // Deterministic helpers
@@ -197,6 +248,7 @@ async function clearSeededRows() {
   await db.user.deleteMany({ where: seeded })
   // Cascades from `Course` anyway, but spelled out: `Order.coupon` is SetNull,
   // so an order that used a seeded code would otherwise outlive it silently.
+  await db.courseQuestion.deleteMany({ where: seeded })
   await db.coupon.deleteMany({ where: seeded })
   await db.course.deleteMany({ where: seeded })
   await db.instructor.deleteMany({ where: seeded })
@@ -276,8 +328,10 @@ type InstructorSeed = {
 async function seedInstructors() {
   const seeds: InstructorSeed[] = []
 
+  // Only the instructors who teach a course the seed writes — an instructor
+  // with no courses is the empty workspace `canTeach`'s note warns about.
   for (const name of new Set(
-    browseCourses.map((course) => course.instructor)
+    seededCourses.map((course) => course.instructor)
   )) {
     const slug = instructorSlug(name)
     const profile = getInstructorProfile(slug)
@@ -364,9 +418,9 @@ async function seedPublishedCourses(
   const courseData: Prisma.CourseCreateManyInput[] = []
   const submissions: Prisma.CourseSubmissionCreateManyInput[] = []
   const curricula: { courseId: string; sections: DetailSection[] }[] = []
-  const last = browseCourses.length - 1
+  const last = seededCourses.length - 1
 
-  for (const [index, course] of browseCourses.entries()) {
+  for (const [index, course] of seededCourses.entries()) {
     const detail = getCourseDetail(course.slug)
     if (!detail) throw new Error(`No detail for course ${course.slug}`)
 
@@ -624,7 +678,14 @@ async function seedPendingCourses(
   instructors: Map<string, InstructorRow>,
   reviewerId: string | null
 ) {
-  for (const seed of pendingCourseSeeds) {
+  // Filtered before it is capped: the seeded instructor set is itself a slice
+  // now, so a queued course whose author was not written is skipped rather
+  // than being the typo the throw below still catches.
+  const queued = cap(
+    pendingCourseSeeds.filter((seed) => instructors.has(seed.instructorSlug))
+  )
+
+  for (const seed of queued) {
     const instructor = instructors.get(seed.instructorSlug)
     if (!instructor)
       throw new Error(`Unknown instructor slug ${seed.instructorSlug}`)
@@ -732,6 +793,8 @@ async function seedPendingCourses(
       ],
     })
   }
+
+  return queued.length
 }
 
 // ---------------------------------------------------------------------------
@@ -776,16 +839,17 @@ function signupDates(count: number) {
 }
 
 async function seedLearners() {
-  const dates = signupDates(LEARNER_COUNT + featuredLearnerSeeds.length)
+  const featured = cap(featuredLearnerSeeds)
+  const dates = signupDates(LEARNER_COUNT + featured.length)
   const learners: LearnerRow[] = []
   const admins: string[] = []
   const users: Prisma.UserCreateManyInput[] = []
   const business: { userId: string; since: Date }[] = []
-  const taken = new Set(featuredLearnerSeeds.map((seed) => seed.email))
+  const taken = new Set(featured.map((seed) => seed.email))
 
   // The export's own eight rows first, so page one of the Users table matches
   // it; they take the newest signup dates so they sit at the top by default.
-  for (const [index, seed] of featuredLearnerSeeds.entries()) {
+  for (const [index, seed] of featured.entries()) {
     const id = `${SEED}u_f${pad(index, 2)}`
     const createdAt = dates[dates.length - 1 - index]!
     users.push({
@@ -917,8 +981,11 @@ async function seedSessions(learners: LearnerRow[]) {
     })
   }
 
-  await db.session.createMany({ data: rows })
-  return rows.length
+  // Capped like everything else: a session row is only ever read as a
+  // liveness signal, and five of them answer that as well as two hundred.
+  const capped = cap(rows)
+  await db.session.createMany({ data: capped })
+  return capped.length
 }
 
 // ---------------------------------------------------------------------------
@@ -958,7 +1025,7 @@ async function seedCoupons(
   const data: Prisma.CouponCreateManyInput[] = []
   const rows: CouponRowSeed[] = []
 
-  for (const seed of couponSeeds) {
+  for (const seed of cap(couponSeeds)) {
     const course = bySlug.get(seed.courseSlug)
     const listPrice = listPriceBySlug.get(seed.courseSlug)
     if (!course || !listPrice) continue
@@ -1065,14 +1132,14 @@ async function seedPurchases(
   }
 
   for (const learner of learners) {
+    // One course an order, so orders, enrolments and reviews each stay
+    // inside `SEED_MAX` rather than multiplying out of it. The multi-course
+    // basket is what a real checkout does and is worth restoring alongside a
+    // larger learner pool.
     const basket = Number(
       weighted([
-        ["0", 22],
-        ["1", 30],
-        ["2", 22],
-        ["3", 13],
-        ["4", 8],
-        ["5", 5],
+        ["0", 20],
+        ["1", 80],
       ] as const)
     )
     if (basket === 0) continue
@@ -1345,7 +1412,7 @@ async function seedReviews(
   // Hold one enrolment per reported course back, so its review can be the
   // reported one rather than colliding on `@@unique([courseId, userId])`.
   const reservations = new Map<string, EnrollmentRow>()
-  for (const seed of reportedReviewSeeds) {
+  for (const seed of cap(reportedReviewSeeds)) {
     const course = bySlug.get(seed.courseSlug)
     if (!course) continue
     const match = enrollments.find(
@@ -1378,7 +1445,7 @@ async function seedReviews(
   const instructorUserIds = [...instructors.values()].map((row) => row.userId)
   const reports: Prisma.ContentReportCreateManyInput[] = []
 
-  for (const [index, seed] of reportedReviewSeeds.entries()) {
+  for (const [index, seed] of cap(reportedReviewSeeds).entries()) {
     const reservation = reservations.get(seed.courseSlug)
     const course = bySlug.get(seed.courseSlug)
     if (!reservation || !course) continue
@@ -1411,10 +1478,14 @@ async function seedReviews(
     })
   }
 
-  await db.courseReview.createMany({ data: rows })
+  // Capped last rather than by skipping enrolments, so the reported reviews
+  // held back above are still among the rows that survive — the queue at
+  // `/dashboard/admin/reviews` is what those exist for.
+  const capped = cap(rows, SEED_MAX + reports.length)
+  await db.courseReview.createMany({ data: capped })
   await db.contentReport.createMany({ data: reports })
 
-  return rows.length
+  return capped.length
 }
 
 // ---------------------------------------------------------------------------
@@ -1426,7 +1497,7 @@ async function seedApplications(
   reviewerId: string | null
 ) {
   await db.instructorApplication.createMany({
-    data: instructorApplicationSeeds.flatMap((seed, index) => {
+    data: cap(instructorApplicationSeeds).flatMap((seed, index) => {
       const applicant = learners[learners.length - 1 - index]
       if (!applicant) return []
       const createdAt = ago(seed.hoursAgo * HOUR)
@@ -1598,7 +1669,10 @@ async function seedUptime() {
   ])
 
   await db.uptimeSample.createMany({
-    data: Array.from({ length: 90 }, (_, index) => {
+    // `SEED_MAX` days rather than 90. The Platform Overview card sums a
+    // window, so it still renders — its month-over-month delta simply has
+    // fewer days behind it.
+    data: Array.from({ length: SEED_MAX }, (_, index) => {
       const daysAgo = index + 1
       const day = new Date(NOW.getTime() - daysAgo * DAY)
       day.setUTCHours(0, 0, 0, 0)
@@ -1631,7 +1705,7 @@ async function seedUptime() {
  * actor with no `actorId` for the automatic entries. `actorName`/`actorRole`
  * are snapshots on every row, per the model's own note.
  */
-const AUDIT_ENTRY_COUNT = 160
+const AUDIT_ENTRY_COUNT = SEED_MAX
 /** How far back entries run. Retention is 24 months; this is the active slice. */
 const AUDIT_WINDOW_DAYS = 120
 
@@ -2008,8 +2082,12 @@ async function seedCommunity(
   let modCursor = 0
   /** The first discussion of each topic, for the report rows below. */
   const firstDiscussionByTopic = new Map<string, string>()
+  /** How many threads have been left with no replies — see the forcing rule. */
+  let unanswered = 0
 
-  for (const [index, seed] of communityTopicSeeds.entries()) {
+  const topicSeeds = cap(communityTopicSeeds)
+
+  for (const [index, seed] of topicSeeds.entries()) {
     const topicId = `${SEED}ct_${seed.slug}`
 
     topics.push({
@@ -2043,11 +2121,27 @@ async function seedCommunity(
       seed.visibility === "STAFF_ONLY"
         ? staffPool
         : [...authorPool, ...staffPool]
-    const replyBudget = Math.max(0, seed.postCount - seed.threadCount)
-    const base = Math.floor(replyBudget / Math.max(1, seed.threadCount))
-    let remainder = replyBudget - base * seed.threadCount
+    /**
+     * **The export's own figures are capped here, not in the seed data.**
+     * `communityTopicSeeds` still carries the 124/1940, 862/9410 … pairs the
+     * admin Community page was measured against, because they are what that
+     * export draws — and `SEED_MAX` is what the database actually gets. So
+     * the page's columns no longer match the drawing; raising `SEED_MAX` puts
+     * them back without re-authoring anything.
+     */
+    // **`SEED_MAX` threads across the whole community**, not per topic — so
+    // every topic pill still opens onto something without the list running to
+    // five pages. `Math.max(1, …)` is what keeps a pill that would otherwise
+    // round to nothing alive, which is the dead-affordance rule the board's
+    // own note states.
+    const perTopic = Math.max(1, Math.floor(SEED_MAX / topicSeeds.length))
+    const threadCount = Math.min(seed.threadCount, perTopic)
+    const postCount = Math.min(seed.postCount, threadCount * (1 + SEED_MAX))
+    const replyBudget = Math.max(0, postCount - threadCount)
+    const base = Math.floor(replyBudget / Math.max(1, threadCount))
+    let remainder = replyBudget - base * threadCount
 
-    for (let n = 0; n < seed.threadCount; n += 1) {
+    for (let n = 0; n < threadCount; n += 1) {
       const id = `${SEED}dsc_${seed.slug}_${pad(n, 4)}`
       if (n === 0) firstDiscussionByTopic.set(seed.slug, id)
 
@@ -2089,22 +2183,36 @@ async function seedCommunity(
     // permanently zero. The replies taken off them are not lost: they go into
     // `remainder` and are settled below, so `threads + sum(replyCount)` is
     // still exactly the export's post figure.
-    const written = discussions.slice(discussions.length - seed.threadCount)
+    const written = discussions.slice(discussions.length - threadCount)
     for (const row of written) {
       // Never the pinned first thread — a pinned announcement with no replies
       // reads as a mistake rather than a fresh question.
       if (row.isPinned) continue
-      if (rng() >= UNANSWERED_RATE) continue
+      // **The last topic forces one if nothing has drawn it yet.** At
+      // `SEED_MAX` the whole community is a handful of threads, and a 9% roll
+      // across five of them usually comes up empty — which leaves the
+      // instructor page's "Awaiting your reply" tile and its Unanswered tab
+      // the two dead controls `UNANSWERED_RATE` exists to prevent.
+      const forced = !unanswered && index === topicSeeds.length - 1
+      if (!forced && rng() >= UNANSWERED_RATE) continue
+      unanswered += 1
       remainder += row.replyCount as number
       row.replyCount = 0
       row.likeCount = Math.floor(rng() * 4)
     }
 
-    // Anything the jitter left unspent goes on the first thread, so
-    // `threads + sum(replyCount)` is exactly the export's post figure.
-    if (remainder > 0 && discussions.length > 0) {
-      const first = discussions[discussions.length - seed.threadCount]
-      if (first) first.replyCount = (first.replyCount as number) + remainder
+    // Anything the jitter left unspent goes on the first thread that still
+    // has replies, so `threads + sum(replyCount)` is the export's post figure.
+    //
+    // **Never onto a thread just left unanswered.** With one thread to a topic
+    // the "first" thread *is* the one zeroed above, so the old form handed its
+    // replies straight back and the Unanswered tab stayed empty however the
+    // roll went. If every thread in the topic is unanswered there is nowhere
+    // honest to put the remainder and it is dropped — that sum is a claim
+    // about the export's figures, which `SEED_MAX` has already given up.
+    if (remainder > 0) {
+      const target = written.find((row) => (row.replyCount as number) > 0)
+      if (target) target.replyCount = (target.replyCount as number) + remainder
     }
 
     // -- the replies themselves ---------------------------------------------
@@ -2150,12 +2258,16 @@ async function seedCommunity(
     // scope and the **Full control** permission set the export's admin row
     // draws.
     const pool = seed.visibility === "STAFF_ONLY" ? staffPool : modPool
+    // Capped by the pool as well as by `SEED_MAX`: the `while` below only
+    // exits when `chosen` grows, so asking for more seats than there are
+    // accounts to fill them would spin forever.
+    const moderatorCount = Math.min(seed.moderatorCount, SEED_MAX, pool.length)
     const chosen: string[] = []
     for (const adminId of admins) {
-      if (chosen.length >= seed.moderatorCount) break
+      if (chosen.length >= moderatorCount) break
       if (pool.includes(adminId)) chosen.push(adminId)
     }
-    while (chosen.length < seed.moderatorCount) {
+    while (chosen.length < moderatorCount) {
       const userId = pool[modCursor % pool.length]!
       modCursor += 1
       if (!chosen.includes(userId)) chosen.push(userId)
@@ -2175,7 +2287,7 @@ async function seedCommunity(
     }
   }
 
-  for (const [index, seed] of communityReportSeeds.entries()) {
+  for (const [index, seed] of cap(communityReportSeeds).entries()) {
     const targetId = firstDiscussionByTopic.get(seed.topicSlug)
     if (!targetId) continue
     const topic = communityTopicSeeds.find((row) => row.slug === seed.topicSlug)
@@ -2251,7 +2363,7 @@ async function seedPromotions(categories: Map<string, string>) {
     return date
   }
 
-  for (const seed of promotionSeeds) {
+  for (const seed of cap(promotionSeeds)) {
     await db.promotion.create({
       data: {
         id: `${SEED}promo_${seed.key}`,
@@ -2275,7 +2387,7 @@ async function seedPromotions(categories: Map<string, string>) {
     })
   }
 
-  return promotionSeeds.length
+  return cap(promotionSeeds).length
 }
 
 // ---------------------------------------------------------------------------
@@ -2386,7 +2498,7 @@ async function seedNotifications(
   const demoLearners = await db.user.findMany({
     where: { role: "user", id: { startsWith: `${SEED}u_` } },
     orderBy: { id: "asc" },
-    take: 10,
+    take: SEED_MAX,
     select: { id: true },
   })
 
@@ -2401,14 +2513,14 @@ async function seedNotifications(
   const admin = await writeNotifications(
     "ADMIN",
     admins,
-    adminNotificationSeeds,
+    cap(adminNotificationSeeds),
     instructorList,
     courses
   )
   const learner = await writeNotifications(
     "LEARNER",
     learners,
-    learnerNotificationSeeds,
+    cap(learnerNotificationSeeds),
     instructorList,
     courses
   )
@@ -2577,7 +2689,7 @@ async function seedConversations(
       learners.map((learner) => [learner.email, learner.id])
     )
 
-    for (const [index, seed] of instructorThreadSeeds.entries()) {
+    for (const [index, seed] of cap(instructorThreadSeeds).entries()) {
       const learnerUserId = learnerByEmail.get(seed.learnerEmail)
       if (!learnerUserId) continue
       thread({
@@ -2626,8 +2738,8 @@ async function seedConversations(
       list.findIndex((other) => other.id === user.id) === index
   )
 
-  for (const [recipientIndex, recipient] of recipients.entries()) {
-    for (const [seedIndex, seed] of learnerThreadSeeds.entries()) {
+  for (const [recipientIndex, recipient] of cap(recipients).entries()) {
+    for (const [seedIndex, seed] of cap(learnerThreadSeeds).entries()) {
       const profile = instructors.get(instructorSlug(seed.instructorName))
       if (!profile) continue
 
@@ -2671,6 +2783,464 @@ async function seedConversations(
 }
 
 // ---------------------------------------------------------------------------
+// Course Q&A
+// ---------------------------------------------------------------------------
+
+/**
+ * The instructor Q&A queue, from
+ * `ui-design/light/dashboard/instructor/Q&A-page.png` and its thread page.
+ *
+ * Nothing in the app emits a course question yet, so this is the stand-in
+ * `seedCommunity` and `seedNotifications` already are. Four things about it:
+ *
+ *  - **Every question is anchored to a real lesson.** `CourseQuestion.lesson`
+ *    is what draws "Lesson 2 · Mastering Tools", and a queue whose lesson
+ *    labels pointed at nothing is the one kind of demo data that reads as
+ *    broken — the point `auditTemplates` already makes about its targets.
+ *  - **Askers are enrolled learners**, not the whole account pool: the page's
+ *    lead says "Questions from students enrolled in your courses", and a
+ *    question from somebody who never bought the course would contradict it.
+ *  - **`answeredByInstructor` is written, not inferred.** It is the column the
+ *    pill, both tabs and the sidebar badge read, so it comes from the seed
+ *    rather than from whether a reply happens to be staff-written.
+ *  - **`voteCount` is the number of `CourseQuestionVote` rows written**, so
+ *    the counter is the cache the model calls it rather than a free-floating
+ *    integer.
+ */
+async function seedCourseQuestions(
+  courses: CourseRow[],
+  learners: LearnerRow[],
+  instructors: Map<string, InstructorRow>
+) {
+  const bySlug = new Map(courses.map((course) => [course.slug, course]))
+  const instructorByCourse = new Map(
+    [...instructors.values()].map((row) => [row.id, row.userId])
+  )
+
+  // Lessons per course, so a question can name one. Ordered, so a re-run
+  // anchors the same questions to the same lessons.
+  const lessons = await db.courseLesson.findMany({
+    where: { section: { courseId: { in: courses.map((c) => c.id) } } },
+    orderBy: [{ sectionId: "asc" }, { order: "asc" }],
+    select: { id: true, order: true, section: { select: { courseId: true } } },
+  })
+  const lessonsByCourse = new Map<string, { id: string; order: number }[]>()
+  for (const lesson of lessons) {
+    const list = lessonsByCourse.get(lesson.section.courseId) ?? []
+    list.push({ id: lesson.id, order: lesson.order })
+    lessonsByCourse.set(lesson.section.courseId, list)
+  }
+
+  // Who may ask: people actually enrolled, per course.
+  const enrolments = await db.enrollment.findMany({
+    where: { courseId: { in: courses.map((c) => c.id) } },
+    select: { courseId: true, userId: true },
+  })
+  const askersByCourse = new Map<string, string[]>()
+  for (const row of enrolments) {
+    const list = askersByCourse.get(row.courseId) ?? []
+    list.push(row.userId)
+    askersByCourse.set(row.courseId, list)
+  }
+
+  const questions: Prisma.CourseQuestionCreateManyInput[] = []
+  const replies: Prisma.CourseQuestionReplyCreateManyInput[] = []
+  const votes: Prisma.CourseQuestionVoteCreateManyInput[] = []
+  const learnerIds = learners.map((learner) => learner.id)
+
+  /** Writes one question plus its replies and votes. */
+  function write(options: {
+    id: string
+    course: CourseRow
+    askerId: string
+    title: string
+    body: string
+    answered: boolean
+    votes: number
+    agoMinutes: number
+    lines: {
+      from: "instructor" | "learner"
+      body: string
+      agoMinutes: number
+    }[]
+  }) {
+    const lessonList = lessonsByCourse.get(options.course.id) ?? []
+    const lesson = lessonList.length
+      ? lessonList[Math.floor(rng() * lessonList.length)]!
+      : null
+    const createdAt = ago(options.agoMinutes * 60 * 1000)
+    const instructorUserId = instructorByCourse.get(options.course.instructorId)
+
+    const question: Prisma.CourseQuestionCreateManyInput = {
+      id: options.id,
+      courseId: options.course.id,
+      lessonId: lesson?.id ?? null,
+      authorId: options.askerId,
+      title: options.title,
+      body: options.body,
+      // Filled in below from the rows actually written — see the voter pool.
+      voteCount: 0,
+      replyCount: options.lines.length,
+      answeredByInstructor: options.answered,
+      createdAt,
+    }
+    questions.push(question)
+
+    options.lines.forEach((line, index) => {
+      const author =
+        line.from === "instructor" && instructorUserId
+          ? instructorUserId
+          : pick(askersByCourse.get(options.course.id) ?? learnerIds)
+      replies.push({
+        id: `${options.id}_r${pad(index, 2)}`,
+        questionId: options.id,
+        authorId: author,
+        body: line.body,
+        // Measured from *now*, like the question itself — the earlier form
+        // computed an offset from the question and inverted the order, so the
+        // thread opened on its last reply.
+        createdAt: ago(line.agoMinutes * 60 * 1000),
+      })
+    })
+
+    // One row per voter, which is what `voteCount` is a cache of. Voters are
+    // drawn from the course's own enrolment and de-duplicated, because the
+    // table is uniquely keyed on (question, user).
+    //
+    // **It falls back to the whole learner pool when the course's own is too
+    // small to supply a single voter.** At `SEED_MAX` a course often has one
+    // enrolment — its asker — and the loop below then wrote no rows at all
+    // while `voteCount` still claimed seven, which is a counter lying about a
+    // table anyone can count.
+    const enrolled = askersByCourse.get(options.course.id) ?? []
+    const pool = enrolled.length > 1 ? enrolled : learnerIds
+    const voters = new Set<string>()
+    let guard = 0
+    const wanted = Math.min(options.votes, Math.max(0, pool.length - 1))
+    while (voters.size < wanted && guard < Math.max(8, wanted * 8)) {
+      guard += 1
+      const candidate = pick(pool)
+      if (candidate !== options.askerId) voters.add(candidate)
+    }
+    for (const voter of voters) {
+      votes.push({
+        id: `${options.id}_v_${voter}`,
+        questionId: options.id,
+        userId: voter,
+        createdAt,
+      })
+    }
+    question.voteCount = voters.size
+  }
+
+  // -- the export's own three ----------------------------------------------
+  for (const [index, seed] of cap(featuredQuestionSeeds).entries()) {
+    const course = bySlug.get(seed.courseSlug)
+    if (!course) continue
+    const askers = askersByCourse.get(course.id)
+    if (!askers || askers.length === 0) continue
+
+    write({
+      id: `${SEED}cq_f${pad(index, 2)}`,
+      course,
+      askerId: pick(askers),
+      title: seed.title,
+      body: seed.body,
+      answered: seed.answered,
+      votes: seed.votes,
+      agoMinutes: seed.agoMinutes,
+      lines: seed.replies,
+    })
+  }
+
+  // -- generated, so the tabs and the pager have something to do -----------
+  //
+  // Spread across every course that has somebody enrolled, which is what makes
+  // the course filter meaningful.
+  let generated = 0
+  for (const course of courses) {
+    // The export's own three already count against the cap, so the generated
+    // ones only make the list up to `SEED_MAX` rather than adding to it.
+    if (questions.length >= SEED_MAX) break
+    const askers = askersByCourse.get(course.id)
+    if (!askers || askers.length === 0) continue
+
+    for (let n = 0; n < QUESTIONS_PER_COURSE; n += 1) {
+      if (questions.length >= SEED_MAX) break
+      // Indexed by the running counter rather than per course, so the four
+      // questions on one course are always four *different* subjects. Two
+      // courses may share a title, which is what a real catalogue looks like
+      // — the card draws the course beside it — so no "(2)" suffix is added.
+      const subject = questionSubjects[generated % questionSubjects.length]!
+      const answered = rng() < 0.55
+      const replyCount = answered
+        ? 1 + Math.floor(rng() * 3)
+        : Math.floor(rng() * 2)
+
+      const askedAgo = 60 * (2 + Math.floor(rng() * 24 * 40))
+      const lines: {
+        from: "instructor" | "learner"
+        body: string
+        agoMinutes: number
+      }[] = []
+      for (let r = 0; r < replyCount; r += 1) {
+        // The instructor's answer comes last, which is what makes the
+        // question answered — and what the thread page reads downward to.
+        const isAnswer = answered && r === replyCount - 1
+        lines.push({
+          from: isAnswer ? "instructor" : "learner",
+          body: isAnswer
+            ? pick(instructorAnswerBodies)
+            : pick(questionReplyBodies),
+          // Spread between the question and now, oldest first — never before
+          // the question it answers.
+          agoMinutes: Math.max(
+            1,
+            Math.round((askedAgo * (replyCount - r)) / (replyCount + 1))
+          ),
+        })
+      }
+
+      write({
+        id: `${SEED}cq_g${pad(generated, 4)}`,
+        course,
+        askerId: pick(askers),
+        title: subject,
+        body: `${subject.replace(/\?$/, "")} — asking here so the answer is in one place for the cohort.`,
+        answered,
+        votes: Math.floor(rng() * 14),
+        agoMinutes: askedAgo,
+        lines,
+      })
+      generated += 1
+    }
+  }
+
+  await db.courseQuestion.createMany({ data: questions })
+  // After the questions they hang off — both are required relations.
+  for (let i = 0; i < replies.length; i += 500) {
+    await db.courseQuestionReply.createMany({ data: replies.slice(i, i + 500) })
+  }
+  for (let i = 0; i < votes.length; i += 500) {
+    await db.courseQuestionVote.createMany({ data: votes.slice(i, i + 500) })
+  }
+
+  return {
+    questions: questions.length,
+    replies: replies.length,
+    votes: votes.length,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The developer's own workspace
+// ---------------------------------------------------------------------------
+
+/**
+ * Courses, enrolments and Q&A for **every instructor profile the seed did not
+ * create** — in practice, the one belonging to whoever is developing this.
+ *
+ * Every instructor surface hangs off `Course.instructorId`, so a profile with
+ * no courses opens Q&A, My Courses, Students and Coupons on their empty
+ * states. That is a correct rendering of an empty account and a useless one to
+ * look at, which is what this fixes. It follows `seedNotifications`' own call
+ * about admin accounts: the account a developer signs in with is usually their
+ * own rather than a seeded one, so the seed writes for it too.
+ *
+ * Everything it writes carries the `seed_` prefix, so `clearSeededRows`
+ * reclaims it on the next run — the profile itself is never touched.
+ */
+async function seedDeveloperWorkspace(
+  categories: Map<string, string>,
+  learners: LearnerRow[]
+) {
+  const owners = await db.instructor.findMany({
+    where: { id: { not: { startsWith: SEED } } },
+    orderBy: { id: "asc" },
+    select: { id: true, userId: true },
+  })
+  if (owners.length === 0 || learners.length === 0) {
+    return { owners: 0, courses: 0, questions: 0 }
+  }
+
+  const courses: CourseRow[] = []
+  const questions: Prisma.CourseQuestionCreateManyInput[] = []
+  const replies: Prisma.CourseQuestionReplyCreateManyInput[] = []
+  const votes: Prisma.CourseQuestionVoteCreateManyInput[] = []
+  const enrollments: Prisma.EnrollmentCreateManyInput[] = []
+
+  for (const [ownerIndex, owner] of owners.entries()) {
+    // `Instructor.userId` is nullable, and an instructor answer needs an
+    // account to be written by — a profile with nobody behind it is not the
+    // developer's own, which is the only case this exists for.
+    const ownerUserId = owner.userId
+    if (!ownerUserId) continue
+    const own: { id: string; lessonIds: string[] }[] = []
+
+    for (const [courseIndex, seed] of cap(ownerCourseSeeds).entries()) {
+      const categoryId = categories.get(seed.categorySlug)
+      if (!categoryId) continue
+
+      const key = `${pad(ownerIndex, 2)}${pad(courseIndex, 2)}`
+      const id = `${SEED}c_own_${key}`
+      // Unique per owner, because `Course.slug` is: two developers sharing a
+      // database would otherwise collide on the second one's first course.
+      const slug = ownerIndex === 0 ? seed.slug : `${seed.slug}-${ownerIndex}`
+      const publishedAt = ago((30 + courseIndex * 20) * DAY)
+      const minutes = seed.lessons.length * 9
+
+      await db.course.create({
+        data: {
+          id,
+          slug,
+          title: seed.title,
+          subtitle: seed.subtitle,
+          description: [
+            `${seed.subtitle} Written for the seed so a fresh instructor profile has something to open.`,
+          ],
+          instructorId: owner.id,
+          categoryId,
+          level: LEVELS[seed.level],
+          durationHours: Math.max(1, Math.round(minutes / 60)),
+          priceCents: seed.priceCents,
+          listPriceCents: seed.listPriceCents,
+          requirements: ["No prior experience needed."],
+          learningOutcomes: seed.lessons,
+          videoHours: Math.max(1, Math.round(minutes / 60)),
+          status: "PUBLISHED",
+          submittedAt: new Date(publishedAt.getTime() - 6 * DAY),
+          publishedAt,
+          createdAt: publishedAt,
+          lessonCount: seed.lessons.length,
+          totalDurationMinutes: minutes,
+          enrollmentCount: Math.min(learners.length, SEED_MAX),
+          sections: {
+            create: {
+              id: `${SEED}sec_own_${key}`,
+              title: "Getting started",
+              order: 0,
+              lessons: {
+                create: seed.lessons.map((title, order) => ({
+                  id: `${SEED}les_own_${key}_${pad(order, 2)}`,
+                  title,
+                  type: "VIDEO" as const,
+                  durationMinutes: 9,
+                  order,
+                  isPublished: true,
+                  isPreview: order === 0,
+                })),
+              },
+            },
+          },
+        },
+      })
+
+      courses.push({
+        id,
+        slug,
+        title: seed.title,
+        priceCents: seed.priceCents,
+        instructorId: owner.id,
+        publishedAt,
+      })
+      own.push({
+        id,
+        lessonIds: seed.lessons.map(
+          (_, order) => `${SEED}les_own_${key}_${pad(order, 2)}`
+        ),
+      })
+
+      // **An `ADMIN_GRANT`, not a `PURCHASE`** — no order was placed, which is
+      // the distinction `seedConversations` already draws about its own
+      // enrolments. It is what makes these learners askers rather than
+      // strangers to the course.
+      for (const learner of cap(learners)) {
+        enrollments.push({
+          id: `${SEED}enr_own_${key}_${learner.id.slice(-6)}`,
+          userId: learner.id,
+          courseId: id,
+          source: "ADMIN_GRANT",
+          createdAt: new Date(publishedAt.getTime() + DAY),
+        })
+      }
+    }
+
+    if (own.length === 0) continue
+
+    for (const [index, seed] of cap(ownerQuestionSeeds).entries()) {
+      const course = own[seed.courseIndex % own.length]!
+      const qid = `${SEED}cq_own_${pad(ownerIndex, 2)}${pad(index, 2)}`
+      const asker = learners[index % learners.length]!
+
+      questions.push({
+        id: qid,
+        courseId: course.id,
+        lessonId: course.lessonIds[index % course.lessonIds.length] ?? null,
+        authorId: asker.id,
+        title: seed.title,
+        body: seed.body,
+        voteCount: seed.votes,
+        replyCount: seed.replies.length,
+        answeredByInstructor: seed.answered,
+        createdAt: ago(seed.agoMinutes * 60 * 1000),
+      })
+
+      seed.replies.forEach((line, replyIndex) => {
+        const others = learners.filter((row) => row.id !== asker.id)
+        replies.push({
+          id: `${qid}_r${pad(replyIndex, 2)}`,
+          questionId: qid,
+          authorId:
+            line.from === "instructor"
+              ? ownerUserId
+              : (others[replyIndex % Math.max(1, others.length)]?.id ??
+                asker.id),
+          body: line.body,
+          // Measured from now, like the question — see `seedCourseQuestions`.
+          createdAt: ago(line.agoMinutes * 60 * 1000),
+        })
+      })
+
+      // One row per voter, which is what `voteCount` caches. Capped by the
+      // pool: a vote needs a real account behind it.
+      for (const voter of learners.slice(0, seed.votes)) {
+        if (voter.id === asker.id) continue
+        votes.push({
+          id: `${qid}_v_${voter.id}`,
+          questionId: qid,
+          userId: voter.id,
+          createdAt: ago(seed.agoMinutes * 60 * 1000),
+        })
+      }
+    }
+  }
+
+  await db.enrollment.createMany({ data: enrollments })
+  await db.courseQuestion.createMany({ data: questions })
+  await db.courseQuestionReply.createMany({ data: replies })
+  await db.courseQuestionVote.createMany({ data: votes })
+
+  // `voteCount` is a cache of rows, so it has to be the number actually
+  // written rather than the figure the seed asked for — a small learner pool
+  // cannot supply nine distinct voters.
+  for (const question of questions) {
+    const written = votes.filter((row) => row.questionId === question.id).length
+    if (written !== question.voteCount) {
+      await db.courseQuestion.update({
+        where: { id: question.id as string },
+        data: { voteCount: written },
+      })
+    }
+  }
+
+  return {
+    owners: owners.length,
+    courses: courses.length,
+    questions: questions.length,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 
@@ -2705,14 +3275,18 @@ async function main() {
   const sessions = await seedSessions(learners)
   console.log(`sessions          ${sessions}`)
 
-  await seedPendingCourses(categories, instructors, reviewerId)
-  console.log(`queued courses    ${pendingCourseSeeds.length}`)
+  const queuedCourses = await seedPendingCourses(
+    categories,
+    instructors,
+    reviewerId
+  )
+  console.log(`queued courses    ${queuedCourses}`)
 
   // Before the purchases, not after: a redemption is an order, so the codes
   // have to exist for `seedPurchases` to attach them to real sales. See
   // `seedCoupons`.
   const listPriceBySlug = new Map(
-    browseCourses.map((course) => [course.slug, cents(course.listPrice)])
+    seededCourses.map((course) => [course.slug, cents(course.listPrice)])
   )
   const coupons = await seedCoupons(courses, listPriceBySlug)
   console.log(`coupons           ${coupons.length}`)
@@ -2733,6 +3307,17 @@ async function main() {
   console.log(`reviews           ${reviews}`)
 
   await seedApplications(learners, reviewerId)
+
+  const qa = await seedCourseQuestions(courses, learners, instructors)
+  console.log(
+    `course Q&A        ${qa.questions} questions, ${qa.replies} replies, ${qa.votes} votes`
+  )
+
+  const own = await seedDeveloperWorkspace(categories, learners)
+  console.log(
+    `your workspace    ${own.courses} courses, ${own.questions} questions ` +
+      `across ${own.owners} non-seeded instructor profile(s)`
+  )
 
   const community = await seedCommunity(learners, instructors, admins)
   console.log(
