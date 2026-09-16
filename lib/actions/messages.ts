@@ -245,3 +245,24 @@ export async function listMessageCandidates(
 ): Promise<MessageCandidate[]> {
   return getMessageCandidates(audience, search)
 }
+
+/**
+ * **Message** on an instructor's public profile. Resolves the instructor's
+ * account from the slug — the browser never supplies a user id — and hands
+ * over to `startConversation`, which runs `resolvePairing` itself: the viewer
+ * must be enrolled in `courseId`, and `courseId` must be this instructor's.
+ * An existing thread about that course is reopened rather than duplicated.
+ */
+export async function openInstructorConversation(
+  instructorSlug: string,
+  courseId: string
+): Promise<MessageActionResult> {
+  const instructor = await db.instructor.findUnique({
+    where: { slug: instructorSlug },
+    select: { userId: true },
+  })
+  if (!instructor?.userId) {
+    return { ok: false, message: "This instructor can't receive messages yet." }
+  }
+  return startConversation("LEARNER", instructor.userId, courseId)
+}

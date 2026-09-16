@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { editorQuizHref, editorStepHref } from "@/lib/config/course-editor"
 import type { ManageFacts } from "@/lib/instructor-course-manage"
 
 /**
@@ -102,24 +103,28 @@ export type ManageRow = {
   /**
    * The row in `instructorNav` whose `built` flag decides whether this row is
    * a link — read from there rather than written down again, so each lights up
-   * on its own the day that route lands. The wizard's three content rows all
-   * hang off Create Course, because that is the flow that will own them.
+   * on its own the day that route lands.
+   *
+   * **Optional, because not every destination is a nav row.** Curriculum goes
+   * to a step of the course editor, which is a route under this very course
+   * and appears in no sidebar; a row with no `navHref` is decided purely by
+   * whether `manageRowHref` can build it one.
    */
-  navHref: string
+  navHref?: string
 }
-
-const CREATE_COURSE = "/dashboard/instructor/courses/new"
 
 /**
  * The three groups, exactly as drawn. Every row is a real destination or is
  * inert — never a link onto a 404, which is the rule
  * `attention-list.tsx` states and this page follows row for row.
  *
- * Two of the eight go somewhere today: **Q&A** and **Coupons**, both filtered
- * to this course through the `?course=` parameter those pages already parse
- * (`parseQuestionsQuery`, `parseCouponsQuery`), and both of which resolve that
- * id against the caller's own courses, so a link built here can only ever
- * narrow what they would have shown anyway.
+ * Five of the eight go somewhere today — all three Content rows, plus **Q&A**
+ * and **Coupons**, which are filtered to this course through the `?course=`
+ * parameter those pages already parse (`parseQuestionsQuery`,
+ * `parseCouponsQuery`); both resolve that id against the caller's own courses,
+ * so a link built here can only ever narrow what they would have shown anyway.
+ * Students, Reviews and Analytics are the three still waiting on a sidebar row
+ * to flip. `manageRowHref` below decides each destination and says why.
  */
 export const manageGroups: {
   title: string
@@ -134,7 +139,6 @@ export const manageGroups: {
         icon: BookOpenTextIcon,
         detail: (facts) =>
           `${plural(facts.sections, "section")} · ${plural(facts.lessons, "lesson")}`,
-        navHref: CREATE_COURSE,
       },
       {
         key: "quizzes",
@@ -144,14 +148,12 @@ export const manageGroups: {
           facts.quizzes === 0
             ? "No quizzes in this course yet"
             : `${plural(facts.quizzes, "quiz", "quizzes")} across the course`,
-        navHref: CREATE_COURSE,
       },
       {
         key: "landing",
         title: "Landing page & pricing",
         icon: SettingsIcon,
         detail: () => "Title, cover, description, price",
-        navHref: CREATE_COURSE,
       },
     ],
   },
@@ -218,12 +220,63 @@ export const manageGroups: {
   },
 ]
 
-/** Where a row goes once its route exists. Only the two built ones need one. */
+/** What `manageRowHref` needs to build a destination.
+ *
+ *  Both halves of the course are carried because the two halves of this app
+ *  address one differently: the `?course=` filters take the **id**, which is
+ *  what those pages parse, while every route under
+ *  `/dashboard/instructor/courses/…` takes the **slug**, which is what a URL a
+ *  human might read should carry. */
+export type ManageRowTarget = {
+  id: string
+  slug: string
+  /** The course's quiz lessons, in curriculum order — see the Quizzes row
+   *  below. Ids rather than a count, because one quiz opens directly. */
+  quizLessonIds: string[]
+}
+
+/**
+ * Where a row goes. A row without an entry — or whose entry declines — renders
+ * inert whatever `instructorNav` says, which is why this returns
+ * `string | undefined` rather than `string`.
+ *
+ * Five of the eight lead somewhere today:
+ *
+ *  - **Curriculum** opens the editor on its Curriculum step, the surface
+ *    `create-course-page__curriculum.png` draws.
+ *  - **Quizzes** has no index page of its own to open — a quiz is edited at
+ *    `/edit/quiz/<lessonId>`, which addresses one lesson — so the destination
+ *    depends on how many there are. Exactly one opens **that quiz**, which is
+ *    the whole point of the row on the commonest course. More than one falls
+ *    back to Curriculum, where every quiz row carries its own *Edit quiz*
+ *    button: picking one of several for the instructor would be a guess. None
+ *    declines, so the row stays inert under its own "No quizzes in this course
+ *    yet" — the "an empty queue is dropped rather than drawn as a zero" rule,
+ *    and a link promising quizzes that opens a page with none is the dead
+ *    affordance `attention-list.tsx` refuses. Build a real quizzes index here
+ *    if one is ever drawn.
+ *  - **Landing page & pricing** is one row over **two** editor steps, so it
+ *    opens the first of them. They are adjacent in `editorGroups` under
+ *    "Publish your course", so Pricing is one click away in the nav card the
+ *    step lands on — which is what makes a single row honest rather than a
+ *    half-destination.
+ *  - **Q&A** and **Coupons** are filtered to this course through the
+ *    `?course=` parameter those pages already parse.
+ */
 export const manageRowHref: Partial<
-  Record<ManageRowKey, (courseId: string) => string>
+  Record<ManageRowKey, (course: ManageRowTarget) => string | undefined>
 > = {
-  qa: (courseId) => `/dashboard/instructor/qa?course=${courseId}`,
-  coupons: (courseId) => `/dashboard/instructor/coupons?course=${courseId}`,
+  curriculum: (course) => editorStepHref(course.slug, "curriculum"),
+  quizzes: (course) => {
+    const [only, ...rest] = course.quizLessonIds
+    if (only === undefined) return undefined
+    return rest.length === 0
+      ? editorQuizHref(course.slug, only)
+      : editorStepHref(course.slug, "curriculum")
+  },
+  landing: (course) => editorStepHref(course.slug, "landing-page"),
+  qa: (course) => `/dashboard/instructor/qa?course=${course.id}`,
+  coupons: (course) => `/dashboard/instructor/coupons?course=${course.id}`,
 }
 
 // ---------------------------------------------------------------------------

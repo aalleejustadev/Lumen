@@ -18,6 +18,7 @@ import {
 } from "@/components/dashboard/courses/sale/course-purchase-actions"
 import { isWishlisted } from "@/lib/cart"
 import type { CourseDetail } from "@/lib/config/course-details"
+import type { SalePreviewLesson } from "@/lib/course-sale"
 import { cn } from "@/lib/utils"
 
 /**
@@ -34,8 +35,19 @@ import { cn } from "@/lib/utils"
  * React-cached, so it costs one extra row lookup, not another session round
  * trip.
  */
-async function CoursePurchaseCard({ course }: { course: CourseDetail }) {
-  const wishlisted = await isWishlisted(course.slug)
+async function CoursePurchaseCard({
+  course,
+  previews = null,
+  purchasable = true,
+}: {
+  course: CourseDetail
+  previews?: SalePreviewLesson[] | null
+  /** False on a database course: the cart and checkout resolve courses from
+   *  the static catalog, so the buttons explain themselves instead of failing
+   *  on click. See `lib/course-sale.ts`. */
+  purchasable?: boolean
+}) {
+  const wishlisted = purchasable ? await isWishlisted(course.slug) : false
 
   const includes = [
     {
@@ -75,9 +87,22 @@ async function CoursePurchaseCard({ course }: { course: CourseDetail }) {
           course.art
         )}
       >
-        <CourseIcon className="absolute inset-0 m-auto size-16 text-white/15" />
+        {course.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={course.thumbnailUrl}
+            alt=""
+            className="absolute inset-0 size-full object-cover"
+          />
+        ) : (
+          <CourseIcon className="absolute inset-0 m-auto size-16 text-white/15" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-        <CoursePreviewDialog course={previewCourse}>
+        <CoursePreviewDialog
+          course={previewCourse}
+          previews={previews}
+          purchasable={purchasable}
+        >
           <button
             type="button"
             className="absolute bottom-4 left-4 flex cursor-pointer items-center gap-2 text-sm font-semibold text-white"
@@ -93,12 +118,19 @@ async function CoursePurchaseCard({ course }: { course: CourseDetail }) {
           <span className="text-[28px] font-extrabold tracking-[-0.02em] tabular-nums">
             ${course.price.toFixed(2)}
           </span>
-          <span className="text-base text-muted-foreground tabular-nums line-through">
-            ${course.listPrice.toFixed(2)}
-          </span>
-          <Badge className="h-6 bg-destructive/10 px-2 text-xs font-semibold text-destructive">
-            {course.discountPercent}% off
-          </Badge>
+          {/* Only when there is a saving. Every catalog course has one; a
+              database course with no sale running would otherwise read
+              "$99.99 ~~$99.99~~ 0% off". */}
+          {course.listPrice > course.price ? (
+            <>
+              <span className="text-base text-muted-foreground tabular-nums line-through">
+                ${course.listPrice.toFixed(2)}
+              </span>
+              <Badge className="h-6 bg-destructive/10 px-2 text-xs font-semibold text-destructive">
+                {course.discountPercent}% off
+              </Badge>
+            </>
+          ) : null}
         </div>
 
         {course.saleEndsInDays > 0 ? (
@@ -109,7 +141,14 @@ async function CoursePurchaseCard({ course }: { course: CourseDetail }) {
           </p>
         ) : null}
 
-        <CourseBuyButtons slug={course.slug} />
+        <CourseBuyButtons
+          slug={course.slug}
+          unavailable={
+            purchasable
+              ? undefined
+              : "Enrolment for this course isn't open yet."
+          }
+        />
         <p className="mt-3 text-center text-[13px] text-muted-foreground">
           30-day money-back guarantee
         </p>
@@ -131,7 +170,11 @@ async function CoursePurchaseCard({ course }: { course: CourseDetail }) {
 
         <Separator className="my-5" />
 
-        <CourseSaveButtons slug={course.slug} wishlisted={wishlisted} />
+        <CourseSaveButtons
+          slug={course.slug}
+          wishlisted={wishlisted}
+          wishlistable={purchasable}
+        />
       </div>
     </Card>
   )

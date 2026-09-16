@@ -9,6 +9,7 @@ import { InstructorCard } from "@/components/dashboard/courses/sale/instructor-c
 import { LearningOutcomesCard } from "@/components/dashboard/courses/sale/learning-outcomes-card"
 import { ReviewsCard } from "@/components/dashboard/courses/sale/reviews-card"
 import type { CourseDetail } from "@/lib/config/course-details"
+import type { SalePreviewLesson } from "@/lib/course-sale"
 
 /**
  * `/dashboard/courses/[slug]`, from `course-sale-page-part-{1,2}.png`. The
@@ -16,7 +17,23 @@ import type { CourseDetail } from "@/lib/config/course-details"
  * different points — the right column is one sticky element, not two, see
  * `CoursePurchaseCard`.
  */
-function CourseSalePage({ course }: { course: CourseDetail }) {
+function CourseSalePage({
+  course,
+  previews = null,
+  purchasable = true,
+}: {
+  course: CourseDetail
+  /** Real free-preview content, on a database course — see
+   *  `lib/course-sale.ts`. */
+  previews?: SalePreviewLesson[] | null
+  /** False on a database course, which checkout cannot sell yet. */
+  purchasable?: boolean
+}) {
+  // Stripped once here for the three client pieces below that need the course:
+  // `icon` is a component, which cannot cross the server->client boundary.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- dropped, not used
+  const { icon, ...previewCourse } = course
+
   return (
     <div>
       <Link
@@ -29,11 +46,14 @@ function CourseSalePage({ course }: { course: CourseDetail }) {
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_348px] lg:items-start">
         <div className="flex flex-col gap-4.5">
-          <CourseHero course={course} />
+          <CourseHero course={course} previews={previews} />
           <LearningOutcomesCard outcomes={course.learningOutcomes} />
           <CourseContentCard
             sections={course.sections}
             contentSummary={course.contentSummary}
+            previewCourse={previewCourse}
+            previews={previews}
+            purchasable={purchasable}
           />
           <CourseAboutCard
             requirements={course.requirements}
@@ -51,7 +71,11 @@ function CourseSalePage({ course }: { course: CourseDetail }) {
           />
         </div>
 
-        <CoursePurchaseCard course={course} />
+        <CoursePurchaseCard
+          course={course}
+          previews={previews}
+          purchasable={purchasable}
+        />
       </div>
     </div>
   )

@@ -208,15 +208,15 @@ model User {
   /// Defaults are all on. Unlike the learner set there is no promotional row
   /// to justify an off-by-default — every one of these is a fact about this
   /// person's own business on the platform.
-  instructorNotifyAbout     NotifyAbout    @default(DIRECT_MESSAGES)
+  instructorNotifyAbout     NotifyAbout        @default(DIRECT_MESSAGES)
   /// Reviews, approvals and status changes on the courses they teach.
-  instructorCourseEmails    Boolean        @default(true)
+  instructorCourseEmails    Boolean            @default(true)
   /// New enrolments, questions and reviews from their students.
-  instructorStudentEmails   Boolean        @default(true)
+  instructorStudentEmails   Boolean            @default(true)
   /// Replies and mentions in discussions on their courses.
-  instructorCommunityEmails Boolean        @default(true)
+  instructorCommunityEmails Boolean            @default(true)
   /// Sales, payouts and failed transfers.
-  instructorEarningEmails   Boolean        @default(true)
+  instructorEarningEmails   Boolean            @default(true)
   /// The Stripe Customer this account's payments and saved cards hang off.
   ///
   /// Checkout used to pass a bare `customer_email`, which meant Stripe made a
@@ -229,13 +229,14 @@ model User {
   /// Unique, so two rows can never claim the same Stripe customer, and
   /// nullable because it is *Stripe's* id: a blank `STRIPE_SECRET_KEY` (or a
   /// key rotation to a different account) must not stop the app booting.
-  stripeCustomerId          String?        @unique
+  stripeCustomerId          String?            @unique
   sessions                  Session[]
   accounts                  Account[]
   // Populated once this user actually starts teaching — see `Instructor`.
   instructorProfile         Instructor?
   cartItems                 CartItem[]
   wishlistItems             WishlistItem[]
+  instructorFollows         InstructorFollow[]
   orders                    Order[]
 
   // Learning
@@ -403,8 +404,31 @@ model Instructor {
   payouts          Payout[]
   watchTimeRollups WatchTimeRollup[]
   coupons          Coupon[]
+  followers        InstructorFollow[]
 
   @@map("instructor")
+}
+
+/// "Follow" on the public instructor profile — one row per learner per
+/// instructor. A row rather than a counter on `Instructor`, for the reason
+/// `ConversationParticipant` gives about unread counts: a stored integer
+/// drifts the first time a write fails halfway, and `@@unique` is what makes a
+/// double-click one follow instead of two.
+///
+/// Keyed to `Instructor` rather than to the instructor's `User`, because the
+/// profile page is keyed that way and an instructor row can exist before its
+/// person has an account (`Instructor.userId` is nullable for exactly that).
+model InstructorFollow {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instructorId String
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, instructorId])
+  @@index([instructorId])
+  @@map("instructor_follow")
 }
 
 // ---------------------------------------------------------------------------

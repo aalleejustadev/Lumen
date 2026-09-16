@@ -304,7 +304,16 @@ function PayoutMethodDialog({
                       "[&>span]:text-[15px]"
                     )}
                   >
-                    <SelectValue />
+                    {/* A render function, not a bare `SelectValue`: Base UI
+                        prints the raw *value* unless it is told how to label
+                        one, so this showed "usd" rather than "USD ($)". */}
+                    <SelectValue>
+                      {(current: string) =>
+                        payoutCurrencies.find(
+                          (option) => option.value === current
+                        )?.label ?? current
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {payoutCurrencies.map((option) => (

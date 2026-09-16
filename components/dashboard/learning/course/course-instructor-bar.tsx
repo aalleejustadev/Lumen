@@ -22,9 +22,13 @@ import { initialsOf } from "@/components/dashboard/learning/course/initials"
 function CourseInstructorBar({
   instructor,
   courseSlug,
+  via,
 }: {
   instructor: CoursePlayerCourse["instructor"]
   courseSlug: string
+  /** An instructor's preview origin, carried across the profile and back —
+   *  see `instructorProfileHref`. The route has already validated it. */
+  via?: string
 }) {
   return (
     <Card className="flex-row items-center justify-between gap-4 p-5 ring-border">
@@ -45,9 +49,10 @@ function CourseInstructorBar({
       </div>
 
       <Link
-        href={instructorProfileHref(instructor.name, {
+        href={instructorProfileHref(instructor, {
           courseSlug,
           via: "learning",
+          preview: via,
         })}
         className="flex shrink-0 items-center gap-1.5 text-[15px] font-semibold text-foreground hover:text-muted-foreground"
       >

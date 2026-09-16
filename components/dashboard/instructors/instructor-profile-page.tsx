@@ -5,21 +5,11 @@ import { InstructorAboutCard } from "@/components/dashboard/instructors/instruct
 import { InstructorCoursesSection } from "@/components/dashboard/instructors/instructor-courses-section"
 import { InstructorHeaderCard } from "@/components/dashboard/instructors/instructor-header-card"
 import { InstructorReviewsCard } from "@/components/dashboard/instructors/instructor-reviews-card"
-import type { BrowseCourse } from "@/lib/config/browse-courses"
 import {
   firstNameOf,
-  type InstructorProfile,
+  type PublicInstructorProfile,
 } from "@/lib/config/instructor-profiles"
-
-/** `icon` is a component reference — it can't cross the server->client prop
- *  boundary into the "use client" `InstructorCoursesSection` below, so it's
- *  dropped here; `InstructorCourseCard` looks the icon up from `category`
- *  instead. */
-function withoutIcon(course: BrowseCourse): Omit<BrowseCourse, "icon"> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to drop it
-  const { icon, ...rest } = course
-  return rest
-}
+import type { ProfileRelationship } from "@/lib/instructor-relationship"
 
 /**
  * `/dashboard/instructors/[slug]`, from
@@ -32,8 +22,10 @@ function InstructorProfilePage({
   instructor,
   backHref,
   backLabel,
+  relationship,
 }: {
-  instructor: InstructorProfile
+  instructor: PublicInstructorProfile
+  relationship: ProfileRelationship
   backHref: string
   backLabel: string
 }) {
@@ -50,7 +42,10 @@ function InstructorProfilePage({
       </Link>
 
       <div className="mt-4 flex flex-col gap-4.5">
-        <InstructorHeaderCard instructor={instructor} />
+        <InstructorHeaderCard
+          instructor={instructor}
+          relationship={relationship}
+        />
 
         <div className="grid gap-4.5 lg:grid-cols-[1.6fr_1fr] lg:items-start">
           <InstructorAboutCard
@@ -65,7 +60,7 @@ function InstructorProfilePage({
       <div className="mt-8">
         <InstructorCoursesSection
           firstName={firstName}
-          courses={instructor.courses.map(withoutIcon)}
+          courses={instructor.courses}
         />
       </div>
     </div>

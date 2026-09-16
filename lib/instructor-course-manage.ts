@@ -87,6 +87,9 @@ export type ManageCoursePage = {
     lessons: number
   }
   facts: ManageFacts
+  /** The course's quiz lessons, in curriculum order — what the Manage page's
+   *  Quizzes row opens. See `manageRowHref`. */
+  quizLessonIds: string[]
   health: {
     completion: number | null
     watchTime: number | null
@@ -153,8 +156,15 @@ export const getManageCoursePage = cache(async function getManageCoursePage(
     recentQuestions,
   ] = await Promise.all([
     db.courseSection.count({ where: { courseId: course.id } }),
-    db.courseLesson.count({
+    // Ids rather than a `count()`: the Manage page's Quizzes row opens the
+    // quiz directly when there is exactly one, and `/edit/quiz/<lessonId>`
+    // addresses a lesson. In curriculum order, so "the only quiz" and "the
+    // first quiz" are the same row the editor would show. A course has a
+    // handful at most, so this costs nothing over counting.
+    db.courseLesson.findMany({
       where: { section: { courseId: course.id }, type: "QUIZ" },
+      orderBy: [{ section: { order: "asc" } }, { order: "asc" }],
+      select: { id: true },
     }),
     db.enrollment.aggregate({
       where: { courseId: course.id },
@@ -318,10 +328,11 @@ export const getManageCoursePage = cache(async function getManageCoursePage(
       revenueCents: earnings._sum.netCents ?? 0,
       lessons: course.lessonCount,
     },
+    quizLessonIds: quizzes.map((lesson) => lesson.id),
     facts: {
       sections,
       lessons: course.lessonCount,
-      quizzes,
+      quizzes: quizzes.length,
       students: course.enrollmentCount,
       unansweredQuestions,
       unrepliedReviews,

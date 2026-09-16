@@ -36,8 +36,13 @@ function InstructorReviewsCard({ reviews }: { reviews: InstructorReview[] }) {
     <Card className="gap-0 p-6.5 ring-border">
       <h2 className="text-lg">Recent student reviews</h2>
       <div className="mt-5 flex flex-col gap-5">
-        {reviews.map((review) => (
-          <div key={review.name} className="flex flex-col gap-2">
+        {reviews.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No reviews yet.</p>
+        ) : null}
+        {reviews.map((review, index) => (
+          // Not keyed by name alone: one learner can review two of an
+          // instructor's courses, and a database profile draws exactly that.
+          <div key={`${index}-${review.name}`} className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Avatar>
                 <AvatarImage src={review.avatarUrl} alt="" />

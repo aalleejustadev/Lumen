@@ -1,11 +1,13 @@
 import Link from "next/link"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon, EyeIcon } from "lucide-react"
 
 import { CourseCompletionCard } from "@/components/dashboard/learning/course/course-completion-card"
 import { CourseInstructorBar } from "@/components/dashboard/learning/course/course-instructor-bar"
 import { CourseTabs } from "@/components/dashboard/learning/course/course-tabs"
 import { CourseVideoPlayer } from "@/components/dashboard/learning/course/course-video-player"
+import { LessonViewer } from "@/components/dashboard/learning/course/lesson-viewer"
 import { StudyProgressCard } from "@/components/dashboard/learning/course/study-progress-card"
+import type { LessonView } from "@/lib/course-player"
 import type { CoursePlayerCourse } from "@/lib/config/course-player"
 import type { learningReturnLink } from "@/lib/course-return"
 
@@ -36,12 +38,16 @@ function CoursePage({
   course,
   backLink,
   via,
+  lesson,
 }: {
   course: CoursePlayerCourse
   backLink: ReturnType<typeof learningReturnLink>
   /** The origin, carried through to the quiz rows so the chain survives one
    *  level down — see `learningCourseHref`. */
   via?: string
+  /** The lesson on screen, on a database course — null on a catalog course,
+   *  which keeps the drawn player. See `lesson-viewer.tsx`. */
+  lesson: LessonView | null
 }) {
   const currentLesson =
     course.sections
@@ -50,13 +56,24 @@ function CoursePage({
 
   return (
     <div>
-      <Link
-        href={backLink.href}
-        className="flex w-fit items-center gap-2.5 text-[15px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4.5" />
-        {backLink.label}
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href={backLink.href}
+          className="flex w-fit items-center gap-2.5 text-[15px] text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeftIcon className="size-4.5" />
+          {backLink.label}
+        </Link>
+        {/* An instructor previewing sees a page identical to a student's, so
+            it says which one it is. Drawn only on a preview the server has
+            verified the viewer owns — see `learningReturnLink`. */}
+        {backLink.preview ? (
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-role-instructor/10 px-3 text-[13px] font-medium text-role-instructor">
+            <EyeIcon className="size-3.5" />
+            Student preview
+          </span>
+        ) : null}
+      </div>
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start xl:grid-cols-[minmax(0,1fr)_576px]">
         <div className="flex min-w-0 flex-col gap-4.5">
@@ -67,10 +84,21 @@ function CoursePage({
           <h1 className="text-[32px] leading-tight font-bold">
             {course.title}
           </h1>
-          <CourseVideoPlayer art={course.art} lessonTitle={currentLesson} />
+          {lesson ? (
+            <LessonViewer
+              lesson={lesson}
+              art={course.art}
+              courseSlug={course.slug}
+              published={course.published ?? false}
+              query={via ? `via=${via}` : ""}
+            />
+          ) : (
+            <CourseVideoPlayer art={course.art} lessonTitle={currentLesson} />
+          )}
           <CourseInstructorBar
             instructor={course.instructor}
             courseSlug={course.slug}
+            via={via}
           />
           <CourseTabs course={course} />
         </div>
@@ -84,6 +112,8 @@ function CoursePage({
             sections={course.sections}
             courseSlug={course.slug}
             via={via}
+            selectedLessonId={lesson?.id}
+            showPreviewTags={course.access === "preview"}
           />
         </div>
       </div>

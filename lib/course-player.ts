@@ -23,8 +23,11 @@ import {
   getCoursePlayer,
   type CoursePlayerCourse,
   type CourseQuestion,
+  type CourseQuiz,
   type QuestionReply,
 } from "@/lib/config/course-player"
+import { parseArticle, type ArticleDoc } from "@/lib/article-body"
+import { canAccessCourseContent } from "@/lib/course-access"
 import { compactAgo, longAgo } from "@/lib/relative-time"
 import type { CourseLevel as DbCourseLevel } from "@/lib/generated/prisma/client"
 
@@ -118,6 +121,7 @@ async function buildFromDatabase(
       id: true,
       slug: true,
       title: true,
+      status: true,
       description: true,
       level: true,
       rating: true,
@@ -127,6 +131,7 @@ async function buildFromDatabase(
       instructor: {
         select: {
           id: true,
+          slug: true,
           name: true,
           title: true,
           imageUrl: true,
@@ -146,6 +151,21 @@ async function buildFromDatabase(
               type: true,
               durationMinutes: true,
               questionsCount: true,
+              isPreview: true,
+              quiz: {
+                select: {
+                  questions: {
+                    orderBy: { order: "asc" },
+                    select: {
+                      prompt: true,
+                      options: {
+                        orderBy: { order: "asc" },
+                        select: { label: true, isCorrect: true },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -233,7 +253,35 @@ async function buildFromDatabase(
   })
 
   const progress = enrollment?.progressPercent ?? 0
-  const playerSections = buildSections(sections, completedLessons)
+  const access = (await canAccessCourseContent(course.id)) ? "full" : "preview"
+
+  // The shared builder cuts the rows and their progress states; the database
+  // then adds what only it knows — each row's id, its real kind, whether it is
+  // a free preview, and whether this viewer may open it. Walked in the same
+  // order, so row N here is lesson N there.
+  const dbLessons = course.sections.flatMap((section) => section.lessons)
+  let rowIndex = 0
+  const playerSections = buildSections(sections, completedLessons).map(
+    (section) => ({
+      ...section,
+      lessons: section.lessons.map((row) => {
+        const lesson = dbLessons[rowIndex++]
+        if (!lesson) return row
+        return {
+          ...row,
+          id: lesson.id,
+          type:
+            lesson.type === "QUIZ"
+              ? ("quiz" as const)
+              : lesson.type === "VIDEO"
+                ? ("video" as const)
+                : ("article" as const),
+          preview: lesson.isPreview,
+          locked: access === "preview" && !lesson.isPreview,
+        }
+      }),
+    })
+  )
 
   // "Lesson 7 · Cutting scope" — the index is course-wide, not
   // section-relative, which is what the chip means to somebody reading it.
@@ -252,6 +300,8 @@ async function buildFromDatabase(
 
   return {
     slug: course.slug,
+    access,
+    published: course.status === "PUBLISHED",
     title: course.title,
     // The per-category gradient, keyed off `Category.accentColor` exactly as
     // `CourseArt` keys it, so one course does not wear two different tiles on
@@ -263,11 +313,17 @@ async function buildFromDatabase(
       name: course.instructor.name,
       title: course.instructor.title,
       avatarUrl: instructorAvatar,
+      slug: course.instructor.slug,
     },
     progress,
     encouragement: buildEncouragement(course.title, progress),
     sections: playerSections,
-    quizzes: buildQuizzes(sections),
+    quizzes: withAuthoredQuestions(
+      buildQuizzes(sections),
+      course.sections.flatMap((section) =>
+        section.lessons.filter((lesson) => lesson.type === "QUIZ")
+      )
+    ),
     about: {
       description: course.description,
       // `Course.intendedAudience` is a single authored line when an instructor
@@ -322,6 +378,47 @@ async function buildFromDatabase(
   }
 }
 
+/**
+ * Swaps in the questions an instructor wrote in the quiz editor.
+ *
+ * `buildQuizzes` walks the syllabus and returns one quiz per quiz lesson, in
+ * order, which is what keeps the lesson row's slug and the quiz page agreeing —
+ * so this keeps that list and only replaces each quiz's questions, matched by
+ * position against the same quiz lessons in the same order. A lesson whose
+ * quiz has not been written yet keeps the generated placeholder, which is what
+ * every seeded course has always shown.
+ *
+ * `answerIndex` is the position of the option marked correct; `saveQuiz`
+ * guarantees exactly one.
+ */
+function withAuthoredQuestions(
+  quizzes: CourseQuiz[],
+  lessons: {
+    quiz: {
+      questions: {
+        prompt: string
+        options: { label: string; isCorrect: boolean }[]
+      }[]
+    } | null
+  }[]
+): CourseQuiz[] {
+  return quizzes.map((quiz, index) => {
+    const authored = lessons[index]?.quiz?.questions ?? []
+    if (authored.length === 0) return quiz
+    return {
+      ...quiz,
+      questions: authored.map((question) => ({
+        prompt: question.prompt,
+        options: question.options.map((option) => option.label),
+        answerIndex: Math.max(
+          0,
+          question.options.findIndex((option) => option.isCorrect)
+        ),
+      })),
+    }
+  })
+}
+
 /** `LessonType` is spelled in caps in the database and in lower case in the
  *  config, and the two enums do not otherwise differ. */
 function toConfigLesson(lesson: {
@@ -370,4 +467,128 @@ function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60)
   const rest = minutes % 60
   return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`
+}
+
+// ---------------------------------------------------------------------------
+// The lesson on screen
+// ---------------------------------------------------------------------------
+
+/**
+ * What the enrolled course page shows in place of its player, for one lesson
+ * of a database course.
+ *
+ * **Content is read only when the viewer may see it.** A locked lesson comes
+ * back as `locked` with its title and nothing else, so its video URL and
+ * article body never reach the page — see `lib/course-access.ts`.
+ */
+export type LessonView = {
+  id: string
+  title: string
+  sectionTitle: string
+  /** 1-based, across the whole course — "Lesson 3 of 12". */
+  number: number
+  total: number
+  previousId: string | null
+  nextId: string | null
+} & (
+  | {
+      kind: "video"
+      /** Null until the instructor uploads one. */
+      video: { url: string; durationSeconds: number | null } | null
+    }
+  | { kind: "article"; minutes: number | null; body: ArticleDoc | null }
+  | { kind: "quiz"; questions: number; quizSlug: string | null }
+  | { kind: "locked"; lessonKind: "video" | "article" | "quiz" }
+)
+
+/**
+ * Resolves the lesson to show: the one named in `?lesson=`, else the lesson
+ * the viewer is on (the syllabus's "current" row), else the first. An id that
+ * is not one of this course's lessons falls back the same way rather than
+ * 404ing, the way an unknown editor step does.
+ */
+export async function getLessonView(
+  course: CoursePlayerCourse,
+  requestedId: string | undefined
+): Promise<LessonView | null> {
+  if (!course.access) return null
+
+  const rows = course.sections.flatMap((section) =>
+    section.lessons.map((lesson) => ({ lesson, sectionTitle: section.title }))
+  )
+  const withIds = rows.filter((row) => row.lesson.id)
+  if (withIds.length === 0) return null
+
+  const index = Math.max(
+    0,
+    withIds.findIndex((row) => row.lesson.id === requestedId) !== -1
+      ? withIds.findIndex((row) => row.lesson.id === requestedId)
+      : withIds.findIndex((row) => row.lesson.state === "current")
+  )
+  const { lesson: row, sectionTitle } = withIds[index]!
+  const base = {
+    id: row.id!,
+    title: row.title,
+    sectionTitle,
+    number: index + 1,
+    total: withIds.length,
+    previousId: withIds[index - 1]?.lesson.id ?? null,
+    nextId: withIds[index + 1]?.lesson.id ?? null,
+  }
+
+  if (row.locked) return { ...base, kind: "locked", lessonKind: row.type }
+
+  // Scoped by the course slug as well as the id, so a lesson id from another
+  // course cannot be read through this one's page.
+  const lesson = await db.courseLesson.findFirst({
+    where: { id: row.id, section: { course: { slug: course.slug } } },
+    select: {
+      type: true,
+      title: true,
+      durationMinutes: true,
+      questionsCount: true,
+      articleBody: true,
+      videoAssetId: true,
+    },
+  })
+  if (!lesson) return null
+
+  if (lesson.type === "QUIZ") {
+    return {
+      ...base,
+      title: lesson.title,
+      kind: "quiz",
+      questions: lesson.questionsCount ?? 0,
+      quizSlug: row.quizSlug ?? null,
+    }
+  }
+
+  if (lesson.type === "VIDEO") {
+    const asset = lesson.videoAssetId
+      ? await db.mediaAsset.findFirst({
+          where: {
+            id: lesson.videoAssetId,
+            ownerId: row.id,
+            ownerType: "LESSON_VIDEO",
+          },
+          select: { url: true, durationSeconds: true },
+        })
+      : null
+    return {
+      ...base,
+      title: lesson.title,
+      kind: "video",
+      video: asset
+        ? { url: asset.url, durationSeconds: asset.durationSeconds }
+        : null,
+    }
+  }
+
+  return {
+    ...base,
+    title: lesson.title,
+    kind: "article",
+    minutes: lesson.durationMinutes,
+    body: parseArticle(lesson.articleBody),
+  }
 }

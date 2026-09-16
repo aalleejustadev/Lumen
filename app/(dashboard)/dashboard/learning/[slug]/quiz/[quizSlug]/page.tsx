@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import { QuizPage } from "@/components/dashboard/learning/quiz/quiz-page"
 import { getEnrolledCourseQuiz } from "@/lib/course-player"
@@ -42,6 +42,14 @@ export default async function CourseQuizPage({
   const { slug, quizSlug } = await params
   const found = await getEnrolledCourseQuiz(slug, quizSlug)
   if (!found) notFound()
+
+  // A quiz is never a free preview, so on a database course only a viewer with
+  // full access may take it — the page ships every question and its answer to
+  // the browser. Anyone else goes to the course's sale page if it has one.
+  if (found.course.access === "preview") {
+    if (found.course.published) redirect(`/dashboard/courses/${slug}`)
+    notFound()
+  }
 
   // "Back to course" keeps whatever brought the visitor here, so an instructor
   // who opened a quiz from a preview lands back in the preview rather than in

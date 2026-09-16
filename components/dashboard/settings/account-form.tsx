@@ -218,7 +218,16 @@ function AccountForm({
               aria-invalid={errors.language ? true : undefined}
               className={SELECT_TRIGGER}
             >
-              <SelectValue placeholder="Select language" />
+              {/* A render function, not a bare `SelectValue`: Base UI prints
+                  the raw *value* unless it is told how to label one, so this
+                  trigger showed "en" rather than "English". The trap
+                  `new-discussion-dialog.tsx` records. */}
+              <SelectValue placeholder="Select language">
+                {(current: string) =>
+                  languages.find((language) => language.value === current)
+                    ?.label ?? "Select language"
+                }
+              </SelectValue>
               <ArrowUpDownIcon className="shrink-0 text-muted-foreground" />
             </SelectTrigger>
             <SelectContent>
@@ -252,7 +261,15 @@ function AccountForm({
               aria-invalid={errors.timeZone ? true : undefined}
               className={SELECT_TRIGGER}
             >
-              <SelectValue placeholder="(GMT+00:00) London" />
+              {/* Same trap: without this the trigger showed the bare IANA id
+                  ("Europe/London") instead of the computed
+                  "(GMT+00:00) London" label. */}
+              <SelectValue placeholder="(GMT+00:00) London">
+                {(current: string) =>
+                  timeZones.find((zone) => zone.value === current)?.label ??
+                  "(GMT+00:00) London"
+                }
+              </SelectValue>
               <ArrowUpDownIcon className="shrink-0 text-muted-foreground" />
             </SelectTrigger>
             <SelectContent>

@@ -192,19 +192,7 @@ export async function getCouponsPage(
       // same second cannot swap places between renders. The *presentation*
       // order is applied below, once the status is known.
       orderBy: [{ createdAt: "desc" }, { code: "asc" }],
-      select: {
-        id: true,
-        code: true,
-        courseId: true,
-        discountType: true,
-        percentOff: true,
-        resultingPriceCents: true,
-        redemptionLimit: true,
-        startsAt: true,
-        endsAt: true,
-        course: { select: { title: true, listPriceCents: true } },
-        _count: { select: { redemptions: true } },
-      },
+      select: COUPON_ROW_SELECT,
     }),
     db.course.findMany({
       where: { instructorId: profile.id },
@@ -218,70 +206,8 @@ export async function getCouponsPage(
     }),
   ])
 
-  const enriched = all.map((coupon) => {
-    const redemptions = coupon._count.redemptions
-    return {
-      id: coupon.id,
-      code: coupon.code,
-      courseId: coupon.courseId,
-      courseTitle: coupon.course.title,
-      discountType: coupon.discountType,
-      percentOff: coupon.percentOff,
-      priceCents: coupon.resultingPriceCents,
-      listPriceCents: coupon.course.listPriceCents,
-      redemptionLimit: coupon.redemptionLimit,
-      redemptions,
-      // See the module note: the coupon's own snapshotted price is the only
-      // figure that still means what it meant on the day of the sale.
-      revenueCents: redemptions * coupon.resultingPriceCents,
-      status: statusOf(coupon, now),
-      startsAt: coupon.startsAt,
-      endsAt: coupon.endsAt,
-    }
-  })
-
-  /**
-   * **Running codes first, then scheduled, then expired — newest first inside
-   * each.**
-   *
-   * The export's own five rows are in no order any single column produces
-   * (their end dates run 30 Sep, 12 Sep, 18 Oct, 05 Nov), so there is nothing
-   * to reproduce and one definition has to win — the reading the Reports
-   * page's payout runs settled. This is the one that matches what the page is
-   * *for*: an instructor opens it to see what is live. Sorting purely by
-   * recency put the single coupon nobody can use yet at the top.
-   *
-   * It is done here rather than in SQL because status is derived from the
-   * clock, which Postgres cannot order by without recomputing it — and the
-   * list is already read whole for the KPI cards, so the sort is free.
-   */
-  const statusRank: Record<CouponStatus, number> = {
-    active: 0,
-    scheduled: 1,
-    expired: 2,
-  }
-  enriched.sort(
-    (a, b) =>
-      statusRank[a.status] - statusRank[b.status] ||
-      b.startsAt.getTime() - a.startsAt.getTime() ||
-      a.code.localeCompare(b.code)
-  )
-
-  const redemptions = enriched.reduce((sum, row) => sum + row.redemptions, 0)
-  const stats = {
-    activeCount: enriched.filter((row) => row.status === "active").length,
-    redemptions,
-    revenueCents: enriched.reduce((sum, row) => sum + row.revenueCents, 0),
-    averageDiscount:
-      redemptions === 0
-        ? null
-        : Math.round(
-            enriched.reduce(
-              (sum, row) => sum + row.percentOff * row.redemptions,
-              0
-            ) / redemptions
-          ),
-  }
+  const enriched = sortCouponRows(all.map((coupon) => toCouponRow(coupon, now)))
+  const stats = couponStatsOf(enriched)
 
   // The visible page is sliced from the same list, filtered the way `where`
   // filtered the count — so "1–5 of 8" and the rows can never disagree.
@@ -306,6 +232,161 @@ export async function getCouponsPage(
     pageCount,
     query: { ...query, page },
     stats,
+    generatedAt: now,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared with the course editor's Coupons step
+// ---------------------------------------------------------------------------
+
+const COUPON_ROW_SELECT = {
+  id: true,
+  code: true,
+  courseId: true,
+  discountType: true,
+  percentOff: true,
+  resultingPriceCents: true,
+  redemptionLimit: true,
+  startsAt: true,
+  endsAt: true,
+  course: { select: { title: true, listPriceCents: true } },
+  _count: { select: { redemptions: true } },
+} satisfies Prisma.CouponSelect
+
+type CouponRecord = Prisma.CouponGetPayload<{
+  select: typeof COUPON_ROW_SELECT
+}>
+
+function toCouponRow(coupon: CouponRecord, now: Date): CouponRow {
+  const redemptions = coupon._count.redemptions
+  return {
+    id: coupon.id,
+    code: coupon.code,
+    courseId: coupon.courseId,
+    courseTitle: coupon.course.title,
+    discountType: coupon.discountType,
+    percentOff: coupon.percentOff,
+    priceCents: coupon.resultingPriceCents,
+    listPriceCents: coupon.course.listPriceCents,
+    redemptionLimit: coupon.redemptionLimit,
+    redemptions,
+    // See the module note: the coupon's own snapshotted price is the only
+    // figure that still means what it meant on the day of the sale.
+    revenueCents: redemptions * coupon.resultingPriceCents,
+    status: statusOf(coupon, now),
+    startsAt: coupon.startsAt,
+    endsAt: coupon.endsAt,
+  }
+}
+
+/**
+ * **Running codes first, then scheduled, then expired — newest first inside
+ * each.**
+ *
+ * The export's own five rows are in no order any single column produces
+ * (their end dates run 30 Sep, 12 Sep, 18 Oct, 05 Nov), so there is nothing
+ * to reproduce and one definition has to win — the reading the Reports
+ * page's payout runs settled. This is the one that matches what the page is
+ * *for*: an instructor opens it to see what is live. Sorting purely by
+ * recency put the single coupon nobody can use yet at the top. The course
+ * editor's four rows (`create-course-page__coupons.png`: Active, Active,
+ * Scheduled, Expired) happen to be drawn in exactly this order.
+ *
+ * It is done here rather than in SQL because status is derived from the
+ * clock, which Postgres cannot order by without recomputing it.
+ */
+function sortCouponRows(rows: CouponRow[]): CouponRow[] {
+  const statusRank: Record<CouponStatus, number> = {
+    active: 0,
+    scheduled: 1,
+    expired: 2,
+  }
+  return rows
+    .slice()
+    .sort(
+      (a, b) =>
+        statusRank[a.status] - statusRank[b.status] ||
+        b.startsAt.getTime() - a.startsAt.getTime() ||
+        a.code.localeCompare(b.code)
+    )
+}
+
+function couponStatsOf(rows: CouponRow[]): CouponsPage["stats"] {
+  const redemptions = rows.reduce((sum, row) => sum + row.redemptions, 0)
+  return {
+    activeCount: rows.filter((row) => row.status === "active").length,
+    redemptions,
+    revenueCents: rows.reduce((sum, row) => sum + row.revenueCents, 0),
+    averageDiscount:
+      redemptions === 0
+        ? null
+        : Math.round(
+            rows.reduce(
+              (sum, row) => sum + row.percentOff * row.redemptions,
+              0
+            ) / redemptions
+          ),
+  }
+}
+
+export type CourseCoupons = {
+  rows: CouponRow[]
+  /** This course alone, in the shape the coupon dialog's course list takes. */
+  course: CouponCourse
+  stats: CouponsPage["stats"]
+  /** The platform's share, for the dialog's payout callout. */
+  revenueShareBps: number
+  generatedAt: Date
+}
+
+/**
+ * The course editor's Coupons step — every coupon on **one** course, with the
+ * same rows, order and figures the Coupons page computes for the whole
+ * programme, because they are computed by the same three functions. Two
+ * screens showing the same code must not disagree about its status, usage or
+ * revenue.
+ *
+ * Scoped by `instructorId` in the `where`, like every read here, so a course id
+ * from another catalog returns nothing rather than someone else's coupons. It
+ * is unpaged: the three-active rule keeps a single course's list short, and
+ * the export draws no pager.
+ */
+export async function getCourseCoupons(
+  courseId: string,
+  revenueShareBps: number
+): Promise<CourseCoupons | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const profile = await getInstructorProfile(session.user.id)
+  if (!profile) return null
+
+  const now = new Date()
+  const [course, coupons] = await Promise.all([
+    db.course.findFirst({
+      where: { id: courseId, instructorId: profile.id },
+      select: {
+        id: true,
+        title: true,
+        priceCents: true,
+        listPriceCents: true,
+      },
+    }),
+    db.coupon.findMany({
+      where: { courseId, instructorId: profile.id },
+      orderBy: [{ createdAt: "desc" }, { code: "asc" }],
+      select: COUPON_ROW_SELECT,
+    }),
+  ])
+  if (!course) return null
+
+  const rows = sortCouponRows(coupons.map((coupon) => toCouponRow(coupon, now)))
+  return {
+    rows,
+    course,
+    stats: couponStatsOf(rows),
+    revenueShareBps,
     generatedAt: now,
   }
 }

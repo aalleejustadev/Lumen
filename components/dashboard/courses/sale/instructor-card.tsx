@@ -73,7 +73,7 @@ function InstructorCard({
           nativeButton={false}
           render={
             <Link
-              href={instructorProfileHref(instructor.name, {
+              href={instructorProfileHref(instructor, {
                 courseSlug,
                 via: "sale",
               })}

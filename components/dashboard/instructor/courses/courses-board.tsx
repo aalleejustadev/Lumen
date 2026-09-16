@@ -301,11 +301,7 @@ function CoursesBoard({
             </Card>
           ) : (
             page.rows.map((course) => (
-              <MyCourseRow
-                key={course.id}
-                course={course}
-                authoringBuilt={authoringBuilt}
-              />
+              <MyCourseRow key={course.id} course={course} />
             ))
           )}
         </div>

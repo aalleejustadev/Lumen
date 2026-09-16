@@ -16,7 +16,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Card } from "@/components/ui/card"
-import type { CourseLesson, CourseSection } from "@/lib/config/course-details"
+import { CoursePreviewDialog } from "@/components/dashboard/courses/sale/course-preview-dialog"
+import type {
+  CourseDetail,
+  CourseLesson,
+  CourseSection,
+} from "@/lib/config/course-details"
+import type { SalePreviewLesson } from "@/lib/course-sale"
 
 const lessonIcons: Record<CourseLesson["type"], typeof PlayIcon> = {
   video: PlayIcon,
@@ -25,8 +31,25 @@ const lessonIcons: Record<CourseLesson["type"], typeof PlayIcon> = {
   practice: BarChart3Icon,
 }
 
-function LessonRow({ lesson }: { lesson: CourseLesson }) {
+function LessonRow({
+  lesson,
+  previewCourse,
+  previews,
+  purchasable,
+}: {
+  lesson: CourseLesson
+  previewCourse: Omit<CourseDetail, "icon">
+  previews: SalePreviewLesson[] | null
+  purchasable: boolean
+}) {
   const Icon = lessonIcons[lesson.type]
+  // On a database course a preview row opens the dialog on that very lesson,
+  // which is what the blue "Preview" has always looked like it should do. A
+  // catalog course has no preview content, so its label stays text.
+  const opensPreview =
+    lesson.preview &&
+    lesson.id !== undefined &&
+    previews?.some((entry) => entry.id === lesson.id)
 
   return (
     <div className="flex items-center justify-between gap-3 bg-card py-2.5 pr-4 pl-10 text-sm hover:bg-hover">
@@ -35,7 +58,21 @@ function LessonRow({ lesson }: { lesson: CourseLesson }) {
         {lesson.title}
       </span>
       <span className="flex shrink-0 items-center gap-3">
-        {lesson.preview ? (
+        {opensPreview ? (
+          <CoursePreviewDialog
+            course={previewCourse}
+            previews={previews}
+            startAt={lesson.id}
+            purchasable={purchasable}
+          >
+            <button
+              type="button"
+              className="cursor-pointer text-sm font-medium text-info underline-offset-4 hover:underline"
+            >
+              Preview
+            </button>
+          </CoursePreviewDialog>
+        ) : lesson.preview ? (
           <span className="text-sm font-medium text-info">Preview</span>
         ) : null}
         <span className="text-muted-foreground tabular-nums">
@@ -62,9 +99,15 @@ function LessonRow({ lesson }: { lesson: CourseLesson }) {
 function CourseContentCard({
   sections,
   contentSummary,
+  previewCourse,
+  previews = null,
+  purchasable = true,
 }: {
   sections: CourseSection[]
   contentSummary: string
+  previewCourse: Omit<CourseDetail, "icon">
+  previews?: SalePreviewLesson[] | null
+  purchasable?: boolean
 }) {
   return (
     <Card className="gap-0 p-6.5 ring-border">
@@ -96,7 +139,13 @@ function CourseContentCard({
             </AccordionTrigger>
             <AccordionContent className="divide-y divide-border-subtle p-0">
               {section.lessons.map((lesson, index) => (
-                <LessonRow key={`${lesson.title}-${index}`} lesson={lesson} />
+                <LessonRow
+                  key={lesson.id ?? `${lesson.title}-${index}`}
+                  lesson={lesson}
+                  previewCourse={previewCourse}
+                  previews={previews}
+                  purchasable={purchasable}
+                />
               ))}
             </AccordionContent>
           </AccordionItem>

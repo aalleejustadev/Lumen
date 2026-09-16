@@ -62,7 +62,11 @@ function ManageCoursePage({
       <div className="mt-4 grid items-start gap-[22px] xl:grid-cols-[minmax(0,1fr)_576px]">
         <ManageSections
           facts={course.facts}
-          courseId={course.id}
+          course={{
+            id: course.id,
+            slug: course.slug,
+            quizLessonIds: course.quizLessonIds,
+          }}
           builtRows={builtRows}
         />
 

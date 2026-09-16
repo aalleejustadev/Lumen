@@ -11,7 +11,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { InstructorCourseCard } from "@/components/dashboard/instructors/instructor-course-card"
-import type { BrowseCourse } from "@/lib/config/browse-courses"
+import type { ProfileCourse } from "@/lib/config/instructor-profiles"
 import { cn } from "@/lib/utils"
 
 const COURSES_PER_PAGE = 4
@@ -24,14 +24,20 @@ function InstructorCoursesSection({
   courses,
 }: {
   firstName: string
-  courses: Omit<BrowseCourse, "icon">[]
+  courses: ProfileCourse[]
 }) {
   const [page, setPage] = React.useState(1)
   const pageCount = Math.max(1, Math.ceil(courses.length / COURSES_PER_PAGE))
   const safePage = Math.min(page, pageCount)
   const start = (safePage - 1) * COURSES_PER_PAGE
   const visible = courses.slice(start, start + COURSES_PER_PAGE)
-  const rangeLabel = `Showing ${start + 1}–${Math.min(start + COURSES_PER_PAGE, courses.length)} of ${courses.length} courses`
+  // An instructor with nothing published — a database account, where a
+  // catalog instructor always has courses — says so rather than reading
+  // "Showing 1–0 of 0 courses" over an empty grid.
+  const rangeLabel =
+    courses.length === 0
+      ? "No published courses yet."
+      : `Showing ${start + 1}–${Math.min(start + COURSES_PER_PAGE, courses.length)} of ${courses.length} courses`
 
   return (
     <div>

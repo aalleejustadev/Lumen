@@ -231,6 +231,7 @@ async function clearSeededRows() {
   // Both feeds: ids are `seed_notif_*` (admin) and `seed_lnotif_*` (learner),
   // so the one prefix match reclaims them together — including rows written
   // onto a real, unseeded admin account, which would not cascade.
+  await db.instructorFollow.deleteMany({ where: seeded })
   await db.notification.deleteMany({ where: seeded })
   await db.promotion.deleteMany({ where: seeded })
   await db.contentReport.deleteMany({ where: seeded })
@@ -725,6 +726,22 @@ async function seedPendingCourses(
       },
     })
 
+    // **The curriculum is written whether or not the course was submitted.**
+    // It used to sit below the `continue` alongside the submission, which left
+    // the one DRAFT in this list carrying `lessonCount: 12` and no lesson rows
+    // at all — the exact shape "a counter is the number of rows written" warns
+    // about, and invisible until the course editor became the first surface to
+    // render a draft's actual syllabus. A draft *has* a syllabus in progress;
+    // what it has not got is a submission.
+    await seedCurriculum(
+      id,
+      queueCurriculum(
+        seed.lessonCount,
+        seed.durationHours,
+        seed.status !== "NEEDS_CHANGES"
+      )
+    )
+
     if (!submittedAt) continue
 
     const decided =
@@ -749,17 +766,6 @@ async function seedPendingCourses(
         noteToInstructor: seed.noteToInstructor ?? null,
       },
     })
-
-    // The syllabus the admin course view previews. Generated rather than
-    // hand-authored — see `queueCurriculum`.
-    await seedCurriculum(
-      id,
-      queueCurriculum(
-        seed.lessonCount,
-        seed.durationHours,
-        seed.status !== "NEEDS_CHANGES"
-      )
-    )
 
     // The submission checklist from the admin course view: three rows computed
     // off the curriculum, and the audio verdict, which is a human one.
@@ -2791,6 +2797,79 @@ async function seedConversations(
 }
 
 // ---------------------------------------------------------------------------
+// Instructor follows
+// ---------------------------------------------------------------------------
+
+/**
+ * Followers for the public instructor profile's **Follow** button.
+ *
+ * The app emits these for real — a learner pressing Follow writes the row — so
+ * unlike the audit log or the uptime samples this is not standing in for a
+ * missing source. It is written for the reason `seedCommunity` gained its tags
+ * and hearts: the header draws a follower count beside the button, and at zero
+ * on every profile that figure is a dead control which makes a shipped feature
+ * read as broken.
+ *
+ * Three things about it:
+ *  - **Only learners follow.** The pool is `seedLearners`' accounts, never the
+ *    `seed_u_ins_*` accounts behind the instructors themselves, so the seed
+ *    cannot write the one row `setFollowingInstructor` refuses (an instructor
+ *    following their own profile).
+ *  - **Each instructor's followers are capped**, not the list as a whole. A
+ *    single `cap()` over every row would give the first instructor five
+ *    followers and everyone after them none, which is the opposite of what the
+ *    page needs to demonstrate.
+ *  - **The count on screen is the number of rows written.** Nothing caches it
+ *    — `getProfileRelationship` counts the table — so the rule
+ *    `CourseQuestion.voteCount` learned the hard way cannot bite here.
+ */
+async function seedFollows(
+  learners: LearnerRow[],
+  instructors: Map<string, InstructorRow>
+) {
+  const instructorUserIds = new Set(
+    [...instructors.values()].map((row) => row.userId)
+  )
+  const pool = learners.filter((learner) => !instructorUserIds.has(learner.id))
+
+  const rows: Prisma.InstructorFollowCreateManyInput[] = []
+
+  for (const instructor of instructors.values()) {
+    // Fisher-Yates rather than `sort(() => rng() - 0.5)`: a comparator that
+    // ignores its arguments leaves the result up to the engine's sort, which
+    // is a poor basis for the seed's promise that two runs are identical.
+    const shuffled = [...pool]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!]
+    }
+    // A different count per instructor, so the profiles do not all draw the
+    // same figure.
+    const followers = cap(shuffled, 1 + Math.floor(rng() * SEED_MAX))
+
+    for (const [index, follower] of followers.entries()) {
+      rows.push({
+        id: `${SEED}follow_${instructor.slug}_${pad(index, 2)}`,
+        userId: follower.id,
+        instructorId: instructor.id,
+        // Somewhere in the last three months, and never before the account
+        // existed — a follow by somebody who had not signed up yet is the one
+        // kind of demo data that reads as broken.
+        createdAt: new Date(
+          Math.max(
+            follower.createdAt.getTime(),
+            ago(rng() * 90 * DAY).getTime()
+          )
+        ),
+      })
+    }
+  }
+
+  await db.instructorFollow.createMany({ data: rows, skipDuplicates: true })
+  return rows.length
+}
+
+// ---------------------------------------------------------------------------
 // Course Q&A
 // ---------------------------------------------------------------------------
 
@@ -3433,6 +3512,9 @@ async function main() {
   console.log(
     `conversations     ${conversations.threads} threads, ${conversations.messages} messages`
   )
+
+  const follows = await seedFollows(learners, instructors)
+  console.log(`instructor follows ${follows}`)
 
   await seedPayouts(instructors, netByInstructor)
   await seedUptime()

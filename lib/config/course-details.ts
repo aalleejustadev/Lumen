@@ -23,6 +23,9 @@ import { browseCourses, type BrowseCourse } from "@/lib/config/browse-courses"
 export type LessonType = "video" | "article" | "quiz" | "practice"
 
 export type CourseLesson = {
+  /** `CourseLesson.id`, on a database course — what lets its syllabus row open
+   *  the preview dialog on that lesson. */
+  id?: string
   title: string
   type: LessonType
   /** Video/article/practice rows show this ("20 min"). */
@@ -48,6 +51,8 @@ export type CourseSection = {
 }
 
 export type CourseInstructorProfile = {
+  /** `Instructor.slug`, on a database course — see `instructorProfileHref`. */
+  slug?: string
   name: string
   title: string
   bio: string
@@ -70,6 +75,8 @@ export type CourseReview = {
 export type RatingBreakdownRow = { stars: 5 | 4 | 3 | 2 | 1; percent: number }
 
 export type CourseDetail = BrowseCourse & {
+  /** An instructor-uploaded cover, on a database course. */
+  thumbnailUrl?: string | null
   subtitle: string
   description: string[]
   learningOutcomes: string[]

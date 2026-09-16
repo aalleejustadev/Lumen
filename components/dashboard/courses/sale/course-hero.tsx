@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { CoursePreviewDialog } from "@/components/dashboard/courses/sale/course-preview-dialog"
 import type { CourseDetail } from "@/lib/config/course-details"
+import type { SalePreviewLesson } from "@/lib/course-sale"
 import { cn } from "@/lib/utils"
 
 /**
@@ -17,7 +18,13 @@ import { cn } from "@/lib/utils"
  * `lumen-course-card-art`) rather than the export's photo, with a dark
  * scrim behind the text block so it stays legible over any category color.
  */
-function CourseHero({ course }: { course: CourseDetail }) {
+function CourseHero({
+  course,
+  previews = null,
+}: {
+  course: CourseDetail
+  previews?: SalePreviewLesson[] | null
+}) {
   // `CoursePreviewDialog` is a Client Component and `course.icon` is a
   // `LucideIcon` component reference, which can't cross that boundary as a
   // prop — so it's stripped off before the course goes down (see the dialog's
@@ -31,10 +38,21 @@ function CourseHero({ course }: { course: CourseDetail }) {
         course.art
       )}
     >
-      <CourseIcon className="absolute inset-0 m-auto size-32 text-white/10" />
+      {course.thumbnailUrl ? (
+        // An instructor's uploaded cover, on a database course. A plain
+        // `<img>` for `CourseArt`'s reason.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={course.thumbnailUrl}
+          alt=""
+          className="absolute inset-0 size-full object-cover"
+        />
+      ) : (
+        <CourseIcon className="absolute inset-0 m-auto size-32 text-white/10" />
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
 
-      <CoursePreviewDialog course={previewCourse}>
+      <CoursePreviewDialog course={previewCourse} previews={previews}>
         <button
           type="button"
           className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-foreground shadow-pop transition-colors hover:bg-white/90"

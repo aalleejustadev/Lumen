@@ -1,20 +1,19 @@
 import {
   BookOpenIcon,
-  MailIcon,
   MessageCircleIcon,
-  PlusIcon,
   StarIcon,
   UsersIcon,
   type LucideIcon,
 } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { InstructorProfileActions } from "@/components/dashboard/instructors/instructor-profile-actions"
 import {
   initialsOf,
-  type InstructorProfile,
+  type PublicInstructorProfile,
 } from "@/lib/config/instructor-profiles"
+import type { ProfileRelationship } from "@/lib/instructor-relationship"
 
 function StatBox({
   icon: Icon,
@@ -41,13 +40,18 @@ function StatBox({
 }
 
 /** The top card from `instructor-page__part1.png`: avatar, name, title,
- *  Follow/Message, then the four stat boxes. `Follow`/`Message` are
- *  decorative — there's no follow/messaging system yet, same as the sale
- *  page's `Wishlist`/`Share`. */
+ *  Follow/Message, then the four stat boxes. Follow and Message are real —
+ *  `instructor-profile-actions.tsx` draws what `getProfileRelationship`
+ *  allows this viewer, and Message only appears for a learner enrolled in
+ *  one of this instructor's courses. */
 function InstructorHeaderCard({
   instructor,
+  relationship,
 }: {
-  instructor: InstructorProfile
+  instructor: PublicInstructorProfile
+  /** What the viewer may do with this instructor — see
+   *  `lib/instructor-relationship.ts`. */
+  relationship: ProfileRelationship
 }) {
   return (
     <Card className="gap-0 p-8 ring-border">
@@ -64,18 +68,11 @@ function InstructorHeaderCard({
             {instructor.title} · Teaching on Lumen since{" "}
             {instructor.teachingSince}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2.5">
-            <Button className="gap-1.5 font-semibold shadow-sm">
-              <PlusIcon data-icon="inline-start" className="size-4" />
-              Follow
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-1.5 bg-card font-semibold shadow-sm"
-            >
-              <MailIcon data-icon="inline-start" className="size-4" />
-              Message
-            </Button>
+          <div className="mt-4">
+            <InstructorProfileActions
+              instructorSlug={instructor.slug}
+              relationship={relationship}
+            />
           </div>
         </div>
       </div>

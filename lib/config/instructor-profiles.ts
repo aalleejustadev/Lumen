@@ -1,4 +1,8 @@
-import { browseCourses, type BrowseCourse } from "@/lib/config/browse-courses"
+import {
+  browseCourses,
+  type BrowseCourse,
+  type BrowseCourseCategory,
+} from "@/lib/config/browse-courses"
 
 /**
  * Demo content for `/dashboard/instructors/[slug]`, measured off
@@ -38,6 +42,63 @@ export type InstructorProfile = {
   skills: string[]
   reviews: InstructorReview[]
   courses: BrowseCourse[]
+}
+
+/**
+ * A course as the profile page's cards draw it — plain data, so it crosses into
+ * the client `InstructorCoursesSection` without the `icon` function a
+ * `BrowseCourse` carries.
+ *
+ * It exists because a profile now resolves from **two catalogs**
+ * (`lib/public-instructor.ts`): the static demo courses, and database courses,
+ * whose categories ("Web Development", "Development") are not in
+ * `BrowseCourseCategory` and whose only rendering page is the enrolled course
+ * page. So the card is told its label, its artwork, its glyph's vocabulary and
+ * its link, rather than deriving all four from a catalog row.
+ */
+export type ProfileCourse = {
+  slug: string
+  title: string
+  categoryLabel: string
+  /** Tailwind gradient stops. */
+  art: string
+  /** Which icon table the glyph comes from — the catalog's, keyed by category
+   *  name, or the console's, keyed by category slug. */
+  glyph:
+    | { from: "catalog"; category: BrowseCourseCategory }
+    | { from: "database"; categorySlug: string }
+  /** An instructor-uploaded cover, drawn over the gradient when set. */
+  thumbnailUrl: string | null
+  rating: number
+  reviews: number
+  durationHours: number
+  /** Dollars, for the card's "$13.99". */
+  price: number
+  listPrice: number
+  href: string
+}
+
+export type PublicInstructorProfile = Omit<InstructorProfile, "courses"> & {
+  courses: ProfileCourse[]
+}
+
+/** A static catalog course, as a card. Its link is the sale page, which every
+ *  catalog course has. */
+export function catalogProfileCourse(course: BrowseCourse): ProfileCourse {
+  return {
+    slug: course.slug,
+    title: course.title,
+    categoryLabel: course.category,
+    art: course.art,
+    glyph: { from: "catalog", category: course.category },
+    thumbnailUrl: null,
+    rating: course.rating,
+    reviews: course.reviews,
+    durationHours: course.durationHours,
+    price: course.price,
+    listPrice: course.listPrice,
+    href: `/dashboard/courses/${course.slug}`,
+  }
 }
 
 /** "Simon Simorangkir" -> "simon-simorangkir". Shared by the link on

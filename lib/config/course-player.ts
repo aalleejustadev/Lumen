@@ -47,11 +47,21 @@ export type PlayerLesson = {
    *  "5 questions". Pre-formatted rather than a number + unit because a quiz
    *  row counts questions where a lecture counts time. */
   meta: string
-  type: "video" | "quiz"
+  /** `article` only ever comes from a database course; the static catalog's
+   *  rows are drawn as video or quiz, as the export draws them. */
+  type: "video" | "article" | "quiz"
   state: PlayerLessonState
   /** Quiz rows only — the `CourseQuiz` this row opens, which is what turns
    *  the completion accordion's trailing chevron into a real link. */
   quizSlug?: string
+  /** `CourseLesson.id`, on a database course. A row with one is selectable —
+   *  it opens that lesson on the page — and a row without one (every catalog
+   *  lesson, which has no content behind it) stays as it was. */
+  id?: string
+  /** Free to watch without enrolling. */
+  preview?: boolean
+  /** The viewer may not open this lesson: not enrolled, and not a preview. */
+  locked?: boolean
 }
 
 export type QuizQuestion = {
@@ -115,6 +125,16 @@ export type CourseNote = {
 
 export type CoursePlayerCourse = {
   slug: string
+  /**
+   * Set on a database course only. `full` when the viewer is enrolled, owns
+   * the course or is an admin — see `lib/course-access.ts` — and `preview`
+   * otherwise, which locks every lesson not marked free preview. Absent on a
+   * catalog course, whose lessons have no content to gate.
+   */
+  access?: "full" | "preview"
+  /** Database courses only: whether a sale page exists to send a locked
+   *  viewer to. Only a published course has one. */
+  published?: boolean
   title: string
   /** Tailwind gradient stops, straight off the `BrowseCourse` row. */
   art: string
@@ -123,6 +143,10 @@ export type CoursePlayerCourse = {
     /** The line under the name, minus the leading "Mentor · ". */
     title: string
     avatarUrl?: string
+    /** `Instructor.slug`, on a database course — what the profile route looks
+     *  a database instructor up by. Absent on catalog courses, whose profile
+     *  slug is derived from the name. */
+    slug?: string
   }
   /** 0-100. The enrolment's stored figure, not a lesson ratio — see the note
    *  on `EnrollmentSeed.progress` in `lib/config/my-learning.ts`. */

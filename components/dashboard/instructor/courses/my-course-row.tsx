@@ -19,6 +19,7 @@ import {
   formatRating,
 } from "@/components/dashboard/instructor/courses/courses-format"
 import { courseStatusBadge } from "@/lib/config/course-status"
+import { editorStepHref, FIRST_STEP } from "@/lib/config/course-editor"
 import { hasBeenLive, myCoursesCopy } from "@/lib/config/instructor-courses"
 import type { MyCourseRow as MyCourseRowData } from "@/lib/instructor-courses"
 import { cn } from "@/lib/utils"
@@ -50,26 +51,17 @@ import { cn } from "@/lib/utils"
  *    Published ones, at 100% as readily as at 45%, so it is "has this course
  *    ever been live" rather than "is it finished". `hasBeenLive` is the one
  *    test both halves read.
- *  - **The primary button is two different controls wearing one slot.** On a
- *    course that has been live it is **Manage**, a link to
+ *  - **The primary button is two different controls wearing one slot**, and
+ *    both are links now. On a course that has been live it is **Manage**, to
  *    `/dashboard/instructor/courses/[slug]` — the page `manage-course.png`
- *    draws, which is where everything about a published course now hangs off.
- *    On one that has not it is **Continue editing**, and *that* half is still
- *    disabled with the reason on it, because there is no course editor to open;
- *    the treatment the Help Center gives "Open Discussions", and like that one
- *    the flag is read off `instructorNav` rather than written down again, so it
- *    lights up on its own the day the authoring flow lands. `hasBeenLive` is
- *    the one test that decides which, the same call the manage page's own read
- *    makes before it will render at all. The `⋯` beside it carries the
- *    destinations that do not depend on either.
+ *    draws. On one that has not it is **Continue editing**, to that course's
+ *    editor, which is the surface the two `create-course-page` exports draw;
+ *    it was inert until that landed. `hasBeenLive` is the one test that
+ *    decides which, the same call the manage page's own read makes before it
+ *    will render at all. The `⋯` beside it carries the destinations that do
+ *    not depend on either.
  */
-function MyCourseRow({
-  course,
-  authoringBuilt,
-}: {
-  course: MyCourseRowData
-  authoringBuilt: boolean
-}) {
+function MyCourseRow({ course }: { course: MyCourseRowData }) {
   const badge = courseStatusBadge(course.status)
   const live = hasBeenLive(course.status)
 
@@ -170,11 +162,8 @@ function MyCourseRow({
           </Button>
         ) : (
           <Button
-            type="button"
-            disabled={!authoringBuilt}
-            title={
-              authoringBuilt ? undefined : myCoursesCopy.authoringUnavailable
-            }
+            nativeButton={false}
+            render={<Link href={editorStepHref(course.slug, FIRST_STEP)} />}
             className="h-[38px] px-4 text-[14px]"
           >
             {myCoursesCopy.continueEditing}

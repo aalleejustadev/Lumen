@@ -27,7 +27,27 @@ import type { PromotionDiscountType } from "@/lib/generated/prisma/client"
  *
  * They return `{ ok, message }` for the caller to toast rather than throwing,
  * the shape `lib/actions/cart.ts` set.
+ *
+ * **The course editor's Coupons step calls these same actions** — its quick
+ * "Create a coupon" form and its dialog alike — so the code format, the
+ * three-active rule and the ownership check are enforced once for both screens.
  */
+
+/**
+ * Both surfaces that draw coupons: this page, and every course's editor — its
+ * Coupons step and the Pricing step's "Current promotion" panel.
+ *
+ * **The editor is revalidated by its route pattern with `"page"`**, not by
+ * `/dashboard/instructor/courses` as a layout. A `"layout"` revalidation
+ * targets the `layout.tsx` at that segment, and that segment has none, so the
+ * first version silently invalidated nothing: the coupon was written, and the
+ * step went on showing the old table until a reload. Caught in the browser;
+ * it builds, typechecks and lints either way.
+ */
+function revalidateCoupons() {
+  revalidatePath("/dashboard/instructor/coupons")
+  revalidatePath("/dashboard/instructor/courses/[slug]/edit/[step]", "page")
+}
 
 export type CouponActionResult = {
   ok: boolean
@@ -252,7 +272,7 @@ export async function createCoupon(
     select: { id: true },
   })
 
-  revalidatePath("/dashboard/instructor/coupons")
+  revalidateCoupons()
   return { ok: true, message: `${checked.code} created.`, couponId: coupon.id }
 }
 
@@ -297,6 +317,52 @@ export async function updateCoupon(
     },
   })
 
-  revalidatePath("/dashboard/instructor/coupons")
+  revalidateCoupons()
   return { ok: true, message: `${checked.code} saved.`, couponId }
+}
+
+/**
+ * **Ends a coupon now** — the course editor's row menu. There is no status
+ * column (status is read off the clock), so ending one is a write to its dates:
+ * a running coupon's `endsAt` moves to now, and a scheduled one has `startsAt`
+ * pulled back with it, or it would reappear as live on the day it was meant to
+ * start. The arrangement `lib/actions/admin-promotions.ts` settled for a sale.
+ *
+ * Nothing is deleted: a coupon that has been redeemed is attached to orders,
+ * and its row is what the revenue figures are counted from. An expired coupon
+ * is refused rather than rewritten, so a stale tab cannot move a date that has
+ * already passed.
+ */
+export async function endCoupon(couponId: string): Promise<CouponActionResult> {
+  const session = await getSession()
+  if (!session) return { ok: false, message: "Sign in to manage coupons." }
+  if (!(await canTeach(session.user))) {
+    return { ok: false, message: "Only instructors can manage coupons." }
+  }
+  const profile = await getInstructorProfile(session.user.id)
+  if (!profile) {
+    return { ok: false, message: "Only instructors can manage coupons." }
+  }
+
+  const coupon = await db.coupon.findFirst({
+    where: { id: couponId, instructorId: profile.id },
+    select: { id: true, code: true, startsAt: true, endsAt: true },
+  })
+  if (!coupon) return { ok: false, message: "That coupon isn't available." }
+
+  const now = new Date()
+  if (coupon.endsAt && coupon.endsAt < now) {
+    return { ok: false, message: "This coupon has already ended." }
+  }
+
+  await db.coupon.update({
+    where: { id: coupon.id },
+    data: {
+      endsAt: now,
+      ...(coupon.startsAt > now ? { startsAt: now } : {}),
+    },
+  })
+
+  revalidateCoupons()
+  return { ok: true, message: `${coupon.code} ended.`, couponId: coupon.id }
 }

@@ -3,9 +3,11 @@ import "server-only"
 import { randomUUID } from "node:crypto"
 import {
   DeleteObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 /**
  * Neon Object Storage — the bucket behind profile avatars.
@@ -45,6 +47,9 @@ const EXTENSIONS: Record<string, string> = {
   "image/gif": "gif",
   "image/x-icon": "ico",
   "image/vnd.microsoft.icon": "ico",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "video/quicktime": "mov",
 }
 
 function endpoint() {
@@ -206,5 +211,170 @@ export async function deleteBrandingAsset(
     await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
   } catch {
     // As above: a failed cleanup must not fail a successful upload.
+  }
+}
+
+/**
+ * Lesson videos, behind the curriculum's **Upload video** button —
+ * `MediaAsset` rows of type `LESSON_VIDEO`, pointed at by
+ * `CourseLesson.videoAssetId`.
+ *
+ * **The browser uploads straight to the bucket**, through a presigned PUT,
+ * rather than posting the file through a Server Action the way avatars do. A
+ * lesson video is hundreds of megabytes: routed through the app it would need
+ * `serverActions.bodySizeLimit` raised past anything sensible, hold the whole
+ * file in the server's memory, and hit the request-body cap of every
+ * serverless host this could be deployed to. The bucket's CORS rules already
+ * allow a cross-origin PUT, so the server only signs and then verifies.
+ *
+ * Same bucket, under a `lessons/` prefix, for the reason `putBrandingAsset`
+ * gives. **That bucket is `public_read`**, so a video's URL is readable by
+ * anyone who has it; the key carries a random UUID, so it cannot be guessed,
+ * but it is not access control. Paid lesson video belongs in a `private`
+ * bucket served through presigned GETs — that bucket has to be created with
+ * `neonctl` first, which is why this does not do it on its own.
+ */
+export const LESSON_VIDEO_PREFIX = "lessons"
+
+export function lessonVideoPrefix(courseId: string, lessonId: string) {
+  return `${LESSON_VIDEO_PREFIX}/${courseId}/${lessonId}/`
+}
+
+/**
+ * A short-lived URL the browser can PUT one video to, and the key it will
+ * land at.
+ *
+ * **Only `host` ends up signed** (verified against the bucket), so neither the
+ * type nor the size is enforced by the URL itself — which is why
+ * `attachLessonVideo` reads both back with a HEAD before trusting the object.
+ * `Cache-Control` is left out here for the same reason: hoisted into the query
+ * string it is silently ignored, so the browser sends it as a header instead,
+ * which the bucket does store.
+ */
+export async function createLessonVideoUpload(
+  courseId: string,
+  lessonId: string,
+  contentType: string
+): Promise<{ uploadUrl: string; key: string } | null> {
+  const s3 = client()
+  if (!s3) return null
+
+  const extension = EXTENSIONS[contentType] ?? "bin"
+  const key = `${lessonVideoPrefix(courseId, lessonId)}${randomUUID()}.${extension}`
+
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType,
+    }),
+    // An hour covers a large file on a slow connection; the URL is useless
+    // for anything but this one key.
+    { expiresIn: 60 * 60 }
+  )
+
+  return { uploadUrl, key }
+}
+
+/**
+ * What actually landed at a key — its size and type as the bucket reports
+ * them, never as the browser claimed. `null` when nothing is there.
+ */
+export async function inspectObject(
+  key: string
+): Promise<{ sizeBytes: number; contentType: string; url: string } | null> {
+  const s3 = client()
+  if (!s3) return null
+
+  try {
+    const head = await s3.send(
+      new HeadObjectCommand({ Bucket: BUCKET, Key: key })
+    )
+    return {
+      sizeBytes: head.ContentLength ?? 0,
+      contentType: head.ContentType ?? "application/octet-stream",
+      url: publicUrl(key),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Drops a lesson's object. Scoped to that lesson's own prefix, for the reason
+ * `deleteAvatar` is scoped to one user's: the key comes out of a database row,
+ * and a stray value must never turn into a delete elsewhere in the bucket.
+ */
+export async function deleteLessonObject(
+  courseId: string,
+  lessonId: string,
+  key: string
+) {
+  if (!key.startsWith(lessonVideoPrefix(courseId, lessonId))) return
+
+  const s3 = client()
+  if (!s3) return
+
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
+  } catch {
+    // A leftover object costs pennies; a failed cleanup must not fail the
+    // write that already succeeded.
+  }
+}
+
+/**
+ * A course's cover image — the Course landing page step's **Replace image**,
+ * stored on `Course.thumbnailUrl`, which `CourseArt` already renders wherever
+ * a course is drawn.
+ *
+ * Same bucket, under `courses/<courseId>/cover/`, and posted through a Server
+ * Action like the avatar rather than presigned like a lesson video: a cover is
+ * capped at 4 MB, under the 5 MB `serverActions.bodySizeLimit` already allows.
+ * A new key per upload for `putAvatar`'s reason.
+ */
+export async function putCourseCover(
+  courseId: string,
+  file: { bytes: Uint8Array; contentType: string }
+): Promise<string | null> {
+  const s3 = client()
+  if (!s3) return null
+
+  const extension = EXTENSIONS[file.contentType] ?? "bin"
+  const key = `courses/${courseId}/cover/${randomUUID()}.${extension}`
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: file.bytes,
+      ContentType: file.contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  )
+
+  return publicUrl(key)
+}
+
+/** Collects the cover a new upload replaced — only under that course's own
+ *  prefix, for the reason `deleteAvatar` is scoped to one user's. */
+export async function deleteCourseCover(courseId: string, url: string | null) {
+  if (!url) return
+  const prefix = `${endpoint()}/${BUCKET}/courses/${courseId}/cover/`
+  if (!endpoint() || !url.startsWith(prefix)) return
+
+  const s3 = client()
+  if (!s3) return
+
+  try {
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET,
+        Key: url.slice(`${endpoint()}/${BUCKET}/`.length),
+      })
+    )
+  } catch {
+    // A failed cleanup must not fail the upload that already succeeded.
   }
 }

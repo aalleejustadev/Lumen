@@ -37,7 +37,15 @@ import { cn } from "@/lib/utils"
  * deliberately silent: the navigation *is* the feedback, and a toast saying
  * the course was added would land on a page that has already moved on.
  */
-function CourseBuyButtons({ slug }: { slug: string }) {
+function CourseBuyButtons({
+  slug,
+  unavailable,
+}: {
+  slug: string
+  /** Why this course cannot be bought, when it cannot. The buttons render
+   *  disabled with the reason under them rather than failing on click. */
+  unavailable?: string
+}) {
   const router = useRouter()
   const [pending, startTransition] = React.useTransition()
   const [pendingAction, setPendingAction] = React.useState<
@@ -76,7 +84,7 @@ function CourseBuyButtons({ slug }: { slug: string }) {
       <Button
         onClick={() => run("add")}
         loading={pendingAction === "add"}
-        disabled={pending}
+        disabled={pending || unavailable !== undefined}
         className="mt-4.5 h-11 w-full gap-2 text-sm font-semibold shadow-sm"
       >
         <ShoppingCartIcon data-icon="inline-start" />
@@ -86,11 +94,16 @@ function CourseBuyButtons({ slug }: { slug: string }) {
         variant="outline"
         onClick={() => run("buy")}
         loading={pendingAction === "buy"}
-        disabled={pending}
+        disabled={pending || unavailable !== undefined}
         className="mt-2.5 h-11 w-full bg-card text-sm font-semibold shadow-sm"
       >
         Buy now
       </Button>
+      {unavailable ? (
+        <p className="mt-2.5 text-center text-[13px] text-muted-foreground">
+          {unavailable}
+        </p>
+      ) : null}
     </>
   )
 }
@@ -101,9 +114,13 @@ function CourseBuyButtons({ slug }: { slug: string }) {
 function CourseSaveButtons({
   slug,
   wishlisted: initialWishlisted,
+  wishlistable = true,
 }: {
   slug: string
   wishlisted: boolean
+  /** False where the wishlist cannot hold the course (a database course — the
+   *  wishlist resolves from the static catalog too). Share still works. */
+  wishlistable?: boolean
 }) {
   const [wishlisted, setWishlisted] = React.useState(initialWishlisted)
   const [pending, startTransition] = React.useTransition()
@@ -148,6 +165,7 @@ function CourseSaveButtons({
         variant="outline"
         onClick={onWishlist}
         loading={pending}
+        disabled={!wishlistable}
         aria-pressed={wishlisted}
         className="h-10 flex-1 gap-1.5 bg-card shadow-sm"
       >

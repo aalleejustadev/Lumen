@@ -74,7 +74,7 @@ export const instructorNav: DashboardNavGroup[] = [
         title: "Create Course",
         href: "/dashboard/instructor/courses/new",
         icon: CirclePlusIcon,
-        built: false,
+        built: true,
         tag: "New",
       },
     ],

@@ -2807,6 +2807,507 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   as the deliberate *second* vocabulary: a queue whose rows are minutes old
   says "48m ago", while a review reaching back weeks says "3 weeks ago", and
   compacting the second reads as a timestamp rather than a sentence.
+- `components/dashboard/instructor/courses/edit/` — **the course editor** at
+  `/dashboard/instructor/courses/[slug]/edit/[step]`, from
+  `ui-design/light/dashboard/instructor/create-course-page.png` and
+  `create-course-page__curriculum.png`: `course-editor-page.tsx` (client — the
+  header and the step switch), `editor-nav.tsx` (a **Server Component passed in
+  as `nav`**, so the six-step config and its glyphs stay off the bundle —
+  `community-page.tsx`' arrangement), `intended-learners-form.tsx`,
+  `curriculum-board.tsx`, `section-card.tsx`, `lesson-row.tsx`,
+  `editable-text.tsx` and `row-button.tsx`. `lib/config/course-editor.ts` is
+  every word and the step vocabulary, `lib/instructor-course-edit.ts` reads and
+  `lib/actions/instructor-course-edit.ts` writes. **Nothing on it is demo data
+  and it needed no migration** — `Course.learningOutcomes` / `requirements` /
+  `intendedAudience` and `CourseSection` / `CourseLesson` were already shaped
+  for it.
+  Measured off the two exports at DPR 2: the shell's usual 32px page inset, a
+  28px/800 title over a 15px "<course> · <status>" line with two 42px buttons
+  right-aligned, then a **238px** nav card, a 26px gutter and a fluid content
+  column. The nav card is `p-3.5` with 36px rows on 12px of their own side
+  padding, an 18px state circle (`--success` when done, `--border` when not)
+  and a selected row on `--hover` **with a 2px `--foreground` left border** —
+  sampled, that border is the one thing about it that is not a plain pill. The
+  Intended learners card is `p-7` with 44px `--background` fields on a 10px
+  gap; a lesson row is **56px**, `--background` on the white section card, with
+  a 34px tinted type tile.
+  Nine things decide what it means, and the exports settle none of them:
+  - **It is keyed by course, not a `/new` wizard.** Both exports draw an
+    existing draft ("Mastering Illustration · Draft"), and all three ways in
+    name a course that already exists: **Continue editing** on My Courses, the
+    **Curriculum** row on the manage page, and the nav card's own steps.
+    `/dashboard/instructor/courses/new` therefore stays `built: false` — see
+    the note below.
+  - **Two of the six steps are built and the other four render inert**, the
+    rule `settingsNav`'s own flag follows. **Their circles still tell the
+    truth**, because completion is derived from the course's rows rather than
+    stored: Pricing is ticked on any seeded course even though nothing can edit
+    it. A stored "steps completed" column would be a second copy of what the
+    course already says.
+  - **Publish means _submit for review_.** A course does not go on sale because
+    its author says so — it goes to `/dashboard/admin/courses`, which is what
+    `CourseSubmission` and `IN_REVIEW` exist for, and wiring the button to
+    PUBLISHED would make that queue decorative (the call `canTeach` makes about
+    `User.intent`). It is confirmed, because it hands the course to somebody
+    else, and it is **gated**: no lessons, or nothing on Intended learners, is
+    refused with the step named — a sentence in a dialog that nothing checks is
+    the promise `instructor-coupons.ts` already refuses to make. It refuses any
+    status but DRAFT and NEEDS_CHANGES, the stale-tab reasoning
+    `admin-courses.ts` records.
+  - **Only the two automated submission checks are written.**
+    `cover_resolution` needs an image upload that does not exist and
+    `audio_quality` is a human judgement — `CourseSubmissionCheck.automated` is
+    the column that says so. Predicting either would put a verdict nobody made
+    in front of a reviewer; the admin course view renders whatever rows exist,
+    so two become four the day those land.
+  - **Nothing on the Curriculum step waits, greys out or spins.** Every edit is
+    applied locally first and the server is told afterwards; the only way it
+    enters the picture is by refusing, in which case the list snaps back and
+    says why. That is the opposite posture from `promotions-board.tsx`, and
+    deliberate for this surface — a curriculum is edited in bursts of a dozen
+    small changes, and a spinner on each one makes the step feel like it is
+    arguing. Three things make it safe: **`inFlight` gates the re-seed from the
+    server** (props landing mid-edit would otherwise redraw the old order under
+    the instructor's hand); **only the writes that change something outside
+    this page revalidate at all** — reordering and renaming do not, because a
+    `revalidatePath` re-renders the whole dashboard tree and on a dragged
+    control that reads as stuttering; and **a new row is drawn immediately with
+    a placeholder id** which the server's real row replaces on answer, its
+    inline fields read-only for that moment because a placeholder id addresses
+    no lesson. Adding a lesson raises **no toast**: the row appearing is the
+    confirmation, and a message per click of three buttons is noise.
+  - **Both trash buttons confirm first** (`delete-curriculum-dialog.tsx`), and
+    they are the only controls on the step that stop and ask. Everything else
+    is either reversible by the control beside it — an arrow moves a row back,
+    a rename types over itself — or adds something; these two take work away
+    and there is no trash to restore from. The section copy **names the lessons
+    it will take with it**, because `CourseLesson.section` cascades and saying
+    "and the 6 lessons inside it" before the click beats the toast that used to
+    say it afterwards. One dialog instance lives in the board rather than one
+    per row, and it carries **no pending state**: confirming closes it and the
+    row goes at once, because the delete is optimistic like every other edit
+    here. Deletes still toast afterwards, because they are destructive and say
+    what went.
+  - **The drag source is the row, not the handle.** `dragstart` fires on the
+    element carrying `draggable` and bubbles *up*, so the first pass's handler
+    on the grip never ran and the handle did nothing at all. The grip's whole
+    job is to arm `draggable` on pointer-down (the row disarms it on `dragend`,
+    or text selection inside its own inline fields breaks); `onDragStart`,
+    `onDragOver` and `onDrop` live on the row. The lesson row stops its
+    `dragstart` and `drop` from propagating, or a lesson drag would start a
+    *section* drag on the card above it. `dataTransfer.setData` is not
+    decoration — Firefox refuses to begin a drag without a payload.
+  - **Save draft submits the active step's form, and is inert on Curriculum**
+    with the reason on it, because that step writes as you edit. That split is
+    the exports' own — one draws a *Save changes* inside the card and the other
+    draws no submit at all — and it is the arrangement the profile page already
+    has between its avatar and its fields. `course-editor-page.tsx` owns the
+    Intended learners values for exactly this: two buttons over one set of
+    values, one owner.
+  - **Titles and lengths are inline fields styled to look like text.** Both
+    exports draw plain text and neither draws any other way to name a lesson, so
+    a builder whose rows cannot be named is the gap; `editable-text.tsx` keeps
+    the drawing at rest (the ring lands on hover and focus only), commits on
+    blur and Enter, reverts on Escape, and puts the old value back when the
+    action refuses. **The meta diverges from the export on purpose**: it writes
+    "4 min" where the export draws "04:12", because `durationMinutes` is an
+    `Int` and the drawn value cannot be stored at all.
+  - **A committed inline edit toasts, and it is the one edit on this step that
+    does.** Everything else here announces itself by changing the list — a row
+    appears, moves or goes — so the screen is its own confirmation and a
+    message per click would be the noise adding a lesson deliberately stays
+    silent to avoid. A rename is the exception: the new text has been on screen
+    since it was typed, so committing it changes nothing visible, and an edit
+    that is only *probably* saved is worse than one that says so. The toast is
+    raised by `curriculum-board.tsx`' **`commit`** — the path all three inline
+    fields already take, and the one that awaits a verdict — rather than by
+    `editable-text.tsx`, which must stay ignorant of what it is naming; and it
+    names the **action** in the past tense ("Lesson renamed.") rather than the
+    value, which the row is already showing. `EditableText` only calls
+    `onCommit` when the value actually moved, so tabbing across a row is
+    silent. `commit` gained a `.catch()` in the same pass, for
+    `payout-run-dialog.tsx`' reason: a rejected action used to leave the field
+    showing a value the database never took, which its own note forbids.
+  - **Reordering is a drag _and_ a pair of arrows, and they are one action.**
+    `moveSection`/`moveLesson` take a destination index rather than a direction
+    so the two gestures cannot drift; the arrows are the whole keyboard story,
+    since native HTML5 drag has none. **Cross-section lesson moves are not
+    supported** by either gesture: no export demonstrates one, and a drop
+    target spanning two sections needs a drawn state nothing provides. A drag
+    that wanders into another section is ignored rather than dropped somewhere
+    surprising.
+  - **Order is always rewritten as a dense 0..n-1 run**, never patched, and
+    `Course.lessonCount` / `totalDurationMinutes` / `durationHours` are
+    recomputed from the rows after anything that moves them rather than
+    incremented. Four surfaces draw `lessonCount`, so a counter that drifts is
+    wrong in all of them at once.
+  - **Every action resolves the course through one `owned()` helper** that puts
+    `instructorId` in the `where`, and reaches a section or lesson *through*
+    its course, so a stray id cannot cross catalogs. Verified: another
+    instructor's profile reaching this course comes back as nothing.
+- **Every curriculum row carries the way into its own content** — **Upload
+  video** (a dialog), **Edit article** and **Edit quiz** (pages at
+  `/edit/article/[lessonId]` and `/edit/quiz/[lessonId]`, static segments beside
+  `edit/[step]`). The button is the one control on a row that never hides; below
+  1400px its label collapses to the icon, because the row is measured to the
+  pixel and the title would otherwise be squeezed to nothing. A lesson's length
+  now follows from its content: the upload sets a video's minutes, saving an
+  article sets its reading time (200 wpm), and a quiz's question count is
+  **read-only** on the row because `saveQuiz` writes it. Nothing needed a
+  migration — `CourseLesson.videoAssetId`, `articleBody`, `MediaAsset` and the
+  `Quiz` / `QuizQuestion` / `QuizOption` models were already there.
+  - **Videos upload straight from the browser to the bucket** through a
+    presigned PUT (`startLessonVideoUpload` → XHR → `attachLessonVideo`), never
+    through a Server Action — a lesson video would blow any body limit. Three
+    things were verified against the real bucket rather than assumed: its CORS
+    already allows a cross-origin PUT; **only `host` is signed**, so the URL
+    enforces neither type nor size, which is why the attach step HEADs the
+    object and refuses anything that is not what was asked for; and a
+    `Cache-Control` hoisted into the presigned query is silently ignored, so the
+    browser sends it as a header. The key must sit under
+    `lessons/<courseId>/<lessonId>/`, or attach refuses it. Deleting a lesson or
+    section collects its `MediaAsset` rows and objects (`dropLessonVideos`) —
+    `ownerId` is not a foreign key, so nothing cascades there.
+  - **Lesson videos live in the `public_read` `lumen-avatars` bucket**, under an
+    unguessable key. That is not access control for paid content: move them to
+    a `private` bucket served by presigned GETs before real courses go on sale.
+    It needs a `neonctl` step, which is why it was not done here.
+  - **There is still no lesson player**, so a student cannot yet watch the
+    video or read the article — both are stored and ready for it. Quizzes are
+    the exception, below.
+  - **Articles are Tiptap, stored as its JSON and whitelisted on write**
+    (`lib/article-body.ts`: paragraph, h2/h3, bulleted and numbered lists, bold,
+    italic). StarterKit's other extensions are switched off so a shortcut cannot
+    produce a node the server would strip. **The client sends the document as a
+    JSON string**, not the object: Tiptap's `attrs` are not plain objects, a
+    Server Action passes a non-plain object as an opaque temporary reference
+    (`"$T"` in the payload), and the server silently saved every subheading as a
+    heading until this was caught in the browser. It builds, typechecks and
+    lints either way.
+  - **The quiz editor is the student quiz page made editable** — same 718px
+    card, header, progress bar, 64px lettered rows and footer, class for class.
+    Clicking a letter marks the correct answer in the student page's own
+    "selected" style; numbered chips under the bar jump between questions, and
+    on the last question Next becomes **Add question**. `validateQuizDraft`
+    (`lib/quiz-draft.ts`) is the one rule set, run by the editor and again by
+    `saveQuiz`: a prompt, 2–6 non-blank distinct answers, exactly one correct.
+    **`saveQuiz` matches rows by id rather than replacing them**, so an edit
+    keeps any `QuizAnswer` a student has recorded.
+  - **Students see authored questions on the database path only.**
+    `lib/course-player.ts` swaps them into `buildQuizzes`' output by position; a
+    quiz lesson with nothing written keeps the generated placeholder, and a
+    catalog course still wins over the database, as that module records.
+
+- **The editor's Course landing page and Pricing steps are built**, from
+  `create-course-page__landing-page.png` and `create-course-page__pricing.png`
+  (`landing-page-form.tsx`, `pricing-form.tsx`). Nothing needed a migration:
+  `Course.subtitle`, `description`, `thumbnailUrl`, `currency`,
+  `listPriceCents` and `includedInBusiness` were already there. Both are
+  controlled from `course-editor-page.tsx` like Intended learners, so the
+  header's **Save draft** saves whichever form step is open.
+  `editor-controls.ts` holds the field vocabulary all three form steps share
+  (the three exports draw one card), and `EDITOR_SWITCH` is
+  `notifications-form.tsx`' 46 x 26 switch. Measured at DPR 2 and verified in
+  the browser at the export's own 1553px width. Things worth knowing:
+  - **The lead is a 620px measure with `[text-wrap:wrap]`.** Both were found by
+    rendering, not by measuring the export, whose type shapes a few percent
+    tighter: pricing needs at least 615px to keep "you earn" on line one, the
+    landing lead breaks correctly under 626px, and the global
+    `text-wrap: pretty` pulled "the" down beside "work." until the opt-out.
+  - **Renaming a course does not move its slug**, for `createCourse`'s reason.
+    The description textarea edits `Course.description`'s paragraphs as one
+    string, split on blank lines when saved.
+  - **The cover applies on pick** (`uploadCourseCover`, a Server Action under
+    the 5 MB body limit, to `courses/<courseId>/cover/`), while the text waits
+    for Save, which is how the profile page treats its avatar. With no cover the
+    box shows the category gradient and the button reads *Upload image*.
+    `CourseArt` already honoured `thumbnailUrl`, so a cover shows on every
+    surface that draws one from the database.
+  - **List price is a select, as drawn**: a ladder of `.99` prices
+    (`PRICE_TIERS_CENTS`), with no Free tier because a $0 line item cannot go
+    through Stripe checkout. A course priced off the ladder keeps its own price
+    as an extra option. **Currency lists USD only**, because every money path is
+    written in dollars and one cart cannot mix currencies. Saving moves
+    `priceCents` with the list price: equal with no sale running, the same
+    percentage off while `saleEndsAt` is in the future. Coupons are not
+    re-priced, since `resultingPriceCents` is a promise already made.
+  - **The selected values render at full strength**, although the export draws
+    them muted. On this step, placeholder grey would read as "no price set".
+  - **"Current promotion" lists this course's live coupons**, judged by the
+    clock the way the Coupons page's Active pill is, with counted redemptions.
+    The export's 212 is not reproduced: the seed caps redemptions, so
+    `LAUNCH40` on Mastering Illustration shows 0. **Manage coupons** opens
+    `/dashboard/instructor/coupons?course=<id>`.
+  - **Nothing reads `includedInBusiness` yet.** There is no subscription product
+    (see the billing note), so like `language`/`timeZone` it stores an intention.
+  - **The student catalog and checkout still read `browse-courses.ts`**, so
+    changing a catalog course's price or title here does not move what a
+    learner is charged or sees there, only the database surfaces. That is the
+    catalog half of the swap `lib/course-player.ts` describes.
+  - An **unbuilt step's URL now falls back** to the first step, as an unknown
+    one did. Before, `/edit/coupons` rendered the Intended learners form while
+    the nav highlighted Coupons.
+
+- **All six course editor steps are built**: Coupons and Course messages
+  landed last, from `create-course-page__coupons.png` and
+  `create-course-page__messages.png` (`coupons-step.tsx`,
+  `course-messages-form.tsx`). Neither needed a migration.
+  - **The Coupons step is the Coupons page's data and rules, not a copy.**
+    `getCourseCoupons` and `getCouponsPage` build their rows, order and figures
+    with the same three helpers (`toCouponRow`, `sortCouponRows`,
+    `couponStatsOf` in `lib/instructor-coupons.ts`). Both of the step's create
+    paths call `createCoupon` / `updateCoupon`, where the code format, the
+    three-active rule and ownership are enforced. The quick form does a
+    percentage starting now; **New coupon** opens the existing dialog, limited
+    to this course, for a fixed price or a future start. The row menu is Edit,
+    Copy code and **End coupon** (`endCoupon`): a write to the dates, never a
+    delete, because a redeemed code is attached to orders. Verified with real
+    order and redemption rows: the tiles counted them, a fourth active code was
+    refused, and the Coupons page showed the same rows.
+  - **Two refresh traps, both caught in the browser.** First, a `"layout"`
+    revalidation of `/dashboard/instructor/courses` invalidates nothing, because
+    that segment has no `layout.tsx` (see the installed `revalidatePath` doc).
+    `revalidateCoupons` now names the editor's route pattern with `"page"`.
+    Second, even that did not re-render the open step in place, so the step
+    calls `router.refresh()` after each successful write, which is the fix
+    `publish-toggle.tsx` records for the same route group. The form steps'
+    saves were already live.
+  - **Course messages are stored, not sent.** Blank is stored as null.
+    `welcomeMessage` belongs on enrolment and `congratulationsMessage` on
+    completion, and **nothing writes either event**: checkout fulfilment
+    (`lib/orders.ts`) marks the order paid without creating an `Enrollment`,
+    and nothing sets `completedAt`. Put the sender next to whichever code first
+    writes those rows, as an instructor message in the course's `Conversation`.
+  - **Save draft** saves the open step, and is inert with a reason on
+    Curriculum and Coupons (`courseEditorCopy.saveDraftUnavailable`).
+- **Preview as student is in the course editor's header**, and returns to the
+  step it was pressed on. `?via=` now names the screen to go back to: `manage`
+  (the manage page, unchanged) or `edit-<step>`. That keeps it a single
+  parameter the course page and its quiz rows already carry.
+  `isPreviewVia` validates it: the route drops anything else, and a
+  bogus `edit-` value falls back to "Back to courses". The href is built in the
+  route, not in the client editor, because `lib/course-return.ts` imports the
+  static catalog. A verified preview shows a **Student preview** marker beside
+  "Exit preview", since the page is otherwise identical to a student's. The
+  header's button group is not `shrink-0`: with three buttons it pushed the
+  page 24px wide at 400px.
+
+- **The instructor profile resolves from the database too**
+  (`lib/public-instructor.ts`). `/dashboard/instructors/[slug]` read only
+  `lib/config/instructor-profiles.ts`, so *View profile* on a course built in
+  the app, reached by previewing it, 404'd. The order matches
+  `lib/course-player.ts`: static profiles win, so nothing drawn to the export
+  changes; then `Instructor.slug`. The database profile is read, not invented:
+  its figures sum and weight the **published** courses' `enrollmentCount`,
+  `reviewsCount` and `rating`, not `Instructor`'s own counters, which nothing
+  keeps in step. Its reviews are real `CourseReview` rows, and About falls back
+  to `bio`. Four things follow:
+  - **Cards take a `ProfileCourse`** (plain data with its own `href`, label,
+    gradient and glyph vocabulary) instead of a catalog row, because database
+    categories ("Web Development") aren't `BrowseCourseCategory` names and the
+    catalog icon lookup would have rendered `undefined`. **A database course's
+    card links to the enrolled course page**, because the sale page still reads
+    only the static catalog.
+  - **The profile link uses `CoursePlayerCourse.instructor.slug`** on a
+    database course rather than re-deriving it from the name, which would 404
+    the day the two differ.
+  - **"Back to course" recognises a database course** once the route has looked
+    it up (`courseReturnLink`'s `databaseCourse`), always returning to the
+    enrolled page. `?preview=` carries an instructor's preview origin across the
+    profile, so course → profile → back still lands in the preview.
+  - Empty states a database account can reach and a catalog one never did: no
+    bio, no skills, no reviews, no published courses. The reviews card is no
+    longer keyed by name, because one learner reviewing two courses is a
+    duplicate key.
+
+- **Follow and Message on the instructor profile are real.**
+  `instructor-page__part1.png` draws both and neither did anything.
+  `lib/instructor-relationship.ts` (`getProfileRelationship`, React `cache`)
+  decides what this viewer may do, `components/dashboard/instructors/
+  instructor-profile-actions.tsx` draws that answer, and
+  `lib/actions/instructor-follow.ts` is the one write. It needed one migration,
+  `instructor_follow`. Six things decide what they mean:
+  - **A follow is a row, not a counter on `Instructor`.** The reason
+    `ConversationParticipant` gives about unread counts: a stored integer
+    drifts the first time a write fails halfway. `@@unique([userId,
+    instructorId])` is what makes a double-click one follow rather than two,
+    and `InstructorFollow` is keyed to `Instructor` rather than to its `User`
+    because the profile page is keyed that way and `Instructor.userId` is
+    nullable for exactly that reason.
+  - **The action takes the desired state, not "toggle".** The button flips
+    optimistically and a double-click sends two requests; a toggle would then
+    undo itself, where "set following to true" twice is still one follow.
+    It answers with what actually landed — the follower count included — so the
+    button settles on the truth rather than on what it guessed, the posture
+    `lib/email-change.ts` records.
+  - **The instructor is resolved from the slug server-side.** The browser never
+    supplies an instructor or user id, so a hand-edited request cannot follow
+    on somebody else's behalf. Following yourself is refused.
+  - **Message appears only for a viewer enrolled in one of this instructor's
+    courses**, and that is not a second rule: it is `resolvePairing`
+    (`lib/messages.ts`) made visible — "a learner may write to the instructor
+    of a course they are enrolled in" — which `openInstructorConversation`
+    then runs again through `startConversation` before writing anything. The
+    arrangement `canTeach` has with the instructor shell's guard, so the page
+    cannot offer a conversation the action would refuse. Enrolment means an
+    `Enrollment` row; My Learning's progress is config, not enrolment.
+  - **With more than one such course the button becomes a menu**, because a
+    `Conversation` is per (learner, instructor, course) — a thread is always
+    *about* a course, which is what `Conversation.courseId` is for — so the
+    learner picks which. An existing thread is reopened rather than
+    duplicated, and the navigation to `/dashboard/messages?c=` is the feedback
+    (a toast would land on a page that has already moved on).
+  - **An instructor with no `Instructor` row cannot be followed**, and the
+    button says so rather than failing on click — the treatment
+    `user-row-actions.tsx` gives a learner's "View profile". Three of the
+    static catalog's profiles exist only in `lib/config/instructor-profiles.ts`
+    with nothing to attach a row to. Neither button is drawn on your own
+    profile.
+- **The profile page survives its own secondary reads failing.** It has two
+  that are not what the page is *about* — `getProfileRelationship` (the two
+  buttons) and the route's `databaseCourse` lookup (the back link) — and an
+  uncaught error in a Server Component takes the whole route down, so either
+  one could cost a student the profile they came to read. That is not
+  hypothetical: the follow work added the first of them, and until
+  `instructor_follow` is deployed every `db.instructorFollow` call raises P2021
+  on a database that is otherwise healthy. Both fail soft now — the buttons are
+  hidden, the back link falls back to "Back to Browse" — and the relationship
+  read **logs the reason, naming the migration**, so a real fault is still
+  findable in the server output rather than swallowed. **`getPublicInstructor`
+  is deliberately not given the same treatment**: it is the *primary* read, and
+  failing it soft would turn a database outage into "this instructor does not
+  exist", which is the one answer worse than an error. A 404 on this route
+  should always mean the slug names nobody. Worth knowing: the whole static
+  catalog resolves without touching the database at all, which is why the
+  degraded page is a complete profile rather than an empty one.
+- **The seed writes followers** (`seedFollows`). Unlike the audit log or the
+  uptime samples this is not standing in for a missing source — the app emits
+  these for real — but the header draws a follower count beside the button, and
+  at zero on every profile that figure is a dead control, the reading
+  `seedCommunity` settled for its own tags and hearts. Each instructor's
+  followers are capped **per instructor** rather than the list as a whole,
+  which would give the first five followers and everyone after them none, and
+  a follow never predates the account that made it. **Re-run `npm run db:seed`
+  to see it.**
+
+- **Lesson content reaches learners** on a database course, on both course
+  pages. Before this, an uploaded video, a written article and an authored quiz
+  were stored and shown to nobody: the enrolled page drew a gradient with a fake
+  play button, and the sale page read only the static catalog.
+  - **The enrolled page is a lesson player** (`lesson-viewer.tsx`, fed by
+    `getLessonView` in `lib/course-player.ts`). `?lesson=<id>` picks the lesson.
+    Otherwise it opens on the one in progress, or the first. What it shows by
+    kind:
+    - **Video:** the browser's own `<video controls>`, with a "Video coming
+      soon" panel when nothing is uploaded.
+    - **Article:** the rendered document.
+    - **Quiz:** a card with **Start quiz**.
+
+    Every syllabus row with an id is a same-page link, and Previous/Next walk
+    the course carrying `?via=`. **Catalog courses are untouched**: their rows
+    have no id, so they keep the drawn player the export shows. The syllabus
+    accordion is **controlled**, since an uncontrolled default cannot follow the
+    selected lesson and Base UI warns when it tries. Sections are keyed by
+    position, because two can share a title.
+  - **Paid content is gated on the server** (`lib/course-access.ts`): an
+    `Enrollment` row, the course's own instructor, or an admin get everything.
+    Anyone else gets free-preview lessons and a lock on the rest. A locked
+    lesson's content is **never read into the page**. Verified: no paid video
+    URL and no paid article text in the HTML. The quiz page redirects a viewer
+    without access to the sale page, because it ships every answer to the
+    browser.
+  - **The sale page resolves database courses** (`lib/course-sale.ts`): a
+    PUBLISHED course, or a draft for its own instructor (anyone else gets a
+    404). It builds the same `CourseDetail` from real rows: enrolments, the
+    `CourseReview` breakdown, lesson counts for "includes", the public profile's
+    instructor figures, and the uploaded cover. **Free previews carry real
+    content**, and only they are read. The preview dialog plays the video or
+    shows the article (`RealPreview`), and each syllabus row's "Preview" opens
+    the dialog on that lesson (`startAt`). Catalog courses pass `previews: null`
+    and keep the drawn dialog.
+  - **A database course cannot be bought yet, and the page says so**
+    (`purchasable: false`). The cart, wishlist and checkout resolve courses from
+    the static catalog, and fulfilment writes no `Enrollment`. So the buy and
+    wishlist buttons render disabled with a reason, and the strikethrough and
+    "% off" only show when there is a real saving. Making these courses sellable
+    means teaching `lib/cart.ts` / `lib/actions/cart.ts` the database and having
+    `lib/orders.ts` create the enrolment. That enrolment is also the event the
+    course's welcome message should be sent on.
+  - `components/dashboard/courses/article-body.tsx` is the one renderer for a
+    stored article, node by node with no HTML. It is hook-free, so the Server
+    Component course page and the client preview dialog both use it.
+  - Profile course cards and "Back to course" now point at a database course's
+    **sale** page, which exists.
+
+- **The manage page's Curriculum row is live and its two neighbours are not.**
+  `ManageRow.navHref` became optional for it: Curriculum's destination is a
+  step of this course's own editor and appears in no sidebar, so a row with no
+  `navHref` is decided purely by whether `manageRowHref` can build it one.
+  `manageRowHref` takes a **`ManageRowTarget`** rather than an id, because the
+  two halves of the app address a course differently — the `?course=` filters
+  take the id, every route under `/dashboard/instructor/courses/…` takes the
+  slug — and because Quizzes needs more than either (below).
+- **All three Content rows lead somewhere now**, so five of the eight do.
+  `manageRowHref` returns `string | undefined` for it, since a row can be inert
+  on its own account rather than only on a nav flag:
+  - **Landing page & pricing opens the editor's `landing-page` step.** It is
+    one row over *two* steps, and the two are adjacent in `editorGroups` under
+    "Publish your course", so Pricing is one click away in the nav card the
+    step lands on. That adjacency is what makes a single row honest rather than
+    a half-destination; splitting it would be designing past the export, which
+    draws one.
+  - **Quizzes has no index page to open**, because a quiz is edited at
+    `/edit/quiz/<lessonId>`, which addresses one lesson. So the destination
+    depends on how many there are: exactly one opens **that quiz**, which is
+    the point of the row on the commonest course; more than one falls back to
+    Curriculum, where every quiz row already carries its own *Edit quiz*
+    button, since picking one of several would be a guess; **none declines**,
+    leaving the row inert under its own "No quizzes in this course yet" — a
+    link promising quizzes that opened a page with none is the dead affordance
+    `attention-list.tsx` refuses, read from the other end. Build a real
+    quizzes index here if one is ever drawn.
+  - That is why `getManageCoursePage` returns **`quizLessonIds`** and not just
+    the count `facts.quizzes` still carries: it reads the quiz lessons in
+    curriculum order rather than counting them, so "the only quiz" and "the
+    first quiz" are the row the editor would show. A course has a handful at
+    most, so it costs nothing over the `count()` it replaced.
+- **My Courses' Continue editing is a link now**, to that course's editor —
+  what the first pass left disabled on the missing authoring flow.
+- `/dashboard/instructor/courses/new` — **the one screen here with no export**,
+  built because the sidebar's **Create Course** row has to lead somewhere.
+  `new-course-form.tsx` asks two things and nothing else: a **title** and a
+  **category**, the only required columns on `Course` that its author alone can
+  answer. Everything else takes a draft's honest default and is filled in on
+  the step that owns it — asking for a price here would be building the Course
+  landing page step in the wrong place. It is drawn in the editor's own
+  vocabulary (a 720px card on 28px padding, 44px `--background` fields, a 40px
+  submit) rather than invented, the borrowing `payout-method-dialog.tsx` makes
+  from a dialog export.
+  Three things about it:
+  - **It is a page, not a link that writes on click.** Next prefetches links on
+    hover, so a GET that created a row would mint a draft course every time the
+    cursor crossed the sidebar.
+  - **The slug is derived once and never re-derived on a rename**, the call
+    `admin-categories.ts` records about category slugs: it is the course's
+    stable key and every route under `/dashboard/instructor/courses/…` is built
+    from it. A collision takes a numeric suffix rather than failing the write —
+    verified, a second "Mastering Illustration" lands on
+    `mastering-illustration-2`.
+  - **Only top-level categories are offered** (`parentId: null`), the filter the
+    admin Categories page already lists by, so nobody is shown a sub-category
+    the console treats as rolled into its parent.
+  `instructorNav`'s Create Course row flipped to `built: true` with it, which
+  lights up **both** entry points at once — the sidebar row and My Courses'
+  header button — because that page reads the flag off the nav rather than
+  writing it down again.
+- **The seed writes a curriculum for a DRAFT queue course too.** It sat below
+  the `if (!submittedAt) continue` alongside the submission, which left
+  `public-speaking-without-fear` carrying `lessonCount: 12` and no lesson rows
+  — the exact shape "a counter is the number of rows written" warns about, and
+  invisible until the editor became the first surface to render a draft's
+  syllabus. A draft *has* a syllabus in progress; what it has not got is a
+  submission. Verified after the change: all 13 courses have
+  `lessonCount === actual rows`. **Re-run `npm run db:seed`.**
 - **The seed now gives enrolments somewhere to be.** Two figures on the health
   card were structurally 0% before this page existed and nothing had noticed:
   `seedPurchases` rolled `Math.floor(rng() * 101)` and wrote `completedAt` only
@@ -3267,6 +3768,25 @@ and `EMAIL_FROM`. A social provider is only registered when both of its keys
 are present, so blank OAuth constants leave the app booting and email sign-in
 working.
 
+**Base UI's `Select.Value` prints the raw _value_, not the item's label.** A
+bare `<SelectValue />` renders whatever string the `SelectItem` carries as its
+`value`, so a select keyed by an id shows the id — a cuid in the course
+category picker, `en` where "English" belongs, `usd` where "USD ($)" does. The
+fix is the render-function form, which `browse-courses.tsx` and
+`new-discussion-dialog.tsx` had from the start and the others did not:
+
+```tsx
+<SelectValue placeholder={…}>
+  {(current: string) =>
+    options.find((option) => option.value === current)?.label ?? …
+  }
+</SelectValue>
+```
+
+It shipped wrong in four places before anyone noticed, because a select whose
+value happens to read like a label hides it. **Grep for `<SelectValue />` after
+adding one**, and only leave it bare when the value *is* what should be shown.
+
 The generated `CommandDialog` does not wrap its children in cmdk's `Command`
 root — using `CommandInput` inside it without adding one throws
 `Cannot read properties of undefined (reading 'subscribe')`. See
@@ -3296,7 +3816,7 @@ then `prisma migrate deploy`.
 - Components are Server Components by default; add `"use client"` only when a component needs state, effects, or browser APIs.
 - Style with Tailwind utility classes composed through `cn()`. Use the CSS variable tokens defined in `app/globals.css` (`bg-background`, `text-muted-foreground`, …) instead of raw color values, so light/dark both work.
 - Variants come from `class-variance-authority`; icons from `lucide-react`.
-- Theming is `next-themes` with `attribute="class"`; pressing `d` toggles dark mode (see `components/theme-provider.tsx`).
+- Theming is `next-themes` with `attribute="class"`; pressing `d` toggles dark mode (see `components/theme-provider.tsx`). That hotkey is a **window-level `keydown` listener**, so it guards twice before acting: it leaves early for anything typed into a field, and it checks that **`event.key` is actually a string**. It is not always one — Chrome dispatches a `keydown` with no `key` at all when a suggestion is chosen from its autofill dropdown, and `KeyboardEvent` types the field as a plain `string`, so `event.key.toLowerCase()` typechecked and threw at runtime. Any new global key handler needs the same guard.
 - Toasts are **Base UI's `toast`, not sonner** — sonner is for Radix/React-Aria projects and this one is `base` (the shadcn skill enforces this). Import `toast` from `@/components/ui/toast` and call `toast.add({ title, type })`. `<Toaster />` is mounted once in the root layout, beside `children` rather than wrapping them: `toast` is a module-level manager, so callers don't need to be inside the provider.
 - Prettier config is authoritative: no semicolons, double quotes, 2-space indent, 80 columns, `prettier-plugin-tailwindcss` sorts class names. Format the files you touched — `npx prettier --write <paths>` — **not** `npm run format`. That script is `prettier --write "**/*.{ts,tsx}"`, which sweeps `components/ui/` too and reformats ~19 generated files into a diff that has nothing to do with your change, contradicting the "don't run Prettier across this directory" rule above.
 

@@ -6,6 +6,7 @@ import {
   manageGroups,
   manageRowHref,
   type ManageRow,
+  type ManageRowTarget,
 } from "@/lib/config/instructor-course-manage"
 import type { ManageFacts } from "@/lib/instructor-course-manage"
 import { cn } from "@/lib/utils"
@@ -28,24 +29,29 @@ import { cn } from "@/lib/utils"
  * trailing edge on a 12px gap.
  *
  * **A row is a link only when its destination exists**, and renders inert —
- * with no chevron — otherwise. That is `attention-list.tsx`' rule, and it is
- * what six of these eight rows are in today: the three Content rows belong to
- * the authoring flow, and Students, Reviews and Analytics are sidebar rows
- * still carrying `built: false`. Each reads that flag **off `instructorNav`**
- * rather than repeating it, so every one lights up on its own the day its
- * route lands — the arrangement the Help Center's "Open Discussions" button
- * records.
+ * with no chevron — otherwise. That is `attention-list.tsx`' rule, and three of
+ * these eight rows are in it today: Students, Reviews and Analytics are sidebar
+ * rows still carrying `built: false`. Each reads that flag **off
+ * `instructorNav`** rather than repeating it, so every one lights up on its own
+ * the day its route lands — the arrangement the Help Center's "Open
+ * Discussions" button records.
+ *
+ * A row can also be inert on its own account: `manageRowHref` returns
+ * `undefined` for **Quizzes** on a course that has none, because a link
+ * promising quizzes that opened a page with none is the same dead affordance
+ * read from the other end.
  *
  * A Server Component: nothing here has state, and the icons stay off the
  * bundle.
  */
 function ManageSections({
   facts,
-  courseId,
+  course,
   builtRows,
 }: {
   facts: ManageFacts
-  courseId: string
+  /** Everything a destination is built from — see `ManageRowTarget`. */
+  course: ManageRowTarget
   /** Which row keys have a live destination, resolved in the route. */
   builtRows: Set<string>
 }) {
@@ -64,7 +70,7 @@ function ManageSections({
                 facts={facts}
                 href={
                   builtRows.has(row.key)
-                    ? manageRowHref[row.key]?.(courseId)
+                    ? manageRowHref[row.key]?.(course)
                     : undefined
                 }
                 first={index === 0}

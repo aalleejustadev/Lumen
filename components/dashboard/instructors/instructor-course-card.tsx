@@ -3,7 +3,12 @@ import { StarIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { categoryIcons, type BrowseCourse } from "@/lib/config/browse-courses"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
+import { categoryIcons } from "@/lib/config/browse-courses"
+import type { ProfileCourse } from "@/lib/config/instructor-profiles"
 import { cn } from "@/lib/utils"
 
 /**
@@ -13,34 +18,44 @@ import { cn } from "@/lib/utils"
  * can be a single `Link` — there's no nested control to protect from a
  * bubbled click.
  *
- * Takes `category` and looks its icon up in `categoryIcons` rather than a
- * `course.icon` field: this renders under the "use client"
- * `InstructorCoursesSection`, fed by a Server Component page — a function
- * value (an icon component) can't cross that server->client prop boundary,
- * only the plain `category` string can.
+ * It takes a `ProfileCourse` — plain data, including its own `href` — rather
+ * than a catalog row, because a profile now lists database courses too (see
+ * `lib/public-instructor.ts`). The glyph is looked up here from whichever table
+ * `glyph` names, since a function value (an icon component) can't cross the
+ * server->client prop boundary into `InstructorCoursesSection`. Either lookup
+ * falls back to the grid glyph, so a category added later never renders
+ * nothing.
  */
-function InstructorCourseCard({
-  course,
-}: {
-  course: Omit<BrowseCourse, "icon">
-}) {
-  const Icon = categoryIcons[course.category]
+function InstructorCourseCard({ course }: { course: ProfileCourse }) {
+  const Icon =
+    (course.glyph.from === "catalog"
+      ? categoryIcons[course.glyph.category]
+      : databaseCategoryIcons[course.glyph.categorySlug]) ??
+    FALLBACK_CATEGORY_ICON
 
   return (
     <Card className="gap-0 overflow-hidden p-0 ring-border transition-shadow hover:shadow-card">
-      <Link
-        href={`/dashboard/courses/${course.slug}`}
-        className="flex flex-col"
-      >
+      <Link href={course.href} className="flex flex-col">
         <div
           className={cn(
             "relative grid aspect-[725/276] place-items-center bg-gradient-to-br",
             course.art
           )}
         >
-          <Icon className="size-10 text-white/25" />
+          {course.thumbnailUrl ? (
+            // A plain `<img>`, for `CourseArt`'s reason: an instructor upload
+            // lives on the storage host, which `next/image` would need declared.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={course.thumbnailUrl}
+              alt=""
+              className="absolute inset-0 size-full object-cover"
+            />
+          ) : (
+            <Icon className="size-10 text-white/25" />
+          )}
           <Badge className="absolute top-3 left-3 h-[22px] bg-black/55 px-2.5 text-[11px] font-medium text-white backdrop-blur-sm">
-            {course.category}
+            {course.categoryLabel}
           </Badge>
         </div>
 
@@ -62,9 +77,13 @@ function InstructorCourseCard({
             <span className="text-lg font-extrabold tracking-[-0.02em] tabular-nums">
               ${course.price.toFixed(2)}
             </span>
-            <span className="text-sm text-muted-foreground tabular-nums line-through">
-              ${course.listPrice.toFixed(2)}
-            </span>
+            {/* Only when there is a saving: a database course with no sale
+                has equal prices, and "$99.99 ~~$99.99~~" reads as a bug. */}
+            {course.listPrice > course.price ? (
+              <span className="text-sm text-muted-foreground tabular-nums line-through">
+                ${course.listPrice.toFixed(2)}
+              </span>
+            ) : null}
           </p>
         </div>
       </Link>

@@ -47,11 +47,20 @@ function ThemeHotkey() {
         return
       }
 
-      if (event.key.toLowerCase() !== "d") {
+      // **Checked before the key, not after.** Nothing typed into a field is
+      // ever this hotkey, so leaving early is both cheaper and the honest
+      // reading — and it is what keeps a browser's own autofill dropdown,
+      // which targets the field, out of the branch below.
+      if (isTypingTarget(event.target)) {
         return
       }
 
-      if (isTypingTarget(event.target)) {
+      // **`event.key` is not always a string**, whatever `KeyboardEvent` says.
+      // Chrome dispatches a `keydown` with no `key` at all when a suggestion
+      // is chosen from its autofill dropdown, and this read `undefined
+      // .toLowerCase()` and threw. TypeScript types the field as a plain
+      // `string`, so nothing but running it could have caught this.
+      if (typeof event.key !== "string" || event.key.toLowerCase() !== "d") {
         return
       }
 
