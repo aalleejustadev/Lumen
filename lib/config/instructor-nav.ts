@@ -86,7 +86,6 @@ export const instructorNav: DashboardNavGroup[] = [
         title: "Students",
         href: "/dashboard/instructor/students",
         icon: UsersRoundIcon,
-        built: false,
       },
       {
         title: "Reviews",

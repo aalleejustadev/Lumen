@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { LayoutGridIcon, PlusIcon } from "lucide-react"
+import { PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -22,13 +22,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -38,6 +31,7 @@ import {
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { toast } from "@/components/ui/toast"
+import { CourseFilter } from "@/components/dashboard/instructor/course-filter"
 import { CouponDialog } from "@/components/dashboard/instructor/coupons/coupon-dialog"
 import {
   couponSchedule,
@@ -226,43 +220,13 @@ function CouponsBoard({
         </ToggleGroup>
 
         <div className="ml-auto">
-          <Select
-            value={page.query.courseId ?? "all"}
-            onValueChange={(next: string | null) =>
-              push({ course: !next || next === "all" ? null : next })
-            }
-          >
-            {/* `data-[size=default]:h-[42px]` repeats the variant
-                `SelectTrigger` carries — an attribute selector a plain height
-                loses to on specificity. */}
-            <SelectTrigger
-              aria-label={couponsCopy.allCourses}
-              className={cn(
-                CONTROL,
-                "min-w-[180px] gap-2 rounded-lg bg-card shadow-sm data-[size=default]:h-[42px]"
-              )}
-            >
-              <LayoutGridIcon className="size-4 text-muted-foreground" />
-              {/* A render function, not a bare `SelectValue`: the trigger
-                  otherwise prints the raw value, and "all" is a sentinel
-                  rather than a label anybody should read. The pattern
-                  `browse-courses.tsx` already uses. */}
-              <SelectValue>
-                {(current: string) =>
-                  page.courses.find((course) => course.id === current)?.title ??
-                  couponsCopy.allCourses
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{couponsCopy.allCourses}</SelectItem>
-              {page.courses.map((course) => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CourseFilter
+            courses={page.courses}
+            value={page.query.courseId}
+            onValueChange={(courseId) => push({ course: courseId })}
+            label={couponsCopy.allCourses}
+            className={cn(CONTROL, "w-[190px] data-[size=default]:h-[42px]")}
+          />
         </div>
       </div>
 

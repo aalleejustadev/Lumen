@@ -74,3 +74,49 @@ export function longAgo(then: Date, now: Date): string {
   const years = Math.floor(days / 365)
   return `${years} ${years === 1 ? "year" : "years"} ago`
 }
+
+/**
+ * The same full-word ladder as `longAgo`, but it resolves **inside** the day:
+ * "2 hours ago", "5 hours ago", "1 day ago", "3 weeks ago", "1 month ago" —
+ * which is exactly what `students-page.png`'s Last active column draws.
+ *
+ * It is a third formatter rather than a flag on `longAgo` because the two
+ * answer different questions and the difference is the whole point. A review
+ * or an activity line rounds to the day, because "Today" is how somebody reads
+ * one and an hour's precision on it would be noise. A student's last-active
+ * stamp is the opposite: it is the column an instructor scans to decide
+ * whether somebody has stalled, so the difference between five hours and five
+ * days has to be on screen. Flattening this one to "Today" would collapse the
+ * most useful half of the range.
+ *
+ * "Just now" rather than "0 minutes ago" under a minute, and it takes `now`
+ * for this module's own stated reason.
+ */
+export function longAgoPrecise(then: Date, now: Date): string {
+  const elapsed = Math.max(0, now.getTime() - then.getTime())
+  const MINUTE = 60 * 1000
+  const HOUR = 60 * MINUTE
+  const DAY = 24 * HOUR
+
+  if (elapsed < MINUTE) return "Just now"
+  if (elapsed < HOUR) {
+    const minutes = Math.floor(elapsed / MINUTE)
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`
+  }
+  if (elapsed < DAY) {
+    const hours = Math.floor(elapsed / HOUR)
+    return `${hours} ${hours === 1 ? "hour" : "hours"} ago`
+  }
+  const days = Math.floor(elapsed / DAY)
+  if (days < 7) return `${days} ${days === 1 ? "day" : "days"} ago`
+  if (days < 30) {
+    const weeks = Math.floor(days / 7)
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`
+  }
+  if (days < 365) {
+    const months = Math.max(1, Math.floor(days / 30))
+    return `${months} ${months === 1 ? "month" : "months"} ago`
+  }
+  const years = Math.floor(days / 365)
+  return `${years} ${years === 1 ? "year" : "years"} ago`
+}

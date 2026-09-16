@@ -260,8 +260,10 @@ export type ManageRowTarget = {
  *    "Publish your course", so Pricing is one click away in the nav card the
  *    step lands on — which is what makes a single row honest rather than a
  *    half-destination.
- *  - **Q&A** and **Coupons** are filtered to this course through the
- *    `?course=` parameter those pages already parse.
+ *  - **Students**, **Q&A** and **Coupons** are filtered to this course through
+ *    the `?course=` parameter those pages already parse. Each resolves that id
+ *    against the caller's own courses, so a link built here can only ever
+ *    narrow what they would have shown anyway.
  */
 export const manageRowHref: Partial<
   Record<ManageRowKey, (course: ManageRowTarget) => string | undefined>
@@ -275,6 +277,7 @@ export const manageRowHref: Partial<
       : editorStepHref(course.slug, "curriculum")
   },
   landing: (course) => editorStepHref(course.slug, "landing-page"),
+  students: (course) => `/dashboard/instructor/students?course=${course.id}`,
   qa: (course) => `/dashboard/instructor/qa?course=${course.id}`,
   coupons: (course) => `/dashboard/instructor/coupons?course=${course.id}`,
 }

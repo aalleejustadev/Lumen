@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { LayoutGridIcon, MessageCircleQuestionMarkIcon } from "lucide-react"
+import { MessageCircleQuestionMarkIcon } from "lucide-react"
 
 import {
   Empty,
@@ -19,15 +19,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { toast } from "@/components/ui/toast"
+import { CourseFilter } from "@/components/dashboard/instructor/course-filter"
 import { QuestionCard } from "@/components/dashboard/instructor/qa/question-card"
 import { toggleQuestionVote } from "@/lib/actions/qa"
 import {
@@ -137,37 +131,13 @@ function QaBoard({ page }: { page: QuestionsPage }) {
           </p>
         </div>
 
-        <Select
-          value={page.query.courseId ?? "all"}
-          onValueChange={(next: string | null) =>
-            push({ course: !next || next === "all" ? null : next })
-          }
-        >
-          {/* `data-[size=default]:h-11` repeats the variant `SelectTrigger`
-              carries — an attribute selector a plain height loses to. */}
-          <SelectTrigger
-            aria-label={qaCopy.allCourses}
-            className="h-11 min-w-[190px] shrink-0 gap-2 rounded-lg bg-card shadow-sm data-[size=default]:h-11"
-          >
-            <LayoutGridIcon className="size-4 text-muted-foreground" />
-            {/* A render function, not a bare `SelectValue`: the trigger
-                otherwise prints the raw course id. */}
-            <SelectValue>
-              {(current: string) =>
-                page.courses.find((course) => course.id === current)?.title ??
-                qaCopy.allCourses
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{qaCopy.allCourses}</SelectItem>
-            {page.courses.map((course) => (
-              <SelectItem key={course.id} value={course.id}>
-                {course.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CourseFilter
+          courses={page.courses}
+          value={page.query.courseId}
+          onValueChange={(courseId) => push({ course: courseId })}
+          label={qaCopy.allCourses}
+          className="h-11 w-[190px] shrink-0 data-[size=default]:h-11"
+        />
       </div>
 
       {/* Tabs ------------------------------------------------------------ */}
