@@ -28,7 +28,7 @@
  * import the other and a `lib/config/*` file does not end up importing from
  * `components/`.
  */
-export type StatFormat = "count" | "currency" | "percent" | "percent1"
+export type StatFormat = "count" | "currency" | "money" | "percent" | "percent1"
 
 const counts = new Intl.NumberFormat("en-US")
 
@@ -60,6 +60,33 @@ const percent1 = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 })
 
+const moneyWhole = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+})
+const moneyCents = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+})
+
+/**
+ * "$142,680", "$4,820.40" — the full figure with cents **only when there are
+ * some**, which is what the instructor's Revenue & Payouts export draws on
+ * every card and in its per-course list.
+ *
+ * `currency` above stays compact ("$1.24M") because the console's Reports and
+ * Platform Overview cards carry platform-wide totals, where the digits past
+ * the second stop meaning anything. An instructor's own balance is a number
+ * they reconcile against a bank statement, so it is written out.
+ */
+export function formatMoney(cents: number): string {
+  return cents % 100 === 0
+    ? moneyWhole.format(cents / 100)
+    : moneyCents.format(cents / 100)
+}
+
 /** An em dash, not "0" — no data and none of it are different answers. */
 const NO_VALUE = "—"
 
@@ -71,6 +98,8 @@ export function formatStatValue(value: number | null, as: StatFormat): string {
       return compactCurrency.format(value / 100)
     case "percent":
       return `${(value * 100).toFixed(2)}%`
+    case "money":
+      return formatMoney(value)
     case "percent1":
       return percent1.format(value)
     default:

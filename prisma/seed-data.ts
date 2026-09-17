@@ -222,20 +222,47 @@ export const ownerEnrolmentSpread = [6, 24, 63, 108, 151] as const
 export const ownerLastSeen = [4, 17, 9, 40, 96] as const
 
 /**
- * The enrolment sources `seedDeveloperWorkspace` spreads its seats across.
+ * The enrolment sources `seedDeveloperWorkspace` spreads its seats across —
+ * three real sales and two grants.
  *
- * All three are **order-less** on purpose: these are grants rather than sales,
- * and `Enrollment.orderId`'s own note reserves `PURCHASE` and `COUPON` for
- * rows that carry an order "so a refund can find what to revoke". Three rows
- * is what gives the Analytics page's "Where enrolments come from" card
- * something to compare on the account a developer actually signs in with.
+ * It began all-grants, which was honest and left the Revenue & Payouts page
+ * with **nothing at all**: no order means no `InstructorEarning`, so every one
+ * of that page's four figures, its chart, its per-course list and its payout
+ * table drew an empty state on the one account a developer signs in with.
+ * `PURCHASE` seats now carry a real `Order`, `OrderItem` and earning, which is
+ * exactly what `Enrollment.orderId`'s own note requires of them ("so a refund
+ * can find what to revoke") — the two grants stay order-less, and `COUPON` is
+ * deliberately not used, since a redemption also needs a `Coupon` row to point
+ * at. Four sources is also one more than the Analytics page's "Where
+ * enrolments come from" card had to compare.
  */
+/**
+ * The two payout runs `seedDeveloperWorkspace` attaches its owner to, matching
+ * the ones `seedPayouts` creates (two and one month back).
+ *
+ * The amounts are fixed rather than derived from the ledger, for
+ * `ownerProgress`' reason — a figure in a screenshot should not move between
+ * runs — but they are kept **below** what the seeded sales earned. They were
+ * an order of magnitude higher on the first pass, and the page said so out
+ * loud: a history of $1,284 sent under a Lifetime earnings card reading
+ * $230.94 is not a payout, it is a bug somebody would file. A payout is a
+ * slice of a ledger and has to read like one.
+ *
+ * The older one paid and the newer one failed, which is what gives the
+ * export's own two status pills something to draw — and a failed transfer
+ * rolling into the next run is the behaviour `admin/reports.ts` describes.
+ */
+export const ownerPayoutRuns = [
+  { monthsBack: 2, amountCents: 5_840, failed: false },
+  { monthsBack: 1, amountCents: 4_160, failed: true },
+] as const
+
 export const ownerEnrolmentSources = [
-  "ADMIN_GRANT",
+  "PURCHASE",
   "FREE",
-  "BUSINESS_PLAN",
+  "PURCHASE",
   "ADMIN_GRANT",
-  "FREE",
+  "PURCHASE",
 ] as const
 
 /**

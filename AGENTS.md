@@ -3764,6 +3764,121 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   whole catalogue, and a table that ranks courses against each other cannot be
   a filtered view of one. No badge either: nothing on the page is work waiting
   on anybody, and the sidebar export draws none.
+- `components/dashboard/instructor/revenue/` — **Revenue & Payouts** at
+  `/dashboard/instructor/revenue`, from
+  `ui-design/light/dashboard/instructor/revenue-page.png`: `balance-card.tsx`,
+  `earnings-chart-card.tsx` (client — recharts), `revenue-stats.tsx`,
+  `earnings-by-course-card.tsx`, `payout-history-card.tsx` and
+  `revenue-format.ts`, composed by `revenue-page.tsx`.
+  `lib/instructor-revenue.ts` reads and `lib/config/instructor-revenue.ts` is
+  every word the page says. **It has no controls and no writes** — everything
+  that changes money lives on the payout settings page, which the one button
+  links to — and it is a Server Component with a single client leaf, the chart.
+  **Nothing on it is demo data and it needed no migration.** The schema was
+  shaped for this export down to the sentences:
+  `InstructorEarning.clearsAt`'s docstring says it is "the page's 'clears
+  within 30 days'", `Payout`'s says "`PO-10428` in the instructor's payout
+  history is the same row the admin's run dialog lists as a recipient", and
+  `PayoutMethod.role` exists because the settings export tags one **Primary**.
+  Measured off that export at DPR 2 and verified against the render: a header
+  block **pixel-identical** to the four instructor pages before it, with
+  nothing beside it; a **0.9 : 1** top row (a 702px balance card against a
+  772px chart on a 20px gap); a four-up KPI row of 361px cards on an **18px**
+  gap; then two full-width cards, every row on a 20px gap. The top row is
+  **`items-start`** — the export's two cards are 298px and 325px, so the
+  balance card hugs its content rather than stretching, the property the
+  Analytics page's sources card also opts out of.
+  Eight definitions decide what the page means, and the export settles none of
+  them:
+  - **Every figure is `netCents` and `REVERSED` rows are excluded
+    everywhere.** A refunded sale's share went back with the money, so it was
+    never earned — `admin-reports.ts`' reading of the platform's own share,
+    stated from the other side, and the definition My Courses and the manage
+    page already draw for a course's revenue.
+  - **"Available for payout" is `AVAILABLE` alone**, not everything unpaid.
+    `EarningStatus` separates PENDING from AVAILABLE precisely because money
+    inside its clearance window cannot be sent, and the card below counts the
+    pending pile separately; adding them would make the headline a number no
+    payout run would honour.
+  - **"Next automatic payout" is the next occurrence of the instructor's own
+    `payoutDayOfMonth`** — the column the settings page's Schedule row and the
+    Help Center's payout answers already read — and it is **dropped when the
+    balance is zero**, because a date with nothing behind it is a promise the
+    platform would not keep. The line reads "when your balance clears"
+    instead; verified against a stripped account.
+  - **"This month" is the calendar month**, because its own footnote says "vs
+    last month" and because "Earnings by course" draws the same figure under
+    the same words — one definition read once, so the two cannot disagree.
+  - **"Pending clearance" names a real number of days.** The export writes
+    "clears within 30 days"; nothing stores a platform-wide window, so the
+    line is derived from the furthest pending `clearsAt` rather than typed
+    into copy — the second-source-of-truth trap `instructor-help.ts` records.
+  - **"Avg. per sale" is over `SALE` rows only.** `EarningSource` also carries
+    BUSINESS_WATCH (a monthly rollup), ADJUSTMENT and REVERSAL, none of which
+    is a sale.
+  - **The chart is six *complete* months and therefore excludes the "This
+    month" card's figure** — which is exactly what the export draws, its last
+    bar being August's $22.1k against a This month card of $18,240. The trap
+    `getRevenueByMonth` documents. Its pill is the trend it plots, last
+    complete month against the one before; the export shows the same +12.4% in
+    both places, which its mock numbers make a coincidence. This export's bars
+    *are* proportional to their labels, unlike the two charts it is a sibling
+    of, so nothing had to be corrected — but they are plotted from zero either
+    way.
+  - **The per-course bar is a share of the month's total, not of the leading
+    course.** The export's top bar fills 34% of its track against $6,180 of an
+    $18,240 month, which is 33.9%; normalising to the leader would make every
+    list's first row full whatever it earned.
+- **Two money formatters, because the export draws two.** The cards and the
+  per-course list drop the cents when there are none ("$142,680", "$6,180")
+  while the payout table writes them always ("$16,120.00") — a headline is
+  read at a glance, a disbursement is reconciled against a bank statement. The
+  adaptive one is a **`money` format on the shared `stat-format.ts`**, because
+  the shared `StatCard` needs it for this page's four tiles; `currency` stays
+  compact ("$1.24M") for the console's platform-wide totals, where the digits
+  past the second stop meaning anything. `revenue-format.ts` re-exports it and
+  owns the other two.
+- **The KPI tiles carry a footnote and no delta chip**, which is the third
+  configuration of the shared tile and the reason `delta` was always allowed
+  to be null: this export puts the comparison *in* the muted line ("+12.4% vs
+  last month", "since Mar 2021") rather than beside the figure.
+- **`balance-card.tsx` imports `methodTitle` from the payout settings'
+  `payouts-format.ts` rather than rewriting it.** "Bank transfer · ••••4471"
+  is exactly what that page draws for the same row, and two spellings of one
+  destination across two screens is how somebody ends up unsure which account
+  the money is going to. The *second* line is deliberately not
+  `methodDescription`: that one identifies the method ("Monzo · USD · added
+  Mar 2021"), which is what a settings list needs, where here the question is
+  when it next runs.
+- **The seed gave a developer's own profile no money at all, and now does.**
+  `seedPayouts` writes methods and payouts for the *seeded* instructors only,
+  and `seedDeveloperWorkspace`'s enrolments were all order-less grants — so on
+  the one account a developer signs in with, this page was four zeroes, an
+  empty chart, an empty list and an empty table, and **Payout settings opened
+  on its empty state too**. Three of the five seats in `ownerEnrolmentSources`
+  are now `PURCHASE` and carry a real `Order`, `OrderItem` and
+  `InstructorEarning` on the same status ladder `seedPurchases` uses (paid and
+  swept, cleared, or still inside its 30 days), so all three of PENDING,
+  AVAILABLE and PAID are represented; the owner also gets the bank + PayPal
+  pair `payout-settings-page.png` draws and two payouts, one paid and one
+  failed, so both status pills have something to render. Two things about it:
+  - **`seedPayouts` moved to run *before* `seedDeveloperWorkspace`.** It is
+    where the two `PayoutRun` rows are created, and the owner's payouts attach
+    to them — a payout is "one instructor's slice of a run" (the model's own
+    words), so a run of one would put a batch in the console's Reports table
+    that nothing scheduled. It reads `netByInstructor` from far above and
+    draws no randomness, so moving it changes nothing else about the run.
+  - **`ownerPayoutRuns`' amounts are kept below what the seeded sales
+    earned.** They were an order of magnitude higher on the first pass and the
+    page said so out loud: a history of $1,284 sent under a Lifetime earnings
+    card reading $230.94 is not a payout, it is a bug somebody would file.
+    **Re-run `npm run db:seed` to see any of it.**
+- **The Revenue & Payouts row in `instructorNav` is `built: true`.** That
+  leaves Create Course's siblings all live and `instructorNav` with no
+  `built: false` row outside the Settings children. No badge: a balance is not
+  work waiting on anybody, and the sidebar export draws none. The manage page
+  gains nothing — Revenue is a whole-account surface with no per-course view,
+  which is why `manageGroups` never had a row for it.
 - `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
   from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
   `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New

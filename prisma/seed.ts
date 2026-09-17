@@ -70,6 +70,7 @@ import {
   ownerEnrolmentSources,
   ownerEnrolmentSpread,
   ownerLastSeen,
+  ownerPayoutRuns,
   ownerProgress,
   ownerQuestionSeeds,
   reportedReviewSeeds,
@@ -3222,6 +3223,13 @@ async function seedDeveloperWorkspace(
   const enrollments: Prisma.EnrollmentCreateManyInput[] = []
   const reviews: Prisma.CourseReviewCreateManyInput[] = []
   const reviewReplies: Prisma.CourseReviewReplyCreateManyInput[] = []
+  // The money half, so the developer's own Revenue & Payouts page has
+  // something in it — see `ownerEnrolmentSources`.
+  const orders: Prisma.OrderCreateManyInput[] = []
+  const orderItems: Prisma.OrderItemCreateManyInput[] = []
+  const earnings: Prisma.InstructorEarningCreateManyInput[] = []
+  const payoutMethods: Prisma.PayoutMethodCreateManyInput[] = []
+  const payouts: Prisma.PayoutCreateManyInput[] = []
 
   for (const [ownerIndex, owner] of owners.entries()) {
     // `Instructor.userId` is nullable, and an instructor answer needs an
@@ -3351,6 +3359,8 @@ async function seedDeveloperWorkspace(
         // `completedAt` follows from 100 and nothing else, and is clamped to
         // now for the reason `seedCoupons` clamps its own dates.
         const progress = ownerProgress[seat % ownerProgress.length]!
+        const source =
+          ownerEnrolmentSources[seat % ownerEnrolmentSources.length]!
         // **Spread across the months since publication, not all on day one.**
         // Every seat used to enrol on `publishedAt + 1 day`, which drew the
         // Analytics page's six-month chart as one spike and five empty
@@ -3378,7 +3388,7 @@ async function seedDeveloperWorkspace(
           // two carry an order "so a refund can find what to revoke", and one
           // without would be a lie in a table somebody reconciles money
           // against.
-          source: ownerEnrolmentSources[seat % ownerEnrolmentSources.length]!,
+          source,
           progressPercent: progress,
           completedAt:
             progress === 100
@@ -3402,6 +3412,62 @@ async function seedDeveloperWorkspace(
           ),
           createdAt: enrolledAt,
         })
+
+        // **A `PURCHASE` seat carries a real sale.** `Enrollment.orderId`'s own
+        // note reserves that source for rows an order can be found from, and
+        // the Revenue & Payouts page reads nothing *but* the ledger those
+        // orders produce — so without this the whole surface is empty states
+        // on the one account a developer signs in with. The status ladder is
+        // `seedPurchases`' exactly (paid and swept, cleared, or still inside
+        // its 30 days), so the two halves of the platform age money the same
+        // way.
+        if (source === "PURCHASE") {
+          const orderId = `${SEED}o_own_${key}_${pad(seat, 2)}`
+          const itemId = `${orderId}_i0`
+          const net = Math.round((seed.priceCents * REVENUE_SHARE_BPS) / 10000)
+          const clearsAt = new Date(enrolledAt.getTime() + 30 * DAY)
+          orders.push({
+            id: orderId,
+            userId: learner.id,
+            stripeSessionId: `cs_test_${orderId}`,
+            stripePaymentIntentId: `pi_test_${orderId}`,
+            status: "PAID",
+            amountTotal: seed.priceCents,
+            subtotalCents: seed.priceCents,
+            discountCents: 0,
+            email: learner.email,
+            createdAt: enrolledAt,
+            paidAt: enrolledAt,
+          })
+          orderItems.push({
+            id: itemId,
+            orderId,
+            courseSlug: slug,
+            courseId: id,
+            title: seed.title,
+            unitAmount: seed.priceCents,
+            instructorId: owner.id,
+            revenueShareBps: REVENUE_SHARE_BPS,
+          })
+          earnings.push({
+            id: `${SEED}e_own_${key}_${pad(seat, 2)}`,
+            instructorId: owner.id,
+            courseId: id,
+            orderItemId: itemId,
+            source: "SALE",
+            grossCents: seed.priceCents,
+            platformFeeCents: seed.priceCents - net,
+            netCents: net,
+            status:
+              clearsAt < ago(40 * DAY)
+                ? "PAID"
+                : clearsAt < NOW
+                  ? "AVAILABLE"
+                  : "PENDING",
+            clearsAt,
+            createdAt: enrolledAt,
+          })
+        }
 
         // Roughly two thirds of them leave one, which is what lights the row's
         // star chip and the Avg. rating tile on My Courses. Without any, both
@@ -3467,6 +3533,72 @@ async function seedDeveloperWorkspace(
 
     if (own.length === 0) continue
 
+    // **Two payout destinations and two payouts, so the money surfaces are not
+    // empty on a developer's own account.** `seedPayouts` writes both for the
+    // *seeded* instructors only, which left this profile with no
+    // `PayoutMethod` at all — Payout settings opened on its empty state, and
+    // Revenue & Payouts had no primary method to name and no history to list.
+    // The pair is the one `payout-settings-page.png` draws, for that export's
+    // own reason: a page whose subject is a fallback chain has nothing to say
+    // with a single row.
+    const primaryMethodId = `${SEED}pm_own_${pad(ownerIndex, 2)}`
+    payoutMethods.push(
+      {
+        id: primaryMethodId,
+        instructorId: owner.id,
+        type: "BANK_TRANSFER",
+        label: "Monzo",
+        last4: String(4471 + ownerIndex).slice(-4),
+        currency: "usd",
+        role: "PRIMARY",
+        verifiedAt: ago(150 * DAY),
+        createdAt: ago(160 * DAY),
+      },
+      {
+        id: `${SEED}pm_own_${pad(ownerIndex, 2)}_backup`,
+        instructorId: owner.id,
+        type: "PAYPAL",
+        // A PayPal address *is* the identifier, so there is no last-4 —
+        // `methodDescription` draws a different second line for each type.
+        label: `payouts+${ownerIndex}@lumen.co`,
+        last4: null,
+        role: "BACKUP",
+        verifiedAt: ago(140 * DAY),
+        createdAt: ago(145 * DAY),
+      }
+    )
+
+    // Attached to the runs `seedPayouts` already created, because a payout is
+    // "one instructor's slice of a run" (the model's own words) and inventing
+    // a run of one would put a row in the admin console's Reports table that
+    // no batch produced. **One paid and one failed**, which is what gives the
+    // history table both of the pills the export draws — and a failed transfer
+    // rolling into the next run is the behaviour `admin/reports.ts` already
+    // describes.
+    for (const [index, run] of ownerPayoutRuns.entries()) {
+      const scheduledFor = new Date(
+        Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth() - run.monthsBack, 1, 9)
+      )
+      const reference = `RUN-${scheduledFor.getUTCFullYear()}-${pad(
+        scheduledFor.getUTCMonth() + 1,
+        2
+      )}`
+      payouts.push({
+        id: `${SEED}po_own_${pad(ownerIndex, 2)}_${index}`,
+        reference: `PO-${reference.slice(4).replace("-", "")}-${9000 + ownerIndex * 10 + index}`,
+        payoutRunId: `${SEED}run_${reference}`,
+        instructorId: owner.id,
+        payoutMethodId: primaryMethodId,
+        amountCents: run.amountCents,
+        status: run.failed ? "FAILED" : "PAID",
+        failureReason: run.failed
+          ? "The bank rejected the transfer: account details could not be verified."
+          : null,
+        paidAt: run.failed ? null : new Date(scheduledFor.getTime() + 3 * HOUR),
+        createdAt: scheduledFor,
+      })
+    }
+
     for (const [index, seed] of cap(ownerQuestionSeeds).entries()) {
       const course = own[seed.courseIndex % own.length]!
       const qid = `${SEED}cq_own_${pad(ownerIndex, 2)}${pad(index, 2)}`
@@ -3515,6 +3647,13 @@ async function seedDeveloperWorkspace(
     }
   }
 
+  // Orders before their items and earnings, which are required relations on
+  // them; methods before payouts, which point at one.
+  await db.order.createMany({ data: orders })
+  await db.orderItem.createMany({ data: orderItems })
+  await db.instructorEarning.createMany({ data: earnings })
+  await db.payoutMethod.createMany({ data: payoutMethods })
+  await db.payout.createMany({ data: payouts })
   await db.enrollment.createMany({ data: enrollments })
   await db.courseReview.createMany({ data: reviews })
   await db.courseReviewReply.createMany({ data: reviewReplies })
@@ -3615,6 +3754,15 @@ async function main() {
     `course Q&A        ${qa.questions} questions, ${qa.replies} replies, ${qa.votes} votes`
   )
 
+  // **Before `seedDeveloperWorkspace`, not after.** It is where the two
+  // `PayoutRun` rows are created, and that function attaches the developer's
+  // own payouts to them — a payout is "one instructor's slice of a run" (the
+  // model's own words), so a run of one would put a batch in the console's
+  // Reports table that nothing scheduled. It reads `netByInstructor`, which
+  // `seedPurchases` produced well above, and draws no randomness, so moving it
+  // earlier changes nothing else about the run.
+  await seedPayouts(instructors, netByInstructor)
+
   const own = await seedDeveloperWorkspace(categories, learners)
   console.log(
     `your workspace    ${own.courses} courses, ${own.questions} questions ` +
@@ -3644,7 +3792,6 @@ async function main() {
   const follows = await seedFollows(learners, instructors)
   console.log(`instructor follows ${follows}`)
 
-  await seedPayouts(instructors, netByInstructor)
   await seedUptime()
   const auditEntries = await seedAuditLog(
     adminAccounts,

@@ -38,14 +38,16 @@ import { instructorSettingsNav } from "@/lib/config/instructor-settings"
  * workspaces belonging to the same person, and the switch is how you move
  * between them. See `workspaceModes`.
  *
- * Dashboard, Notifications, Settings and Help Center are `built` today.
- * **The rest carry an explicit `built: false`** — the flag defaults to *built*, so a row
- * left without it silently renders as a live link onto a 404. They are listed because the export draws them and because that is what says what
- * the workspace will hold; `NavRow` renders an unbuilt row as inert text
- * rather than a link onto a 404, the flag `settingsNav` and `adminNav` use.
- * Each has an export of its own in `ui-design/light/dashboard/instructor/`
- * waiting to be built against, and the hrefs here are what those routes must
- * be called so the sidebar and the pages cannot invent two spellings.
+ * **Every row here is `built` today**, Revenue & Payouts last; the only
+ * `built: false` left in this file is on three of the Settings children.
+ *
+ * The flag stays on the type, and every row keeps it spelled out, for the
+ * reason it was added: it **defaults to *built***, so a row written without
+ * it silently renders as a live link onto a 404 — which is exactly what
+ * happened on the first pass. A row listed before its route exists renders as
+ * inert text instead, the treatment `settingsNav` and `adminNav` use, and the
+ * hrefs here are what those routes must be called so the sidebar and the
+ * pages cannot invent two spellings.
  */
 export const instructorNav: DashboardNavGroup[] = [
   {
@@ -144,10 +146,16 @@ export const instructorNav: DashboardNavGroup[] = [
         built: true,
       },
       {
+        // Real: `InstructorEarning`, `Payout` and `PayoutMethod` were already
+        // shaped for `revenue-page.png` — `clearsAt`'s own docstring names the
+        // page's "clears within 30 days" and `Payout`'s names its `PO-10428` —
+        // so the surface needed no migration. See `lib/instructor-revenue.ts`.
+        // No badge: a balance is not work waiting on anybody, and the sidebar
+        // export draws none.
         title: "Revenue & Payouts",
         href: "/dashboard/instructor/revenue",
         icon: WalletIcon,
-        built: false,
+        built: true,
       },
       {
         // Real: `Coupon` and `CouponRedemption` were already shaped for
