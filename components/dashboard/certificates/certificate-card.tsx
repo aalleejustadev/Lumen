@@ -112,10 +112,7 @@ function CertificateCard({ row }: { row: CertificateRow }) {
               </span>
               <span className="font-mono tracking-tight">{row.serial}</span>
             </p>
-            <CertificateActions
-              publicSlug={row.publicSlug}
-              courseTitle={row.courseTitle}
-            />
+            <CertificateActions row={row} />
           </div>
         </div>
       </div>

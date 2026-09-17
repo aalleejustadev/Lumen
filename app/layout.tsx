@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { Figtree, Geist_Mono } from "next/font/google"
+import { Figtree, Geist_Mono, Lora } from "next/font/google"
 
 import "./globals.css"
 import { NavigationProgress } from "@/components/shared/navigation-progress"
@@ -13,6 +13,33 @@ const figtree = Figtree({
   subsets: ["latin"],
   style: ["normal", "italic"],
   variable: "--font-figtree",
+  display: "swap",
+})
+
+/**
+ * The one serif in the app, and it has exactly one job: the printed
+ * certificate at `/certificates/[slug]`, whose export
+ * (`ui-design/light/dashboard/student/certificate.png`) sets its title and the
+ * holder's name in a display serif with a true cursive italic. Figtree has no
+ * serif and the CSS generic would render Times, which on a credential reads as
+ * a word-processor document rather than as a document.
+ *
+ * Lora rather than one of the narrower text serifs, and that was **measured
+ * rather than guessed**: the export's title sets "Certificate of Completion"
+ * 561.5px wide against 41px of ink, a width-to-ink ratio of 13.7, where Source
+ * Serif 4 — the first choice — came out at 12.3. Lora is the wider face with
+ * the same ball terminals and a genuinely cursive italic, and it lands on the
+ * drawn proportions. It is still a close match rather than a confirmed
+ * identification.
+ *
+ * It is variable across 400–700 and carries a real italic, so the whole
+ * certificate ships in two files. Nothing else in the app uses `font-serif`;
+ * if a second surface ever wants one, this is the family it gets.
+ */
+const fontSerif = Lora({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-lora",
   display: "swap",
 })
 
@@ -31,7 +58,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn(figtree.variable, fontMono.variable, "font-sans")}
+      className={cn(
+        figtree.variable,
+        fontSerif.variable,
+        fontMono.variable,
+        "font-sans"
+      )}
     >
       <body>
         {/* Same reasoning as `Toaster`: app-wide chrome, not a surface's.

@@ -192,6 +192,7 @@
    -------------------------------------------------------------------------- */
 @theme inline {
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-lora), ui-serif, Georgia, serif;
   --font-mono:
     var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -672,3 +673,89 @@
    in both the app and marketing site. Pair with next-themes:
      <ThemeProvider attribute="class" defaultTheme="light" />
    ========================================================================== */
+
+/* ==========================================================================
+   PRINTING A CERTIFICATE
+
+   The one thing this app prints. `/certificates/[slug]` and the preview
+   dialog both render `CertificateDocument` at a fixed **960 x 679** — A4
+   landscape to within half a pixel — and mark it `data-certificate-print`.
+
+   Three rules do the work, and each of them replaces something that made the
+   old print output look like a web page rather than a document:
+
+     · `@page { size: A4 landscape; margin: 0 }` — without it the browser
+       prints portrait with its own margins, and the certificate broke across
+       two pages with a header and a URL stamped on them.
+     · The sheet is pinned with `position: **absolute**`, not `fixed`. Chrome's
+       print layout ignored `top`/`left` on the fixed element and left it at
+       its static offset, which put the certificate 50pt in from the corner and
+       clipped the rest off the page — seen in a generated PDF, not guessed.
+       Absolute resolves against the initial containing block, which in a
+       printed document *is* the first page's origin.
+     · **Everything else is hidden by `visibility`, not `display`.** The
+       certificate lives inside a dialog portal on one route and inside the
+       marketing shell on the other; hiding by `display` would collapse the
+       ancestors it is positioned against, where `visibility` leaves the box
+       tree alone and lets the fixed positioning below still resolve.
+     · `print-color-adjust: exact` on the document itself (see
+       `certificate-document.tsx`) — browsers strip background colours when
+       printing, which would have produced a white page with no frame, no
+       ground and no seal.
+
+   The scale is the one hard-coded number here: 1122.52 / 960 = 1.16929, where
+   1122.52px is 297mm at 96dpi. It is a constant because both sizes are, and
+   because `scale()` needs a unitless number that `calc()` cannot derive from
+   a length.
+   ========================================================================== */
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  [data-certificate-print],
+  [data-certificate-print] * {
+    visibility: visible !important;
+  }
+
+  [data-certificate-print] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    margin: 0 !important;
+    width: 960px !important;
+    height: 679px !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    transform: scale(1.16929) !important;
+    transform-origin: top left !important;
+  }
+
+  /* The scaled sheet is what fills the page, so nothing it sits inside may
+     clip it, offset it — or **transform** it. That last one is the subtle
+     part: a transformed ancestor becomes the containing block for
+     `position: fixed` inside it, so leaving the on-screen `scale()` standing
+     pinned the certificate to its wrapper rather than to the page, and it
+     printed inset and undersized. Both wrappers carry the attribute. */
+  [data-certificate-print-host] {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    transform: none !important;
+  }
+}

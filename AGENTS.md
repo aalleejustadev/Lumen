@@ -3938,21 +3938,139 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     is used where the browser has it, the clipboard is the fallback, and a
     share the person dismissed (`AbortError`) is swallowed rather than
     toasted.
-  - **PDF opens the same page with `?print=1`**, which makes it call
-    `window.print()` once on arrival — where "Save as PDF" lives.
-    `Certificate.pdfStorageKey` is the eventual home for a generated file
-    ("rendered once on issue rather than on every download", per its own note)
-    and nothing writes one; printing the credential is the honest version until
-    something does, and **the button's destination does not change when it
-    lands**. The flag exists because the *shared* link is the same URL without
-    it: somebody checking a credential wants to read it, not be ambushed by a
-    print dialog.
+  - **PDF opens the certificate itself, in a preview dialog** — see the
+    certificate-document note below. It first navigated to the verification
+    page with a `?print=1` flag that called `window.print()` on arrival, which
+    produced the web page on paper; that flag and
+    `components/certificates/print-on-arrival.tsx` are gone. **The card's own
+    label still reads "PDF"**, which is the export's word and is now the one
+    thing on this path that names a format nothing produces.
   - **The verification page reads no session and states one fact about a
     person: their name.** That is what it is for — an employer following the
     link has no Lumen account — and it is why the slug is separate from the
     printed serial, so quoting an ID on a CV does not hand over a working link
     to it. A bad slug renders a page rather than a 404, because somebody
     handed a link by a candidate needs to be told which it is.
+- `components/certificates/certificate-document.tsx` — **the certificate**,
+  from `ui-design/light/dashboard/student/certificate.png`. It is what the
+  card's PDF button opens, what the verification page renders and **what the
+  downloaded PDF is** — one document with three ways in.
+  `certificate-sheet.tsx` scales it, `certificate-preview-dialog.tsx` is the
+  overlay, `certificate-page-actions.tsx` is the public page's pair of buttons,
+  and the print rules live at the end of `app/globals.css`.
+  - **It is drawn at a fixed 960 x 679 and scaled, never reflowed.** That is
+    the whole design: a certificate is a *document*, so a phone, a desktop and
+    a sheet of A4 have to produce the same artefact rather than three
+    arrangements of the same words — reflowing it would mean a printed
+    credential whose line breaks depended on the window that made it. The
+    sheet's own aspect is A4 landscape to within half a pixel (1.414), which
+    is presumably why it was drawn at that size. `CertificateSheet` is the only
+    client piece, and only for its `ResizeObserver`.
+    **The scale is capped at 1, and the box the caller styles is sized to the
+    document rather than to the space it was offered** — with one box, a
+    container wider than 960 left the rounded, ringed card standing 32px proud
+    of the sheet on the verification page and 80px on the dialog, which draws a
+    sliver of page colour inside the frame. Both callers are sized to the
+    document too (the dialog `w-[min(960px,94vw)]`, the page `max-w-[1008px]`
+    over `px-6`), which is what puts the preview bar's buttons over the sheet's
+    own right edge rather than 80px past it. Measured at five widths.
+    **The measured box carries `min-w-0`, and that is load-bearing.** In a grid
+    or flex parent — which `DialogContent` is — an item's automatic minimum
+    size is its *content*, so the 960px sheet inside pushed the box out to
+    960px, `w-full` resolved against that, and the scale settled at 1 and never
+    came down: the certificate overflowed the dialog at phone width and its
+    Download button sat off screen. A block parent (the verification page's
+    `main`) never showed it, which is how it survived a pass.
+    **`overflow-hidden` fixes it too and must not be used** — the callers paint
+    a `ring` and a `shadow-2xl`, which sit outside the layout box.
+  - **Every colour on it is a literal, not a token** — the one place in this
+    app where a token would be wrong. It must look the same in dark mode, on
+    paper and in a PDF somebody opens in five years. The washes' fills are
+    sampled (`#f0e6e9`, `#f4e9e5`) and flat rather than an opacity over the
+    ground, so print cannot composite them differently, and the ground, the
+    frame, the rule, the washes and the pill all carry
+    `print-color-adjust: exact` — browsers strip backgrounds when printing by
+    default, which is a white page with a missing border.
+  - **The serif is Lora (`--font-serif`), added to `app/layout.tsx` for this
+    one surface**, and **its sizes are the drawn widths rather than the drawn
+    point sizes**. Figtree has no true cursive italic and the CSS generic
+    renders Times, which reads as a word-processor document. Source Serif 4 was
+    tried first and drew the title at a width-to-ink ratio of 12.3 against the
+    export's 13.7; Lora lands on it, at 47px for the title and 48px for the
+    name. Neither is a confirmed identification — the title's ink runs 48px
+    tall against the drawn 41, which is Lora's descender depth and the limit of
+    identifying a font from a raster. Don't "fix" it by shrinking the type.
+  - **The two washes were solved, not eyeballed.** Their edges were traced
+    across the export at four heights each and fitted: a 320px circle centred
+    at (40, 40) and a 362px one at (920, 639).
+  - **The footer row is `justify-between`, not `grid-cols-3`.** The export's
+    seal sits at x=493 where the sheet's centre is 480, because the two
+    signatures are different widths (177px and 149.5px) and the seal takes the
+    middle of what is left between them — exactly 493.75. An equal three-column
+    grid centres it and loses that; the ID/ISSUED/host line below is the same
+    layout for the same reason. The rendered seal lands at ~506 rather than
+    493, which follows from the rendered signatures' own widths.
+  - **The gradients are inline SVG, not `bg-gradient-to-br`.** Chrome writes a
+    CSS gradient into a PDF correctly — worth knowing, because macOS' `sips`
+    and Preview flatten it on the way back out and that looks exactly like a
+    print bug. An SVG `<linearGradient>` is a real PDF shading and survives
+    every renderer; a certificate is re-opened and printed by strangers on
+    software nobody here chose.
+- **Download saves a PNG, and does not print** (`use-certificate-download.ts`),
+  at the user's instruction: the button hands over a file instead of opening
+  the browser's print dialog and asking for a destination. It rasterises the
+  document node with **`modern-screenshot`**, which serialises the real element
+  into an SVG `foreignObject` and lets the browser paint it — the same engine
+  that drew what is on screen, where `html2canvas` would have to be trusted to
+  re-implement the frame's radius, the two clipped washes and the seal's SVG
+  gradient. Four things it passes are decisions: **`width`/`height` explicitly
+  at 960 x 679**, because the node sits under the sheet's `transform: scale()`
+  and its own bounding rect is whatever the window happened to be — verified,
+  a 400px phone and a 1797px desktop save byte-identical files; **`scale: 2`**,
+  so the file is 1920 x 1358 and 15px body copy survives being zoomed into;
+  **`backgroundColor`** (`CERTIFICATE_GROUND`, which duplicates the document's
+  own `bg-[#fbfaf7]` because Tailwind resolves an arbitrary value at build time
+  and cannot read a variable), since a rasteriser given none composites onto
+  transparency and a transparent certificate turns black as often as white in
+  whatever it is dropped into; and the **import is dynamic**, because the
+  library is the heaviest thing on either surface and is only needed once
+  somebody asks for the file. The node is reached by a **ref threaded through
+  `CertificateSheet`'s `documentRef`**, not `querySelector`, so two sheets on a
+  page could never save each other's certificate.
+- **The print rules are still there and are no longer what the button does.**
+  They are the last block in `app/globals.css`, outside any `@layer`: `@page {
+  size: A4 landscape; margin: 0 }`, everything hidden with **`visibility`**
+  rather than `display` (which would collapse the layout the sheet is
+  positioned in), then the sheet pinned to the page origin and scaled 1.16929
+  to fill it. They are kept because the verification page is a public link and
+  reaching for Cmd+P on it is a thing people do; verified by generating the PDF
+  through Playwright and rendering it back — one page, MediaBox 841.92 x
+  594.96pt, the certificate's own colours in all four corners, no app chrome.
+  **Printing from the dashboard *dialog* paginates**, because Base UI's dialog
+  is `position: fixed` and a fixed ancestor repeats on every printed page; that
+  is why the button downloads rather than prints, and it is not worth chasing
+  now that nothing routes there. Two traps, both of which cost a round of "the
+  PDF is offset and clipped":
+  - **Chrome's print layout ignores `top`/`left` on `position: fixed`.** The
+    sheet has to be `position: absolute`.
+  - **An identity `matrix(1,0,0,1,0,0)` still creates a containing block.** A
+    transformed ancestor is the containing block for an absolutely-positioned
+    descendant, so `CertificateSheet`'s scaler captured the sheet even at
+    `scale(1)` and printed it 50pt in from the corner. Both of its wrappers
+    carry `data-certificate-print-host` and the rules reset the transform to
+    `none` on them rather than trusting `scale(1)` to be inert.
+- **"Add to LinkedIn" is a plain link to a public endpoint LinkedIn
+  maintains** (`/profile/add?startTask=CERTIFICATION_NAME&…`), not an
+  integration — it drops the credential into somebody's Licenses &
+  Certifications with the fields filled. Its `certUrl` is the verification
+  page, which is what makes the entry checkable by whoever reads the profile
+  and the reason that route had to exist. Two things about the fields are
+  deliberate: the year and month come off the stored date rather than out of
+  the formatted `issuedOn` string, because re-parsing one is how a locale
+  shifts a month; and `certUrl` is built from **`siteConfig.url`, not
+  `location.origin`**, because the link is filed on a profile for years and one
+  pointing at a preview deployment or `localhost` would rot the moment they
+  left it.
 - **`Pagination` cannot be rendered from a Server Component**, and this page is
   where that surfaced. `components/ui/pagination.tsx` carries no `"use client"`
   directive, so an RSC parent pulls it — and `Button`, and Base UI's

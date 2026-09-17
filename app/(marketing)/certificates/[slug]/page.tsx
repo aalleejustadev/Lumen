@@ -1,4 +1,3 @@
-import * as React from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
@@ -80,12 +79,5 @@ export default async function Page({
     )
   }
 
-  // `PrintOnArrival` reads `useSearchParams`, which without a boundary would
-  // opt every route under the marketing layout into client-side rendering —
-  // the trap `navigation-progress.tsx` records.
-  return (
-    <React.Suspense>
-      <CertificateVerification row={row} />
-    </React.Suspense>
-  )
+  return <CertificateVerification row={row} />
 }

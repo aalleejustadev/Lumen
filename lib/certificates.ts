@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth"
 import { CERTIFICATES_PAGE_SIZE } from "@/lib/config/certificates"
 import { db } from "@/lib/db"
+import type { Prisma } from "@/lib/generated/prisma/client"
 
 /**
  * The reads behind `/dashboard/certificates` and the public verification page
@@ -45,21 +46,16 @@ import { db } from "@/lib/db"
  *    most recently is the thing you want to hand over.
  */
 
-export type CertificateRow = {
-  id: string
-  /** The printed ID, e.g. "LMN-DS-4821". */
-  serial: string
-  publicSlug: string
-  courseTitle: string
-  instructorName: string
-  /** Already written, e.g. "Aug 12, 2026" — see `CertificatesPage`. */
-  issuedOn: string
-  /** `Certificate.grade` is nullable; the banner drops its pill when it is. */
-  grade: string | null
-  categorySlug: string
-  categoryAccent: string
-  thumbnailUrl: string | null
-}
+/**
+ * A row on the dashboard list.
+ *
+ * **It is a `PublicCertificate` plus its id**, rather than a narrower shape,
+ * because the card's PDF button opens the full preview — the same document the
+ * verification page renders — and a second type would mean building the same
+ * certificate from two sets of fields. `holderName` is the signed-in learner,
+ * which the card never draws and the document always does.
+ */
+export type CertificateRow = PublicCertificate & { id: string }
 
 export type CertificatesPage = {
   rows: CertificateRow[]
@@ -77,10 +73,18 @@ export type CertificatesPage = {
 
 export type PublicCertificate = {
   serial: string
+  /** The verification page's slug, which the LinkedIn link and the preview's
+   *  own actions both need. */
+  publicSlug: string
   holderName: string
   courseTitle: string
   instructorName: string
   issuedOn: string
+  /** The issue date's own parts, **not re-parsed from `issuedOn`**. LinkedIn
+   *  wants a year and a month, and pulling them back out of a formatted string
+   *  is how a locale shifts a month. */
+  issuedYear: number
+  issuedMonth: number
   grade: string | null
   scorePercent: number | null
   categorySlug: string
@@ -190,16 +194,8 @@ export async function getCertificatesPage(
 
   return {
     rows: rows.map((row) => ({
+      ...toPublic(row),
       id: row.id,
-      serial: row.serial,
-      publicSlug: row.publicSlug,
-      courseTitle: row.course.title,
-      instructorName: row.course.instructor.name,
-      issuedOn: issuedFormat.format(row.issuedAt),
-      grade: row.grade,
-      categorySlug: row.course.category.slug,
-      categoryAccent: row.course.category.accentColor,
-      thumbnailUrl: row.course.thumbnailUrl,
     })),
     stats: {
       earned: total,
@@ -235,12 +231,23 @@ export async function getPublicCertificate(
   })
   if (!row) return null
 
+  return toPublic(row)
+}
+
+/** One mapper for both reads, so the card and the verification page cannot
+ *  build different certificates out of the same row. */
+function toPublic(
+  row: Prisma.CertificateGetPayload<{ select: typeof certificateSelect }>
+): PublicCertificate {
   return {
     serial: row.serial,
+    publicSlug: row.publicSlug,
     holderName: row.user.name?.trim() || row.user.email,
     courseTitle: row.course.title,
     instructorName: row.course.instructor.name,
     issuedOn: issuedFormat.format(row.issuedAt),
+    issuedYear: row.issuedAt.getUTCFullYear(),
+    issuedMonth: row.issuedAt.getUTCMonth() + 1,
     grade: row.grade,
     scorePercent: row.scorePercent,
     categorySlug: row.course.category.slug,
