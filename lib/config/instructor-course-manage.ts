@@ -118,14 +118,15 @@ export type ManageRow = {
  * inert — never a link onto a 404, which is the rule
  * `attention-list.tsx` states and this page follows row for row.
  *
- * Seven of the eight go somewhere today — all three Content rows, plus
+ * **All eight go somewhere today** — all three Content rows, plus
  * **Students**, **Q&A**, **Reviews** and **Coupons**, which are filtered to
  * this course through the `?course=` parameter those pages already parse
  * (`parseStudentsQuery`, `parseQuestionsQuery`, `parseReviewsQuery`,
  * `parseCouponsQuery`); each resolves that id against the caller's own
  * courses, so a link built here can only ever narrow what they would have
- * shown anyway. **Analytics** is the one still waiting on a sidebar row to
- * flip. `manageRowHref` below decides each destination and says why.
+ * shown anyway. **Analytics** goes to the page itself rather than a filtered
+ * view of it, for the reason its own entry gives. `manageRowHref` below
+ * decides each destination and says why.
  */
 export const manageGroups: {
   title: string
@@ -241,8 +242,8 @@ export type ManageRowTarget = {
  * inert whatever `instructorNav` says, which is why this returns
  * `string | undefined` rather than `string`.
  *
- * Seven of the eight lead somewhere today — Analytics is the one still
- * waiting on its own route:
+ * **All eight lead somewhere today.** Analytics was the last, and is the one
+ * row that does not narrow to this course; its entry below says why:
  *
  *  - **Curriculum** opens the editor on its Curriculum step, the surface
  *    `create-course-page__curriculum.png` draws.
@@ -282,6 +283,13 @@ export const manageRowHref: Partial<
   students: (course) => `/dashboard/instructor/students?course=${course.id}`,
   qa: (course) => `/dashboard/instructor/qa?course=${course.id}`,
   reviews: (course) => `/dashboard/instructor/reviews?course=${course.id}`,
+  // **No `?course=`, because Analytics has no course filter.** Its subject is
+  // the whole catalogue — a four-up KPI row, a six-month chart and a table
+  // that *ranks courses against each other*, which one course cannot be a
+  // filtered view of. The row still leads somewhere useful: the table it opens
+  // has this course in it. Give it a filter and this becomes a `?course=` link
+  // like its three neighbours.
+  analytics: () => "/dashboard/instructor/analytics",
   coupons: (course) => `/dashboard/instructor/coupons?course=${course.id}`,
 }
 

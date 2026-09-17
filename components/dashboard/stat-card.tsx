@@ -4,16 +4,25 @@ import { ArrowDownIcon, ArrowUpIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
   deltaToneClass,
+  formatCountDelta,
   formatDelta,
   formatStatValue,
-} from "@/components/dashboard/admin/platform-format"
-import type { PlatformStatFormat } from "@/lib/config/admin-overview"
+  type StatFormat,
+} from "@/components/dashboard/stat-format"
 import { cn } from "@/lib/utils"
 
 /**
- * One KPI card. Both admin pages draw the identical tile — Platform Overview's
- * four-up row and Reports' — so the geometry is measured once here rather than
- * copied, and neither page can drift from the other.
+ * One KPI card — a 34px icon tile beside a label, with the figure and its
+ * delta below.
+ *
+ * **Three** pages draw the identical tile: Platform Overview's four-up row,
+ * Reports', and the instructor's Analytics page. It was
+ * `components/dashboard/admin/admin-stat-card.tsx` until the third one landed
+ * and moved out of the console's directory for the reason `count-card.tsx`
+ * and `course-art.tsx` both record — and which `manage-stats.tsx` had already
+ * named from the other side. It stays distinct from `count-card.tsx` (a 44px
+ * tinted tile beside the figure, no delta) and from `manage-stats.tsx`' own
+ * bare-glyph tile: three exports, three anatomies.
  *
  * Measured off `platform-overview.png` at DPR 2: a 20px inset, a 34px icon tile
  * beside a 15px muted label, and the figure with its delta on a shared
@@ -33,26 +42,42 @@ import { cn } from "@/lib/utils"
  * `settings-billing.tsx` documents. Setting the variable is the fix; a `p-5`
  * next to it would leave both declarations standing.
  *
- * `arrow` is the one difference between the two pages: the Reports export puts
- * a ↑/↓ before each delta and Platform Overview's does not, so it is opt-in
- * rather than something the shared tile decides for itself.
+ * Three props are opt-in rather than something the shared tile decides for
+ * itself, because each is one export disagreeing with another:
+ *
+ *  - **`arrow`** — Reports and Analytics put a ↑/↓ before the delta, Platform
+ *    Overview does not.
+ *  - **`deltaFormat`** — Analytics' Open questions card draws "+2" where every
+ *    other card on every page draws a percentage. A queue of nine is better
+ *    described by the two that arrived than by "+22%".
+ *  - **`footnote`** — the Analytics export hangs a muted line under the figure
+ *    ("42 per day average", "awaiting your reply") that says what the number
+ *    is *of*. Nothing else draws one, so it is absent by default and the card
+ *    keeps the console's own height when it is.
  */
-function AdminStatCard({
+function StatCard({
   label,
   icon: Icon,
   value,
   delta,
   format,
   arrow = false,
+  deltaFormat = "percent",
+  footnote,
 }: {
   label: string
   icon: LucideIcon
   value: number | null
   delta: number | null
-  format: PlatformStatFormat
+  format: StatFormat
   arrow?: boolean
+  /** How the chip beside the figure reads — see the note above. */
+  deltaFormat?: "percent" | "count"
+  /** The muted line under the figure, drawn only when there is one. */
+  footnote?: string
 }) {
-  const formatted = formatDelta(delta)
+  const formatted =
+    deltaFormat === "count" ? formatCountDelta(delta) : formatDelta(delta)
   const Arrow = delta !== null && delta < 0 ? ArrowDownIcon : ArrowUpIcon
 
   return (
@@ -87,9 +112,18 @@ function AdminStatCard({
             </span>
           ) : null}
         </div>
+
+        {/* Tight to the figure rather than a sibling of the two rows above:
+            measured, the export leaves ~4px between the figure's box and this
+            line, where the column's own gap would leave twelve. */}
+        {footnote ? (
+          <p className="-mt-1.5 text-[14px] text-muted-foreground">
+            {footnote}
+          </p>
+        ) : null}
       </div>
     </Card>
   )
 }
 
-export { AdminStatCard }
+export { StatCard }

@@ -2,7 +2,7 @@ import { format } from "date-fns"
 
 /**
  * Presentation for the Coupons table, kept beside the components that use it
- * the way `courses-format.ts` and `platform-format.ts` are.
+ * the way `courses-format.ts` and `stat-format.ts` are.
  *
  * It holds **no `date-fns` relative formatting on purpose**: unlike the audit
  * log or the courses queue, every date this page draws is absolute ("Ends

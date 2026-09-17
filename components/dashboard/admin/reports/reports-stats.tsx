@@ -1,11 +1,11 @@
-import { AdminStatCard } from "@/components/dashboard/admin/admin-stat-card"
+import { StatCard } from "@/components/dashboard/stat-card"
 import { reportStatCards } from "@/lib/config/admin-reports"
 import type { ReportStats } from "@/lib/admin/reports"
 
 /**
  * The four-up KPI row at the top of
  * `ui-design/light/dashboard/admin/reports-page__admin.png`. Same tile as
- * Platform Overview's (`admin-stat-card.tsx`), with the arrow this export
+ * Platform Overview's (`stat-card.tsx`), with the arrow this export
  * draws beside each delta.
  *
  * Note the **Refund rate** card is tinted red when the rate falls, because
@@ -19,7 +19,7 @@ function ReportsStatsRow({ stats }: { stats: ReportStats }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {reportStatCards.map((card) => (
-        <AdminStatCard
+        <StatCard
           key={card.key}
           label={card.label}
           icon={card.icon}

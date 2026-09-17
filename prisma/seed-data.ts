@@ -195,6 +195,50 @@ export const ownerCourseSeeds: {
 export const ownerProgress = [100, 72, 45, 100, 18] as const
 
 /**
+ * How many days before the run each seat enrolled — the ladder
+ * `seedDeveloperWorkspace` walks so its enrolments land in different months.
+ *
+ * Every seat used to enrol the day after the course was published, which put
+ * a whole course's cohort in one column of the Analytics page's six-month
+ * chart and left five empty. These are fixed rather than rolled for
+ * `ownerProgress`' reason: a figure in a screenshot should not move between
+ * runs. They span roughly five months, so a six-column chart has a shape, and
+ * the first two sit inside a 30-day window so the page's default range is not
+ * empty.
+ */
+export const ownerEnrolmentSpread = [6, 24, 63, 108, 151] as const
+
+/**
+ * How long after enrolling each seat was last seen, in days — what
+ * `Enrollment.lastAccessedAt` gets.
+ *
+ * It decides which enrolments count as an **active cohort**, which is the
+ * basis the Analytics page's Completion rate and Avg. watch time are measured
+ * over. The first two are recent enough to fall inside a 30-day window and the
+ * rest trail off, so the two cards have a cohort at every range and the
+ * Students table's Last active column has something other than "Not started"
+ * to draw.
+ */
+export const ownerLastSeen = [4, 17, 9, 40, 96] as const
+
+/**
+ * The enrolment sources `seedDeveloperWorkspace` spreads its seats across.
+ *
+ * All three are **order-less** on purpose: these are grants rather than sales,
+ * and `Enrollment.orderId`'s own note reserves `PURCHASE` and `COUPON` for
+ * rows that carry an order "so a refund can find what to revoke". Three rows
+ * is what gives the Analytics page's "Where enrolments come from" card
+ * something to compare on the account a developer actually signs in with.
+ */
+export const ownerEnrolmentSources = [
+  "ADMIN_GRANT",
+  "FREE",
+  "BUSINESS_PLAN",
+  "ADMIN_GRANT",
+  "FREE",
+] as const
+
+/**
  * The four questions waiting on the developer's own Q&A page.
  *
  * `courseIndex` addresses `ownerCourseSeeds` by position rather than by slug,

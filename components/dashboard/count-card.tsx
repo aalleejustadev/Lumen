@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
  * The dashboard's **count** tile: a 44px tinted square, with the figure and
  * its label stacked beside it, and no delta.
  *
- * **Not `admin-stat-card.tsx`.** That one is Platform Overview's and Reports'
+ * **Not `stat-card.tsx`.** That one is Platform Overview's and Reports'
  * — a small icon beside a label, with the figure and a month-over-month delta
  * on the line below. This is the other shape, and **three** exports across two
  * shells now draw it identically (80px tall, 20px inset, 44px tile, 16px gap

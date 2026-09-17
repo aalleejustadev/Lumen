@@ -3,7 +3,7 @@ import type { PayoutMethodView } from "@/lib/instructor-payouts"
 /**
  * Presentation for the payout settings card — the strings the export draws,
  * built from real rows. Kept beside the components that use them rather than
- * in `lib/`, the way `platform-format.ts` and `courses-format.ts` are: this is
+ * in `lib/`, the way `stat-format.ts` and `courses-format.ts` are: this is
  * how a value is *written*, not what it is.
  */
 

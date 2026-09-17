@@ -1,7 +1,7 @@
 /**
  * Number formatting for `my-courses-page.png`, kept beside the components that
  * draw it — presentation, the way `settings-controls.ts` and
- * `platform-format.ts` are.
+ * `stat-format.ts` are.
  *
  * All three are `en-US` explicitly rather than the runtime's locale: these
  * strings are rendered on the server and hydrated in the browser, and a server

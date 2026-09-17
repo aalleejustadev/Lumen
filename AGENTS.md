@@ -3615,6 +3615,155 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   are work waiting, but not the way an unanswered question is, and the manage
   page's own row already counts them per course. Seven of the manage page's
   eight rows now lead somewhere; Analytics is the last.
+- `components/dashboard/instructor/analytics/` — **Analytics** at
+  `/dashboard/instructor/analytics`, from
+  `ui-design/light/dashboard/instructor/analytics-page.png`:
+  `range-select.tsx` (client — the only control on the page),
+  `analytics-stats.tsx` (the four-up KPI row), `enrolments-chart-card.tsx`
+  (client — recharts), `enrolment-sources-card.tsx`,
+  `course-performance-card.tsx`, composed by `analytics-page.tsx`.
+  `lib/instructor-analytics.ts` reads and `lib/config/instructor-analytics.ts`
+  is every word the page says. **It has no writes at all** — every control
+  either filters or navigates — and it needed no migration: `Enrollment`
+  already carries `createdAt`, `source`, `completedAt`, `lastAccessedAt` and
+  `progressPercent`.
+  It is a **Server Component down to the range select**: that select and the
+  chart are the entire client bundle, so the four KPI tiles, the sources card
+  and the whole performance table are rendered on the server.
+  Measured off that export at DPR 2 and verified against the render, which
+  lands within 2.5px on every landmark: a header block **pixel-identical** to
+  `students-page.png`'s, `coupons-page__main.png`'s and `reviews-page.png`'s
+  (so it is that header, reused rather than re-measured) with a **155 x 42**
+  range select flush to the content column's right edge; a four-up KPI row of
+  **359.5px** cards on an **18px** gap; a **3:2** split below it — an 884px
+  chart against a 589px sources card on a 20px gap — and the full-width
+  performance card. That second row is **`items-start`**: the export's two
+  cards are 352.5px and 256px, so the sources card hugs its rows rather than
+  stretching, which Grid's default `align-items: stretch` would otherwise do.
+  Seven definitions decide what the page means, and the export settles none of
+  them:
+  - **The range select is the page's premise, so every figure is measured over
+    the selected window and every delta compares the window immediately
+    before.** One rule rather than the console's mixture of running totals and
+    period figures — change the range and both halves of every comparison move
+    together. It writes to the URL, since it changes which rows exist and that
+    happens in SQL; `parseAnalyticsQuery` is the gate, and the default
+    ("Last 30 days", the export's own) never reaches the URL.
+  - **Open questions is the one exception and its footnote says so.** A
+    backlog is a *now* figure — "awaiting your reply" is not something that
+    happened during a window — so the headline is the standing count of
+    unanswered questions, the definition the sidebar badge already uses. Its
+    **delta compares arrivals** (still-open questions asked this window against
+    the window before), and is drawn as a **count**, because the export draws
+    "+2" and "+22%" of a queue of nine says less.
+  - **Completion rate and Avg. watch time are measured over enrolments *active*
+    in the window** — `lastAccessedAt` inside it — which is exactly what the
+    export's footnote "across active cohorts" says. Scoping them to enrolments
+    *created* in the window was the other reading and is far worse: nobody who
+    joined seven days ago has finished, so a short range would draw 0% and call
+    it a fact about the course. They are therefore **not** the manage page's
+    figures, which are a course's all-time health — two questions under two
+    labels — and the table below draws the all-time pair so the two screens
+    still agree per course.
+  - **The chart is the last six *complete* months and the range does not reach
+    it.** "New enrolments by month" over "Last 7 days" is one partial column,
+    and a partial month beside complete ones reads as a collapse — the trap
+    `getRevenueByMonth` documents, which turned that card's pill into −76.8% on
+    real data. The console's Reports page already pairs a 30-day KPI row with a
+    fixed six-month chart for this reason. Its pill is the trend it plots: the
+    last complete month against the one before. The export draws the same
+    +8.1% on the chart and on the New enrolments card, which its mock numbers
+    make a coincidence rather than a definition.
+  - **The bars are plotted from zero and the export's are not.** Fitted, its
+    six columns run from a baseline of roughly 195 — and not even consistently
+    (1,164 is drawn shorter than the fit predicts, 948 taller), so they were
+    placed by eye. `revenue-chart-card.tsx` reached the same conclusion about
+    its own export; a bar chart whose heights do not match its values is the
+    one thing a chart must not be.
+  - **The table ranks on enrolments in the period**, which is what its own
+    subtitle promises, over courses that took at least one — a row of zeroes
+    explains nothing. `ANALYTICS_COURSE_LIMIT` is set well above the export's
+    five for `TRANSACTIONS_LIMIT`' reason: five is its sample size, not a
+    designed cap, and there is no pager on it.
+  - **Row art is the per-category gradient + icon** (`lumen-course-card-art`)
+    through the shared `CourseArt`, and a row is **not a link** — the export
+    draws no affordance on one, the rule `help-topic-card.tsx` states.
+- **"Where enrolments come from" is the one place this page departs from its
+  export.** It draws four *acquisition channels* — Course search, Instructor
+  profile, Lumen Business, Direct & referrals — and three of those four are
+  traffic attribution that **nothing in this app records**: there is no
+  referrer column on `Enrollment`, nothing would write one, and adding one
+  leaves every account showing 100% unknown, which is worse than not drawing
+  the card. Building it as drawn would mean inventing the numbers.
+  `EnrollmentSource` *is* an answer to the question the heading asks, it is
+  stored on every row already, and one of its members is literally the
+  export's own "Lumen Business" — so the card keeps the drawn geometry, the
+  drawn colours and the heading, and its rows become the five real sources.
+  The call `adminEmailNotifications` made about the console's own toggle rows:
+  the principled source beats an invented list. To reproduce the drawn card,
+  `Enrollment` needs a nullable `referrer` enum written at checkout and at the
+  free-enrol path; the card then reads that and nothing above it changes.
+  Two details: **colour is keyed to the source, not to the row's position**, so
+  a source keeps its swatch as the shares move (`categoryAccentClasses`'
+  arrangement), and a source with no rows is **dropped rather than drawn as a
+  0% bar**. Sampled, three of the four drawn fills land on `--accent-2`,
+  `--accent-1` and `--success` exactly; the amber is `#f59e0c`, which no token
+  matches to the digit, so it takes `--star` — the token the categories page
+  already maps amber to.
+- **`admin-stat-card.tsx` and `platform-format.ts` moved out of the console**,
+  to `components/dashboard/stat-card.tsx` and
+  `components/dashboard/stat-format.ts`. **Three** exports now draw that tile
+  identically — Platform Overview, Reports and Analytics — and
+  `manage-stats.tsx` had already complained in its own note that "`StatCard`
+  lives in the console's directory besides, which is the coupling
+  `count-card.tsx`' own note refuses". So this retires a coupling the repo had
+  already named, the same move `count-card.tsx` and `course-art.tsx` each
+  made. The tile is unchanged for the two console callers; it gained three
+  opt-ins, each one export disagreeing with another: **`footnote`** (the muted
+  line under the figure this export hangs there, which is what makes its card
+  137.5px against the console's 116), **`deltaFormat: "count"`** for
+  Open questions' "+2", and a **`percent1`** value format, because this export
+  writes "88%" and "72.5%" on one row where Platform Overview's uptime card
+  needs its two decimals. The private tile inside `manage-stats.tsx` was
+  renamed `MetricTile`, since it is a third anatomy and would now shadow the
+  shared name.
+- **The seed's enrolments had two gaps this page surfaced, and both are fixed.**
+  Neither was visible until something read these columns over a *window*:
+  - **`seedDeveloperWorkspace` never wrote `lastAccessedAt`.** Every grant on
+    the account a developer signs in with read "Not started" in the Students
+    table's Last active column while `progressPercent` said the learner was
+    40–100% through — and this page, whose Completion rate and Avg. watch time
+    are measured over enrolments *active* in the window, had no cohort at all
+    and drew two em dashes. `ownerLastSeen` is the fixed ladder that writes it,
+    never before the enrolment and never after the run.
+  - **`seedPurchases` could date `lastAccessedAt` in the future.** It was
+    `paidAt` plus up to 40 days, and `paidAt` falls anywhere in the signup
+    window, so recent buyers were last active *tomorrow*. Clamped to the run,
+    the way `seedCoupons` clamps its own dates.
+    Two more changes give the page something to draw on a fresh account:
+    `ownerEnrolmentSpread` walks the seats back over five months (they all used
+    to enrol the day after publication, which drew one bar and five empty
+    columns), the owner's two live courses now publish **95 days apart** rather
+    than 20 so those enrolments have somewhere to land, and
+    `ownerEnrolmentSources` spreads the seats across `ADMIN_GRANT`, `FREE` and
+    `BUSINESS_PLAN` so the sources card has more than one row. All three are
+    **order-less** on purpose: `Enrollment.orderId`'s own note reserves
+    `PURCHASE` and `COUPON` for rows that carry an order "so a refund can find
+    what to revoke", and one without would be a lie in a table somebody
+    reconciles money against. **Re-run `npm run db:seed` to see any of it.**
+- **The New enrolments footnote picks its unit.** The export draws 1,284 over
+  30 days as "42 per day average" — but the same sentence handed 7 over 30 days
+  wrote "**0** per day average", and 10 over a year wrote it again with two
+  more decimals of nothing. It walks up to weeks and then months until the
+  figure is worth reading, and floors at a rate of one a day or more, which is
+  what the export does (1,284 ÷ 30 is 42.8 and it writes 42).
+- **The Analytics row in `instructorNav` is `built: true`**, which was the last
+  `false` in the Business group, and `manageRowHref` gained its entry — so
+  **all eight** of the manage page's rows now lead somewhere. Analytics is the
+  one that does **not** narrow to the course you came from: its subject is the
+  whole catalogue, and a table that ranks courses against each other cannot be
+  a filtered view of one. No badge either: nothing on the page is work waiting
+  on anybody, and the sidebar export draws none.
 - `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
   from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
   `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New

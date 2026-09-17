@@ -8,7 +8,7 @@ const counts = new Intl.NumberFormat("en-US")
  * The four-up KPI row at the top of
  * `ui-design/light/dashboard/admin/users-page__admin.png`.
  *
- * **Not `admin-stat-card.tsx`.** That tile is Platform Overview's and Reports'
+ * **Not `stat-card.tsx`.** That tile is Platform Overview's and Reports'
  * — a small icon beside a label, with the figure and its month-over-month
  * delta on the line below — and this export draws something else: a 44px tile
  * on the left, the figure and its label stacked beside it, no delta anywhere.

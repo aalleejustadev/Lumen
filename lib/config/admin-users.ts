@@ -89,7 +89,7 @@ export function showingLine(page: {
 
 /**
  * The KPI row. A **different tile** from Platform Overview's and Reports' —
- * `admin-stat-card.tsx` puts a small icon beside a label with the figure and
+ * `stat-card.tsx` puts a small icon beside a label with the figure and
  * its delta beneath, where this export draws a 44px tile beside the figure and
  * no delta at all — so it is not that shared component, and `users-stats.tsx`
  * says so.

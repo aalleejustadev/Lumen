@@ -7,7 +7,7 @@ import type { SubtitleFormatters } from "@/lib/config/admin-overview"
 
 /**
  * The two shapes `attentionQueues`' `subtitle` formatters ask for. They live
- * here, next to their only caller, rather than in `platform-format.ts` — that
+ * here, next to their only caller, rather than in `stat-format.ts` — that
  * module is imported by a Client Component and this is the only thing in the
  * console that needs `date-fns`.
  */

@@ -5,7 +5,7 @@ import { Bar, BarChart, LabelList, XAxis } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
-import { formatDelta } from "@/components/dashboard/admin/platform-format"
+import { formatDelta } from "@/components/dashboard/stat-format"
 import { adminReportsCopy } from "@/lib/config/admin-reports"
 import type { RevenueSeries } from "@/lib/admin/reports"
 
@@ -30,7 +30,7 @@ const compact = new Intl.NumberFormat("en-US", {
  * in caps, and the export lower-cases only the thousands one, so that single
  * letter is patched rather than the number being formatted by hand.
  *
- * Local rather than in `platform-format.ts`: the stat cards above never reach
+ * Local rather than in `stat-format.ts`: the stat cards above never reach
  * the thousands suffix (they draw millions), so this spelling is this card's
  * business alone.
  */

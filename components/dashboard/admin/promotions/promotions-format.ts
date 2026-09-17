@@ -7,8 +7,8 @@ import type {
  * The number, money and date strings `/dashboard/admin/promotions` draws.
  *
  * Presentation, kept beside the components that render it the way
- * `platform-format.ts`, `courses-format.ts` and `reviews-format.ts` are — and
- * like `platform-format.ts` since Reports, it carries **no date library**: the
+ * `stat-format.ts`, `courses-format.ts` and `reviews-format.ts` are — and
+ * like `stat-format.ts` since Reports, it carries **no date library**: the
  * board is a Client Component and importing this module must not pull
  * `date-fns` into its bundle. `Intl` is already in every runtime.
  */

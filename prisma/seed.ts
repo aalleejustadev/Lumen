@@ -67,6 +67,9 @@ import {
   questionReplyBodies,
   questionSubjects,
   ownerCourseSeeds,
+  ownerEnrolmentSources,
+  ownerEnrolmentSpread,
+  ownerLastSeen,
   ownerProgress,
   ownerQuestionSeeds,
   reportedReviewSeeds,
@@ -1368,8 +1371,16 @@ async function seedPurchases(
         progressPercent: progress,
         completedAt:
           progress === 100 ? new Date(paidAt.getTime() + 30 * DAY) : null,
+        // **Clamped to now.** `paidAt` falls anywhere in the signup window,
+        // so a flat "+ up to 40 days" put recent buyers' last visit in the
+        // *future* — which the Students page draws as a last-active stamp and
+        // the Analytics page counts as an active cohort. The clamp
+        // `seedCoupons` needs for its own dates.
         lastAccessedAt: new Date(
-          paidAt.getTime() + Math.floor(rng() * 40 * DAY)
+          Math.min(
+            NOW.getTime(),
+            paidAt.getTime() + Math.floor(rng() * 40 * DAY)
+          )
         ),
         createdAt: paidAt,
       }
@@ -3235,7 +3246,14 @@ async function seedDeveloperWorkspace(
       // are recent instead, which is what puts them where My Courses sorts
       // (`updatedAt desc`) and gives its "Updated 4 hours ago" shape something
       // to render.
-      const publishedAt = ago((30 + courseIndex * 20) * DAY)
+      // **The two live courses publish months apart**, not three weeks. The
+      // gap used to be 20 days, which left every enrolment on the developer's
+      // account inside one month — and the Analytics page's six-month chart
+      // drawing one bar and five empty columns, since `seedDeveloperWorkspace`
+      // clamps an enrolment to the day after its course went on sale. 95 days
+      // keeps the first at the 30 the reviews below are dated against and
+      // pushes the second back far enough for the series to have a shape.
+      const publishedAt = ago((30 + courseIndex * 95) * DAY)
       const touchedAt = live ? publishedAt : ago((courseIndex - 1) * 6 * HOUR)
       const minutes = seed.lessons.length * 9
       // What the "% built" bar reads — see `ownerCourseSeeds`. A submitted
@@ -3333,12 +3351,34 @@ async function seedDeveloperWorkspace(
         // `completedAt` follows from 100 and nothing else, and is clamped to
         // now for the reason `seedCoupons` clamps its own dates.
         const progress = ownerProgress[seat % ownerProgress.length]!
-        const enrolledAt = new Date(publishedAt.getTime() + DAY)
+        // **Spread across the months since publication, not all on day one.**
+        // Every seat used to enrol on `publishedAt + 1 day`, which drew the
+        // Analytics page's six-month chart as one spike and five empty
+        // columns. `ownerEnrolmentSpread` walks them backwards from the run so
+        // the series has a shape, clamped so nobody enrols before the course
+        // existed.
+        const enrolledAt = new Date(
+          Math.max(
+            publishedAt.getTime() + DAY,
+            NOW.getTime() -
+              ownerEnrolmentSpread[seat % ownerEnrolmentSpread.length]! * DAY
+          )
+        )
         enrollments.push({
           id: enrollmentId,
           userId: learner.id,
           courseId: id,
-          source: "ADMIN_GRANT",
+          // **Not all `ADMIN_GRANT`.** These are grants rather than sales — no
+          // order was placed, which is the distinction `seedConversations`
+          // draws — but `FREE` and `BUSINESS_PLAN` are equally order-less, and
+          // spreading the seats across the three is what gives the Analytics
+          // page's "Where enrolments come from" card more than one row on the
+          // account a developer signs in with. `PURCHASE` and `COUPON` are
+          // deliberately not used: `Enrollment.orderId`'s own note says those
+          // two carry an order "so a refund can find what to revoke", and one
+          // without would be a lie in a table somebody reconciles money
+          // against.
+          source: ownerEnrolmentSources[seat % ownerEnrolmentSources.length]!,
           progressPercent: progress,
           completedAt:
             progress === 100
@@ -3346,6 +3386,20 @@ async function seedDeveloperWorkspace(
                   Math.min(NOW.getTime(), enrolledAt.getTime() + 21 * DAY)
                 )
               : null,
+          // **Written, not left null.** Without it every one of these reads
+          // "Not started" in the Students table's Last active column while
+          // `progressPercent` says the learner is 40–100% through, and the
+          // Analytics page — whose Completion rate and Avg. watch time are
+          // measured over enrolments *active* in the window — had no cohort at
+          // all and drew two em dashes. Never before the enrolment and never
+          // after now.
+          lastAccessedAt: new Date(
+            Math.min(
+              NOW.getTime(),
+              enrolledAt.getTime() +
+                ownerLastSeen[seat % ownerLastSeen.length]! * DAY
+            )
+          ),
           createdAt: enrolledAt,
         })
 

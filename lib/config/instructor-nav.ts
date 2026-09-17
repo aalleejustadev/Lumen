@@ -133,10 +133,15 @@ export const instructorNav: DashboardNavGroup[] = [
     title: "Business",
     items: [
       {
+        // Real: `Enrollment` already carries `createdAt`, `source`,
+        // `completedAt`, `lastAccessedAt` and `progressPercent`, so the
+        // surface needed no migration — see `lib/instructor-analytics.ts`. No
+        // badge: nothing on that page is work waiting on anybody, and the
+        // sidebar export draws none.
         title: "Analytics",
         href: "/dashboard/instructor/analytics",
         icon: ChartLineIcon,
-        built: false,
+        built: true,
       },
       {
         title: "Revenue & Payouts",
