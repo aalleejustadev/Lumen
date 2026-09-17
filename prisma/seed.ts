@@ -1389,6 +1389,27 @@ async function seedPurchases(
 // 8 · Reviews, and the three that get reported
 // ---------------------------------------------------------------------------
 
+/**
+ * What an instructor writes back, for the half of the reviews that get a
+ * reply.
+ *
+ * The first line is `reviews-page.png`'s own, which it draws under *both* of
+ * its replied cards — a placeholder in a body slot, so the rest are written
+ * rather than repeated five times. **Nothing in the app emits a review reply
+ * except an instructor pressing Reply**, so unlike `seedAuditLog` this is not
+ * standing in for a missing source; it is here because the export draws two
+ * states — "Reply" and "You replied" with the reply inset beneath it — and a
+ * database with no `CourseReviewReply` row anywhere opens the page on only one
+ * of them. The reading `seedCommunity` settled for its own tags and hearts.
+ */
+const REVIEW_REPLIES = [
+  "Thanks so much for the detailed feedback — I have noted this for the next update.",
+  "Really glad it landed. The section you mention is the one I rewrote twice, so that is good to hear.",
+  "That is fair, and it comes up often enough that I am re-recording the opening lessons this month.",
+  "Thank you for taking the time to write this up — it is genuinely useful for deciding what to build next.",
+  "Noted, and thank you. I have added a downloadable summary to that module in the meantime.",
+]
+
 const REVIEW_BODIES = [
   {
     title: "Finally clicked for me",
@@ -1457,6 +1478,11 @@ async function seedReviews(
   }
 
   const instructorUserIds = [...instructors.values()].map((row) => row.userId)
+  // Keyed by `Instructor.id` rather than by slug, because a course carries the
+  // id — it is what decides who a review reply is written by, below.
+  const instructorUserById = new Map(
+    [...instructors.values()].map((row) => [row.id, row.userId])
+  )
   const reports: Prisma.ContentReportCreateManyInput[] = []
 
   for (const [index, seed] of cap(reportedReviewSeeds).entries()) {
@@ -1498,6 +1524,34 @@ async function seedReviews(
   const capped = cap(rows, SEED_MAX + reports.length)
   await db.courseReview.createMany({ data: capped })
   await db.contentReport.createMany({ data: reports })
+
+  // **Every other review gets a reply**, which is exactly the alternation
+  // `reviews-page.png` draws down its own four cards. A reply is written by
+  // the instructor who owns the course, never by an arbitrary account — the
+  // page renders it under an `Instructor` pill, so anybody else would be a
+  // lie about who answered — and it is dated after the review it answers and
+  // never in the future, the clamp `seedCoupons` needs for its own dates.
+  const authorByCourse = new Map(
+    courses.map((course) => [
+      course.id,
+      instructorUserById.get(course.instructorId),
+    ])
+  )
+  const replies: Prisma.CourseReviewReplyCreateManyInput[] = []
+  for (const [index, review] of capped.entries()) {
+    if (index % 2 !== 0) continue
+    const authorId = authorByCourse.get(review.courseId)
+    if (!authorId) continue
+    const written = review.createdAt as Date
+    replies.push({
+      id: `${SEED}rvr_${pad(replies.length, 6)}`,
+      reviewId: review.id as string,
+      authorId,
+      body: REVIEW_REPLIES[replies.length % REVIEW_REPLIES.length]!,
+      createdAt: new Date(Math.min(NOW.getTime(), written.getTime() + 2 * DAY)),
+    })
+  }
+  await db.courseReviewReply.createMany({ data: replies })
 
   return capped.length
 }
@@ -3156,6 +3210,7 @@ async function seedDeveloperWorkspace(
   const votes: Prisma.CourseQuestionVoteCreateManyInput[] = []
   const enrollments: Prisma.EnrollmentCreateManyInput[] = []
   const reviews: Prisma.CourseReviewCreateManyInput[] = []
+  const reviewReplies: Prisma.CourseReviewReplyCreateManyInput[] = []
 
   for (const [ownerIndex, owner] of owners.entries()) {
     // `Instructor.userId` is nullable, and an instructor answer needs an
@@ -3302,15 +3357,33 @@ async function seedDeveloperWorkspace(
         const copy = pick(REVIEW_BODIES)
         const rating = rng() < 0.7 ? 5 : 4
         ratings.push(rating)
+        const reviewId = `${SEED}rv_own_${key}_${pad(seat, 2)}`
+        const writtenAt = ago((7 + seat * 5) * DAY)
         reviews.push({
-          id: `${SEED}rv_own_${key}_${pad(seat, 2)}`,
+          id: reviewId,
           courseId: id,
           userId: learner.id,
           enrollmentId,
           rating,
           title: copy.title,
           body: copy.body,
-          createdAt: ago((7 + seat * 5) * DAY),
+          createdAt: writtenAt,
+        })
+
+        // **Every other one is answered**, so the Reviews page opens on both
+        // of the states `reviews-page.png` draws — "Reply" and "You replied"
+        // with the reply inset beneath it — on the one account a developer
+        // actually signs in with. The author is the owner, which is who the
+        // `Instructor` pill on that block claims wrote it.
+        if (seat % 2 !== 0) continue
+        reviewReplies.push({
+          id: `${SEED}rvr_own_${key}_${pad(seat, 2)}`,
+          reviewId,
+          authorId: ownerUserId,
+          body: REVIEW_REPLIES[reviewReplies.length % REVIEW_REPLIES.length]!,
+          createdAt: new Date(
+            Math.min(NOW.getTime(), writtenAt.getTime() + 2 * DAY)
+          ),
         })
       }
 
@@ -3390,6 +3463,7 @@ async function seedDeveloperWorkspace(
 
   await db.enrollment.createMany({ data: enrollments })
   await db.courseReview.createMany({ data: reviews })
+  await db.courseReviewReply.createMany({ data: reviewReplies })
   await db.courseQuestion.createMany({ data: questions })
   await db.courseQuestionReply.createMany({ data: replies })
   await db.courseQuestionVote.createMany({ data: votes })

@@ -88,10 +88,17 @@ export const instructorNav: DashboardNavGroup[] = [
         icon: UsersRoundIcon,
       },
       {
+        // Real: `CourseReview`, `CourseReviewReply` and `ContentReport` were
+        // already shaped for `reviews-page.png`, so the surface needed no
+        // migration — see `lib/instructor-reviews.ts`. No badge, because the
+        // sidebar export draws none on this row: unreplied reviews are work
+        // waiting, but they are not urgent the way an unanswered question is,
+        // and the manage page's own Reviews row already counts them per
+        // course.
         title: "Reviews",
         href: "/dashboard/instructor/reviews",
         icon: StarIcon,
-        built: false,
+        built: true,
       },
       {
         // Placeholder counts, exactly as drawn — the same posture the student

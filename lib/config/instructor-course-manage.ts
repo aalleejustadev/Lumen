@@ -118,13 +118,14 @@ export type ManageRow = {
  * inert — never a link onto a 404, which is the rule
  * `attention-list.tsx` states and this page follows row for row.
  *
- * Five of the eight go somewhere today — all three Content rows, plus **Q&A**
- * and **Coupons**, which are filtered to this course through the `?course=`
- * parameter those pages already parse (`parseQuestionsQuery`,
- * `parseCouponsQuery`); both resolve that id against the caller's own courses,
- * so a link built here can only ever narrow what they would have shown anyway.
- * Students, Reviews and Analytics are the three still waiting on a sidebar row
- * to flip. `manageRowHref` below decides each destination and says why.
+ * Seven of the eight go somewhere today — all three Content rows, plus
+ * **Students**, **Q&A**, **Reviews** and **Coupons**, which are filtered to
+ * this course through the `?course=` parameter those pages already parse
+ * (`parseStudentsQuery`, `parseQuestionsQuery`, `parseReviewsQuery`,
+ * `parseCouponsQuery`); each resolves that id against the caller's own
+ * courses, so a link built here can only ever narrow what they would have
+ * shown anyway. **Analytics** is the one still waiting on a sidebar row to
+ * flip. `manageRowHref` below decides each destination and says why.
  */
 export const manageGroups: {
   title: string
@@ -240,7 +241,8 @@ export type ManageRowTarget = {
  * inert whatever `instructorNav` says, which is why this returns
  * `string | undefined` rather than `string`.
  *
- * Five of the eight lead somewhere today:
+ * Seven of the eight lead somewhere today — Analytics is the one still
+ * waiting on its own route:
  *
  *  - **Curriculum** opens the editor on its Curriculum step, the surface
  *    `create-course-page__curriculum.png` draws.
@@ -260,10 +262,10 @@ export type ManageRowTarget = {
  *    "Publish your course", so Pricing is one click away in the nav card the
  *    step lands on — which is what makes a single row honest rather than a
  *    half-destination.
- *  - **Students**, **Q&A** and **Coupons** are filtered to this course through
- *    the `?course=` parameter those pages already parse. Each resolves that id
- *    against the caller's own courses, so a link built here can only ever
- *    narrow what they would have shown anyway.
+ *  - **Students**, **Q&A**, **Reviews** and **Coupons** are filtered to this
+ *    course through the `?course=` parameter those pages already parse. Each
+ *    resolves that id against the caller's own courses, so a link built here
+ *    can only ever narrow what they would have shown anyway.
  */
 export const manageRowHref: Partial<
   Record<ManageRowKey, (course: ManageRowTarget) => string | undefined>
@@ -279,6 +281,7 @@ export const manageRowHref: Partial<
   landing: (course) => editorStepHref(course.slug, "landing-page"),
   students: (course) => `/dashboard/instructor/students?course=${course.id}`,
   qa: (course) => `/dashboard/instructor/qa?course=${course.id}`,
+  reviews: (course) => `/dashboard/instructor/reviews?course=${course.id}`,
   coupons: (course) => `/dashboard/instructor/coupons?course=${course.id}`,
 }
 

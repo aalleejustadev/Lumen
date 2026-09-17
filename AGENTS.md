@@ -3500,6 +3500,121 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   pages already parse), and anything else reading that flag — the arrangement
   My Courses' own header button records. Six of the manage page's eight rows
   now lead somewhere.
+- `components/dashboard/instructor/reviews/` — **Reviews** at
+  `/dashboard/instructor/reviews`, from
+  `ui-design/light/dashboard/instructor/reviews-page.png`:
+  `rating-summary-card.tsx` and `rating-by-course-card.tsx` (the two-up row),
+  `reviews-board.tsx` (client — the filter row, the cards, the pager and both
+  dialogs, since one busy descriptor belongs to all of them), `review-card.tsx`,
+  `stars.tsx`, `reply-dialog.tsx`, `report-review-dialog.tsx`, composed by
+  `reviews-page.tsx`. `lib/instructor-reviews.ts` reads,
+  `lib/config/instructor-reviews.ts` is every word the page says, and
+  `lib/actions/instructor-reviews.ts` is the two writes. **Nothing on it is
+  demo data and it needed no migration** — `CourseReview`, `CourseReviewReply`
+  and `ContentReport` were already shaped for this export, docstrings and all:
+  `CourseReview.title` is described as "the headline the instructor Reviews
+  page draws above the body", `CourseReviewReply.reviewId` is unique because
+  the reply is "rendered inline beneath it", and `ContentReport`'s note says
+  reports are "filed by instructors from their Reviews page". What the seed
+  had never written was a single reply row.
+  Unlike its neighbours the composer is a **Server Component all the way down
+  to the filter row**: this export puts no control in the heading row, so the
+  header and both summary cards never reach the bundle and there is no
+  `children` hand-off — the arrangement `students-page.tsx` only needs because
+  its own export does.
+  Measured off that export at DPR 2 and verified against the render: a header
+  block **pixel-identical** to `students-page.png`'s and
+  `coupons-page__main.png`'s (so it is that header, reused rather than
+  re-measured), a two-up grid of equal **738px** cards on a 16px gap, a 42px
+  segmented track opposite a 42px course filter and a 68 x 42 **Reset**, then
+  cards on a 16px gap. Rendered against the export, every band of a review card
+  lands within 1.5px of the drawn one — header at 19/20, headline at 68/69.5,
+  body at 96.5/97, controls at 127/127 — and the card runs **244px against the
+  drawn 237.5** because the controls are built at the app's 40px baseline over
+  the export's 34px, the trade `reported-review-card.tsx` and `courses-list.tsx`
+  already made. Seven definitions decide what the page means, and the export
+  settles none of them:
+  - **Every figure is counted from `CourseReview` rows, not from
+    `Course.rating` / `Course.reviewsCount`.** The export forces it — its five
+    per-course counts (1,204 + 892 + 741 + 284 + 163) sum to **exactly** the
+    3,284 in its own headline, so the two halves of the page are one
+    population — and the star breakdown can only ever be counted, since nothing
+    stores it. A headline read off the counter above bars summing to something
+    else would look broken. Those counters are a cache of this table, so the
+    two agree on a real database and drift only in the seeded one: the trade
+    `lib/instructor-students.ts` already makes between its "Total students"
+    headline and `Course.enrollmentCount`, stated from the other side. It
+    follows that this page's average and the Avg. rating tiles on My Courses
+    and Students — weighted by `reviewsCount` — can disagree on seeded data.
+  - **"+0.2 vs last quarter" is the rating *now* against the rating as it stood
+    ninety days ago** — the average over reviews written before that date, not
+    the average *of* last quarter's reviews. That is the running-total reading
+    Platform Overview's four cards settled, and the only one under which the
+    line describes a reputation rather than a batch; it is a difference in
+    rating **points**, like uptime's percentage points. The line is **dropped,
+    not drawn as "+0.0"**, when nothing predates the window — which is what a
+    fresh account renders, verified.
+  - **The star row floors rather than rounds.** The export draws 4.7 as four
+    gold stars and one grey, which rounding turns into five. The exact figure
+    is printed beside it, so the stars are the coarse read.
+  - **"across 12 courses" counts courses that have a review**, not courses
+    owned: a rating is spread across the things that have been rated, and the
+    card beside it lists exactly those.
+  - **Only `VISIBLE`, undeleted reviews are listed or counted.** A review a
+    moderator removed or parked pending appeal is off the course page, and an
+    instructor's rating should not be dragged by a row nobody else can see. It
+    follows that reporting one changes nothing visible here until an admin
+    decides, which is why **Report goes inert with the reason on it** once any
+    open report exists — the treatment `user-row-actions.tsx` gives a learner's
+    "View profile", and `reportReview` re-checks it, so hiding it is not the
+    guard.
+  - **"You replied" is a status, not a control, and there is no edit path.**
+    `CourseReviewReply` is unique per review and the export draws no edit
+    affordance; the reply is already on screen, which is the check that
+    matters. The dialog says out loud that it is public, because it is the one
+    thing an instructor writes here that a stranger reads.
+  - **"Rating by course" rows are not links.** The export draws no chevron or
+    other affordance — the rule `help-topic-card.tsx` states — and the course
+    filter directly beneath the card is how you narrow to one, so a row that
+    navigated would be a second way to do what the filter already does.
+- **A `groupBy` has no ordering guarantee, and "Rating by course" proved it.**
+  Two courses holding the same number of reviews swapped places between two
+  renders of identical data until the sort was tie-broken on `courseId` —
+  caught in the browser, invisible to a typecheck, and exactly why
+  `Category.order` is tie-broken on `name`.
+- **Both writes call `router.refresh()` as well as revalidating.** They name
+  `/dashboard/instructor` as a layout, which is what moves the manage page's
+  Reviews badge — but it does not re-render the open page, so a posted reply
+  left the card still offering **Reply** until the next navigation. Seen before
+  and after in the browser; the same fix `publish-toggle.tsx` and the editor's
+  Coupons step both record for this route group.
+- **The report dialog's reasons are a radio group and its labels are
+  `reportReasonBadge`'s**, read rather than written out again, so the pill the
+  console's queue draws on a report is word for word what the instructor
+  picked. A single enum column cannot hold a multi-select, which is the
+  opposite call from `request-changes-dialog.tsx`, whose reasons really are a
+  list. Neither dialog draws a Cancel, per the standing rule. The dialog also
+  states the platform's rule — reviews are never removed for being critical —
+  in the same words the admin queue's lead uses, so the two sides of one
+  decision are not promised different things.
+- **The seed writes review replies, and every other review gets one**
+  (`REVIEW_REPLIES`, written in both `seedReviews` and
+  `seedDeveloperWorkspace`). That alternation is the export's own down its four
+  cards. Unlike `seedAuditLog` this is not standing in for a missing source —
+  an instructor pressing **Reply** is the only thing that emits one — but the
+  export draws two states and a database with no `CourseReviewReply` row
+  anywhere opens the page on only one of them, the reading `seedCommunity`
+  settled for its own tags and hearts. The author is always the course's own
+  instructor, since the block claims so under an `Instructor` pill, and a reply
+  never predates the review it answers or lands in the future.
+  **Re-run `npm run db:seed` to see it.**
+- **The Reviews row in `instructorNav` is `built: true`**, which lights up the
+  sidebar row and the manage page's Reviews row at once (now in
+  `manageRowHref`, filtered through the `?course=` this page already parses).
+  **No badge**, because the sidebar export draws none on it: unreplied reviews
+  are work waiting, but not the way an unanswered question is, and the manage
+  page's own row already counts them per course. Seven of the manage page's
+  eight rows now lead somewhere; Analytics is the last.
 - `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
   from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
   `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New
