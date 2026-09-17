@@ -3879,6 +3879,129 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   work waiting on anybody, and the sidebar export draws none. The manage page
   gains nothing — Revenue is a whole-account surface with no per-course view,
   which is why `manageGroups` never had a row for it.
+- `components/dashboard/certificates/` — **Certificates** at
+  `/dashboard/certificates`, from
+  `ui-design/light/dashboard/student/certificates-page.png`:
+  `certificate-card.tsx`, `certificate-actions.tsx` (client — Share and PDF),
+  `certificates-pager.tsx` (client — see below), composed by
+  `certificates-page.tsx`. `lib/certificates.ts` reads and
+  `lib/config/certificates.ts` is every word both it and the public
+  verification page say. **It has no writes** — nothing on it changes a row —
+  and it is the **first student surface that reads real rows for everything**
+  rather than a config file.
+  **Nothing on it is demo data and it needed no migration.** `Certificate` was
+  shaped for this export down to the sentences: `serial` is "the printed ID,
+  human-facing and quoted on the card, so it is stored rather than derived from
+  the cuid", and `publicSlug` is "the Share button's destination — a public
+  verification page, so it must not be guessable from the serial". What nothing
+  had was a single row.
+  Measured off that export at DPR 2 and verified against the render: the
+  dashboard's usual page inset, a header block **pixel-identical** to the four
+  instructor pages' (so it is that header, reused rather than re-measured), a
+  three-up `CountCard` row on an **18px** gap, then a two-up grid of **730px**
+  cards on an 18px gap — a **149px** banner on 26px padding over a body on 26px
+  padding. **`CountCard`, not `StatCard`**: this export draws the figure
+  *above* its label beside a 44px tile and no delta, which is the count tile's
+  anatomy; measured, its cards are the same 80px on the same 20px inset.
+  Five definitions decide what the page means, and the export settles none of
+  them:
+  - **"Certificates Earned" is the row count**, which makes it the one tile
+    that is also the length of the list beneath it — so the headline and the
+    pager's total can never disagree.
+  - **"Hours Completed" is the certified courses' own length**, summed from
+    `Course.totalDurationMinutes`, not watch time. A certificate attests to
+    finishing a course, so the hours it is worth are the course's, and that is
+    the figure a learner puts on a CV; watch time is
+    `Enrollment.progressPercent`' business and the instructor's Analytics page
+    already draws it under its own name.
+  - **"Longest Streak" is the longest run of consecutive days on which any
+    lesson was completed**, over `LessonProgress.completedAt` — the only
+    per-day record a learner has. Deliberately not a streak of *certificates*
+    (nobody finishes a course a day) and not of sessions (`Session.updatedAt`
+    is refreshed by the framework, not by studying). Days are counted in UTC so
+    the run cannot break when somebody travels, and the tile takes a **string**
+    so it can read "46d": a streak is a duration, and "46" beside "Longest
+    Streak" would read as a tally of streaks.
+  - **The grade pill is dropped when there is none.** `Certificate.grade` is
+    nullable and a credential is valid without one; an empty circle reads as a
+    missing value rather than an absent grade.
+  - **Newest first**, because a credential list is a CV and the thing you
+    earned most recently is the thing you hand over.
+- **The two buttons on a card both lead somewhere real, and one new route is
+  what makes that true.** `Certificate.publicSlug`'s own docstring names the
+  destination — "a public verification page" — so `/certificates/[slug]` is
+  built: `app/(marketing)/certificates/[slug]/` over
+  `components/certificates/`. It has **no export** and is drawn in the app's
+  own vocabulary, the way `new-course-form.tsx` was.
+  - **Share copies that link rather than navigating** — what a learner wants
+    from a Share button on their own credential is the URL. `navigator.share`
+    is used where the browser has it, the clipboard is the fallback, and a
+    share the person dismissed (`AbortError`) is swallowed rather than
+    toasted.
+  - **PDF opens the same page with `?print=1`**, which makes it call
+    `window.print()` once on arrival — where "Save as PDF" lives.
+    `Certificate.pdfStorageKey` is the eventual home for a generated file
+    ("rendered once on issue rather than on every download", per its own note)
+    and nothing writes one; printing the credential is the honest version until
+    something does, and **the button's destination does not change when it
+    lands**. The flag exists because the *shared* link is the same URL without
+    it: somebody checking a credential wants to read it, not be ambushed by a
+    print dialog.
+  - **The verification page reads no session and states one fact about a
+    person: their name.** That is what it is for — an employer following the
+    link has no Lumen account — and it is why the slug is separate from the
+    printed serial, so quoting an ID on a CV does not hand over a working link
+    to it. A bad slug renders a page rather than a 404, because somebody
+    handed a link by a candidate needs to be told which it is.
+- **`Pagination` cannot be rendered from a Server Component**, and this page is
+  where that surfaced. `components/ui/pagination.tsx` carries no `"use client"`
+  directive, so an RSC parent pulls it — and `Button`, and Base UI's
+  `useRender` underneath — into the *server* React runtime, which takes a
+  different path: the server emitted `data-slot="button"` on the anchor and
+  dropped the chevron's props where the client produced
+  `data-slot="pagination-link"` and a full `<svg>`. React reported a hydration
+  mismatch and regenerated the tree. Every other paginated page here renders
+  its pager inside a client board that also owns tabs or a search, so nothing
+  had ever pointed an RSC at it; this page has no filters, which is exactly how
+  it showed up. The fix is the `certificates-pager.tsx` boundary, **not** a
+  `"use client"` on the generated file, which `npx shadcn@latest add pagination`
+  would revert. Seen in the browser before and after.
+  That pager also takes a **`basePath` string, not a `hrefFor` function** — a
+  function cannot be serialized across the server→client boundary, the trap
+  `settings-nav-card.tsx` records about a nav item's `icon`, and it builds,
+  typechecks and lints cleanly either way.
+- **The student sidebar's Certificates row had been a live link onto a 404.**
+  `DashboardNavItem.built` defaults to *built*, and neither `dashboardNav` nor
+  the command palette's copy of the row carried the flag — the exact failure
+  that flag exists to prevent, and the one `/dashboard/help` is still in.
+- **The seed writes certificates and the lesson progress behind them**
+  (`seedCertificates`). Nothing in the app issues one — there is no completion
+  flow — so this is the stand-in `seedAuditLog` and `seedNotifications` already
+  are. Four things about it:
+  - **It runs last and reads the database rather than taking rows in.**
+    Whether an enrolment completed is decided inside `seedPurchases`'
+    `createMany` by a roll nothing else sees, and `seedDeveloperWorkspace` adds
+    more afterwards; querying for `completedAt != null` is the only way to
+    catch both.
+  - **It grants every admin account five completed courses of its own**, for
+    the reason `seedNotifications` gives: the account a developer signs in with
+    is usually their own, and every figure on this page hangs off the signed-in
+    *learner* — so the page opened completely empty on the one account they
+    use. Five rather than one or two because the page pages **four** at a time:
+    at three the pager never appears and the footer's "Showing 1–4 of 6" could
+    not be looked at.
+  - **A lesson is completed on its own day**, walking back from the enrolment's
+    completion, which is what gives the streak something to count — and
+    `Enrollment.completedLessons` is then set to the rows that were actually
+    written, the rule `CourseQuestion.voteCount` learned the hard way. These
+    are the **first `LessonProgress` rows** the seed has ever produced.
+  - **`publicSlug` is two FNV-1a passes, not a `hash * 31` loop.** The
+    enrolment ids it hashes differ only in their last character, and the naive
+    version produced slugs that differed only in their last character too —
+    technically unique and exactly the "guessable" that column's docstring
+    rules out. The serial's middle two letters come from the course's category
+    the way the export's own four do (`web-development` → WD, `design` → DS,
+    `finance` → FN). **Re-run `npm run db:seed` to see any of it.**
 - `components/dashboard/instructor/coupons/` — `/dashboard/instructor/coupons`,
   from `ui-design/light/dashboard/instructor/coupons-page__main.png` and
   `create-coupon__dialog.png`: `coupons-board.tsx` (client — the title's New

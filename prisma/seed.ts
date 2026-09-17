@@ -1569,6 +1569,242 @@ async function seedReviews(
 }
 
 // ---------------------------------------------------------------------------
+// 8b · Certificates, and the lesson progress behind them
+// ---------------------------------------------------------------------------
+
+/**
+ * The credentials `/dashboard/certificates` lists, and the `LessonProgress`
+ * rows that make its **Longest streak** tile a real number.
+ *
+ * Nothing in the app issues a certificate yet — there is no completion flow —
+ * so this is the stand-in `seedAuditLog` and `seedNotifications` already are
+ * for their own sources. Three things about it are load-bearing:
+ *
+ *  - **It runs last and reads the database rather than taking rows in.**
+ *    Whether an enrolment completed is decided inside `seedPurchases`'
+ *    `createMany` by a roll this function never sees, and
+ *    `seedDeveloperWorkspace` adds more afterwards. Querying for
+ *    `completedAt != null` is the only way to catch both.
+ *  - **It grants admin accounts a few completed courses of their own.** Every
+ *    figure on that page hangs off the signed-in *learner*, and a developer's
+ *    account is an admin who has bought nothing — so the page opened
+ *    completely empty on the one account they actually use. The call
+ *    `seedNotifications` and `seedDeveloperWorkspace` both make.
+ *  - **A lesson is completed on its own day**, walking backwards from the
+ *    enrolment's completion. That is what gives the streak something to count:
+ *    it is the longest run of consecutive days on which *any* lesson was
+ *    finished, so a twelve-lesson course is a twelve-day run and two courses
+ *    whose windows touch chain into a longer one. `completedLessons` is then
+ *    set to the rows that were actually written — a counter is the number of
+ *    rows, never the figure the seed asked for.
+ */
+async function seedCertificates() {
+  // **Every admin account, not the seeded one.** The account a developer signs
+  // in with is usually their own and carries no `seed_` prefix — the same
+  // reason `seedNotifications` queries for its recipients rather than taking
+  // the list `seedLearners` returns. The rows written below still carry the
+  // prefix, so `clearSeededRows` reclaims them from a real account as cleanly
+  // as from a seeded one.
+  const admins = await db.user.findMany({
+    where: { role: "admin" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  })
+
+  const catalog = await db.course.findMany({
+    where: { id: { startsWith: SEED }, status: "PUBLISHED" },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+      categoryId: true,
+      sections: {
+        orderBy: { order: "asc" },
+        select: {
+          lessons: { orderBy: { order: "asc" }, select: { id: true } },
+        },
+      },
+    },
+  })
+  if (catalog.length === 0) return 0
+
+  // **Granted, not bought** — no order was placed, which is the distinction
+  // `seedConversations` draws about its own enrolments. Staggered so the
+  // day-sets below chain rather than overlap into one short run.
+  const grants: Prisma.EnrollmentCreateManyInput[] = []
+  for (const [adminIndex, admin] of admins.entries()) {
+    const held = new Set(
+      (
+        await db.enrollment.findMany({
+          where: { userId: admin.id },
+          select: { courseId: true },
+        })
+      ).map((row) => row.courseId)
+    )
+    const open = catalog.filter((course) => !held.has(course.id))
+    for (const [index, course] of open.slice(0, ADMIN_CERTIFICATES).entries()) {
+      const finishedAt = ago((9 + index * 26 + adminIndex) * DAY)
+      grants.push({
+        id: `${SEED}enr_cert_${pad(adminIndex, 2)}${pad(index, 2)}`,
+        userId: admin.id,
+        courseId: course.id,
+        source: "ADMIN_GRANT",
+        progressPercent: 100,
+        completedAt: finishedAt,
+        lastAccessedAt: finishedAt,
+        createdAt: new Date(finishedAt.getTime() - 40 * DAY),
+      })
+    }
+  }
+  await db.enrollment.createMany({ data: grants })
+
+  const completed = await db.enrollment.findMany({
+    where: { completedAt: { not: null }, course: { id: { startsWith: SEED } } },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+      userId: true,
+      courseId: true,
+      completedAt: true,
+      course: { select: { categoryId: true } },
+    },
+  })
+
+  const lessonsByCourse = new Map(
+    catalog.map((course) => [
+      course.id,
+      course.sections.flatMap((section) =>
+        section.lessons.map((lesson) => lesson.id)
+      ),
+    ])
+  )
+  const categorySlug = new Map(
+    (await db.category.findMany({ select: { id: true, slug: true } })).map(
+      (row) => [row.id, row.slug]
+    )
+  )
+
+  const progress: Prisma.LessonProgressCreateManyInput[] = []
+  const certificates: Prisma.CertificateCreateManyInput[] = []
+
+  for (const [index, enrollment] of completed.entries()) {
+    const lessons = lessonsByCourse.get(enrollment.courseId) ?? []
+    if (lessons.length === 0) continue
+    const finishedAt = enrollment.completedAt!
+
+    // One lesson a day, ending on the day the course was finished — see the
+    // note above. `secondsWatched` is what `Enrollment.progressPercent`'s own
+    // docstring says that column is computed from, so it is written rather
+    // than left at zero.
+    lessons.forEach((lessonId, order) => {
+      const day = new Date(
+        finishedAt.getTime() - (lessons.length - 1 - order) * DAY
+      )
+      progress.push({
+        id: `${SEED}lp_${pad(index, 4)}_${pad(order, 3)}`,
+        enrollmentId: enrollment.id,
+        lessonId,
+        secondsWatched: 540,
+        completedAt: day,
+      })
+    })
+
+    await db.enrollment.update({
+      where: { id: enrollment.id },
+      data: { completedLessons: lessons.length },
+    })
+
+    const score = 78 + ((index * 7) % 22)
+    certificates.push({
+      id: `${SEED}cert_${pad(index, 4)}`,
+      serial: `LMN-${categoryCode(
+        categorySlug.get(enrollment.course.categoryId) ?? "general"
+      )}-${1000 + ((index * 733) % 9000)}`,
+      // **Not derived from the serial.** `Certificate.publicSlug`'s own note
+      // says the share link must not be guessable from the printed ID, so it
+      // is a random-looking token of its own.
+      publicSlug: `${token(enrollment.id)}${pad(index, 2)}`,
+      enrollmentId: enrollment.id,
+      userId: enrollment.userId,
+      courseId: enrollment.courseId,
+      grade: gradeFor(score),
+      scorePercent: score,
+      // `pdfStorageKey` is deliberately null: nothing renders a PDF yet, and
+      // the page prints the credential rather than claiming a stored file.
+      issuedAt: finishedAt,
+    })
+  }
+
+  await db.lessonProgress.createMany({ data: progress })
+  await db.certificate.createMany({ data: certificates })
+
+  return certificates.length
+}
+
+/**
+ * How many completed courses each admin account is handed, so the page is not
+ * empty on the account a developer signs in with.
+ *
+ * Five rather than a token one or two, because the page pages **four** at a
+ * time: at three the pager never appears and the footer's "Showing 1–4 of 6"
+ * — the one line the export draws of it — could not be looked at. It is
+ * capped by how many published courses the seed has left unenrolled, so a
+ * small catalog simply produces fewer.
+ */
+const ADMIN_CERTIFICATES = 5
+
+/**
+ * "WD", "DS", "FN" — the two letters in the middle of a printed serial, from
+ * the course's category.
+ *
+ * The export's own four are `LMN-DS-4821`, `LMN-WD-3390`, `LMN-AI-2274` and
+ * `LMN-FN-1180`: a multi-word slug takes the initials of its first two words
+ * (web-development → WD) and a single word its first and third letters
+ * (design → DS, finance → FN), which is what reproduces all four.
+ */
+function categoryCode(slug: string): string {
+  const words = slug.split("-").filter(Boolean)
+  if (words.length >= 2) {
+    return `${words[0]![0]}${words[1]![0]}`.toUpperCase()
+  }
+  const word = words[0] ?? "xx"
+  return `${word[0] ?? "x"}${word[2] ?? word[1] ?? "x"}`.toUpperCase()
+}
+
+/** A–F from the recorded score, which is the only thing `Certificate.grade`
+ *  can honestly be derived from. */
+function gradeFor(score: number): string {
+  if (score >= 95) return "A+"
+  if (score >= 88) return "A"
+  if (score >= 82) return "B+"
+  if (score >= 75) return "B"
+  return "C"
+}
+
+/**
+ * A short opaque token for `Certificate.publicSlug`, deterministic per
+ * enrolment so a re-run does not invalidate a link somebody pasted somewhere.
+ *
+ * **Two FNV-1a passes with different offsets, not one `hash * 31` loop.** The
+ * enrolment ids this is fed differ only in their last character or two
+ * (`seed_enr_cert_0000`, `…0001`), and the naive version produced tokens that
+ * differed only in their last character too — technically unique and exactly
+ * the "guessable" that `publicSlug`'s own docstring rules out. Mixing twice
+ * and interleaving the halves is what makes a neighbouring id land somewhere
+ * else entirely.
+ */
+function token(seed: string): string {
+  const fnv = (offset: number) => {
+    let hash = offset
+    for (const character of seed) {
+      hash ^= character.charCodeAt(0)
+      hash = Math.imul(hash, 16777619) >>> 0
+    }
+    return hash.toString(36).padStart(7, "0")
+  }
+  return `${fnv(2166136261)}${fnv(2166136261 ^ 0x5bf03635)}`.slice(0, 12)
+}
+
+// ---------------------------------------------------------------------------
 // 9 · Instructor applications
 // ---------------------------------------------------------------------------
 
@@ -3791,6 +4027,11 @@ async function main() {
 
   const follows = await seedFollows(learners, instructors)
   console.log(`instructor follows ${follows}`)
+
+  // **After `seedDeveloperWorkspace`**, because it reads the database for
+  // every completed enrolment and that function writes more of them.
+  const certificates = await seedCertificates()
+  console.log(`certificates      ${certificates}`)
 
   await seedUptime()
   const auditEntries = await seedAuditLog(
