@@ -11,17 +11,16 @@ import { getStripe } from "@/lib/stripe"
  * Reads for `/dashboard/settings/billing`. Writes are in
  * `lib/actions/billing.ts`.
  *
- * Everything on that page is real: saved cards and the plan come from Stripe,
- * the transaction table comes from our own `order` rows. There is no demo
- * data anywhere in here — an account that has never paid for anything gets
- * empty states, which is the honest answer and what almost every account will
- * see today.
+ * Everything on that page is real. There is no demo data anywhere in here — an
+ * account that has never paid for anything gets empty states, which is the
+ * honest answer.
  *
- * The one thing worth knowing before changing any of it: **Lumen has no
- * subscription product.** Courses are one-time `mode: "payment"` purchases, so
- * `subscription` is `null` for every real account and the header renders its
- * "no plan" state. It is still read from Stripe rather than stubbed, so the
- * day a plan exists the page shows it without a change here.
+ * **The transaction table has two sources, because the money does.** A course
+ * is a one-time `mode: "payment"` Checkout Session and lands as an `order`
+ * row; Lumen Business is a subscription and its payments exist only as Stripe
+ * **invoices** — there is no order behind a renewal, and there never will be.
+ * Reading orders alone is why somebody who had just paid for a plan saw a
+ * table with no sign of it. The two are merged and sorted by date.
  */
 
 export type BillingCard = {
@@ -281,15 +280,91 @@ async function readCards(
 }
 
 /**
- * The transaction table. Our own `order` rows, not Stripe's charges: an order
- * knows *what course* was bought (Stripe only knows a line-item name we sent
- * it), and it exists for abandoned checkouts too, which is what makes the
+ * Stripe invoice statuses onto `OrderStatus`.
+ *
+ * Reusing the order enum rather than widening `BillingTransaction.status` is
+ * what lets `billing-transactions.tsx` keep one `STATUS_STYLES` map: a row is
+ * a row, and "this payment succeeded" means the same thing whether it bought a
+ * course or a month of the plan. `void` and `uncollectible` are both money
+ * that never arrived, which is what FAILED says; a `draft` invoice has not
+ * been issued to anybody and is dropped entirely rather than shown as
+ * anything.
+ */
+const INVOICE_STATUS: Record<string, OrderStatus> = {
+  paid: "PAID",
+  open: "PENDING",
+  void: "FAILED",
+  uncollectible: "FAILED",
+}
+
+/**
+ * Subscription payments, which exist **only** in Stripe.
+ *
+ * A renewal has no Checkout Session and no `order` row — Stripe bills the
+ * saved card and writes an invoice — so this is not a duplicate of the order
+ * table, it is the other half of it. Invoices are also the thing a customer
+ * means by "my receipt": each carries a hosted PDF, which is why the id is
+ * kept as the row key.
+ *
+ * Fails soft: an outage on this call costs the plan's rows, not the page. The
+ * course orders beside them still render.
+ */
+async function readInvoices(
+  stripe: Stripe,
+  customerId: string,
+  take: number
+): Promise<BillingTransaction[]> {
+  const invoices = await stripe.invoices
+    .list({ customer: customerId, limit: Math.min(take, 100) })
+    .catch(() => null)
+  if (!invoices) return []
+
+  const rows: BillingTransaction[] = []
+  for (const invoice of invoices.data) {
+    const status = INVOICE_STATUS[invoice.status ?? ""]
+    // A draft has not been issued and is nobody's transaction yet.
+    if (!status) continue
+
+    const line = invoice.lines?.data?.[0]
+    rows.push({
+      id: invoice.id ?? `invoice_${invoice.number}`,
+      // Stripe's own human-facing number, which is what appears on the
+      // receipt and what support will be asked about — far better than
+      // hashing an id the way an order has to.
+      reference: invoice.number ?? "—",
+      // The line's own description ("1 × Lumen Business (at $299.00 / year)"),
+      // which is what Stripe prints on the invoice. `plan.nickname` was the
+      // other candidate and is not on the current `InvoiceLineItem` type at
+      // all — `plan` is the deprecated object Prices replaced.
+      product: line?.description ?? "Lumen Business",
+      status,
+      // `status_transitions.paid_at` is when the money actually moved; an
+      // unpaid invoice is dated by when it was issued.
+      date: new Date(
+        (invoice.status_transitions?.paid_at ?? invoice.created) * 1000
+      ),
+      amountCents: invoice.amount_paid || invoice.amount_due,
+      currency: invoice.currency,
+    })
+  }
+  return rows
+}
+
+/**
+ * Course purchases. Our own `order` rows rather than Stripe's charges: an
+ * order knows *what course* was bought (Stripe only knows a line-item name we
+ * sent it), and it exists for abandoned checkouts too, which is what makes the
  * `pending` rows in the export real rather than decorative.
+ *
+ * **A `pending` row is a real abandoned checkout, not demo data**, and it stays
+ * pending until Stripe says the session expired — so a run of them means the
+ * webhook was not receiving `checkout.session.expired` at the time, not that
+ * the table is showing something invented.
  *
  * `product` is the order's own snapshotted item titles — see `OrderItem`'s
  * note on why those are stored rather than looked up.
  */
-async function readTransactions(
+async function readOrders(
   userId: string,
   take: number
 ): Promise<BillingTransaction[]> {
@@ -326,13 +401,31 @@ async function readTransactions(
   }))
 }
 
+/** Both sources, newest first, capped as one list. */
+async function readTransactions(
+  userId: string,
+  customerId: string | null,
+  take: number
+): Promise<BillingTransaction[]> {
+  const stripe = getStripe()
+  const [orders, invoices] = await Promise.all([
+    readOrders(userId, take),
+    stripe && customerId ? readInvoices(stripe, customerId, take) : [],
+  ])
+
+  return [...orders, ...invoices]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, take)
+}
+
 /**
  * Everything the billing page renders, in one round trip per source.
  *
- * Returns `configured: false` with empty lists when there is no Stripe key,
- * the same posture `lib/stripe.ts` and `lib/storage.ts` take: the page says
- * billing isn't configured instead of throwing. The transaction table is
- * still filled in that case — it comes from our database, not Stripe.
+ * Returns `configured: false` when there is no Stripe key, the same posture
+ * `lib/stripe.ts` and `lib/storage.ts` take: the page says billing isn't
+ * configured instead of throwing. **The table still fills in that case** —
+ * course orders come from our database, and only the subscription invoices
+ * beside them need Stripe.
  */
 export async function getBilling(
   take = TRANSACTIONS_LIMIT
@@ -341,9 +434,8 @@ export async function getBilling(
   if (!session) return null
 
   const stripe = getStripe()
-  const transactions = await readTransactions(session.user.id, take)
-
   if (!stripe) {
+    const transactions = await readTransactions(session.user.id, null, take)
     return { configured: false, plan: null, cards: [], transactions }
   }
 
@@ -352,13 +444,11 @@ export async function getBilling(
   // simply has no cards and no plan; one is created the first time they add a
   // card or open checkout.
   const customerId = await readStripeCustomerId(session.user.id)
-  if (!customerId) {
-    return { configured: true, plan: null, cards: [], transactions }
-  }
 
-  const [plan, cards] = await Promise.all([
-    readPlan(stripe, customerId),
-    readCards(stripe, customerId),
+  const [transactions, plan, cards] = await Promise.all([
+    readTransactions(session.user.id, customerId, take),
+    customerId ? readPlan(stripe, customerId) : null,
+    customerId ? readCards(stripe, customerId) : [],
   ])
 
   return { configured: true, plan, cards, transactions }

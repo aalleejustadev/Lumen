@@ -4,20 +4,32 @@ import { StarIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { AddToCartButton } from "@/components/dashboard/courses/add-to-cart-button"
-import type { BrowseCourse } from "@/lib/config/browse-courses"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
+import type { CatalogCourse } from "@/lib/config/catalog-shape"
 
 /**
  * A catalog card from `browse-courses-page.png`. Art is the per-category
- * gradient + icon used across the app (see `lib/config/browse-courses.ts`)
- * rather than the export's photos — the category badge overlay is the one
- * piece of that treatment worth keeping, so it's carried over as-is.
+ * gradient + icon used across the app rather than the export's photos — the
+ * category badge overlay is the one piece of that treatment worth keeping, so
+ * it's carried over as-is. An instructor-uploaded cover wins over the gradient
+ * when there is one.
+ *
+ * **The glyph is resolved here, from `categorySlug`.** The row arrives from a
+ * Server Component and a function cannot cross that boundary, so the card
+ * cannot be handed an icon — the trap `settings-nav-card.tsx` records.
  *
  * The image/title/meta block is one `Link` to the sale page
  * (`/dashboard/courses/[slug]`, see `course-sale-page.tsx`); price and "Add"
  * sit outside it so adding to cart doesn't also navigate — a `<button>`
  * nested inside an `<a>` would.
  */
-function CourseCard({ course }: { course: BrowseCourse }) {
+function CourseCard({ course }: { course: CatalogCourse }) {
+  const Icon =
+    databaseCategoryIcons[course.categorySlug] ?? FALLBACK_CATEGORY_ICON
+
   return (
     <Card className="gap-0 overflow-hidden p-0 transition-shadow hover:shadow-card">
       <Link
@@ -27,9 +39,22 @@ function CourseCard({ course }: { course: BrowseCourse }) {
         <div
           className={`relative grid aspect-[725/276] place-items-center bg-gradient-to-br ${course.art}`}
         >
-          <course.icon className="size-12 text-white/25" />
+          {course.thumbnailUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- the Neon
+               storage endpoint is branch-scoped, so it cannot be pinned in
+               `next.config.ts`' remotePatterns and `next/image` throws on an
+               unconfigured host. The same call `platform-controls-form.tsx`
+               records for its branding preview. */
+            <img
+              src={course.thumbnailUrl}
+              alt=""
+              className="absolute inset-0 size-full object-cover"
+            />
+          ) : (
+            <Icon className="size-12 text-white/25" />
+          )}
           <Badge className="absolute top-3 left-3 h-[22px] bg-black/55 px-2.5 text-[11px] font-medium text-white backdrop-blur-sm">
-            {course.category}
+            {course.categoryName}
           </Badge>
         </div>
 

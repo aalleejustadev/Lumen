@@ -1,5 +1,6 @@
 import { EnrolledCoursesSection } from "@/components/dashboard/learning/enrolled-courses-section"
 import { LearningStats } from "@/components/dashboard/learning/learning-stats"
+import { getMyLearning } from "@/lib/learning"
 
 /**
  * `/dashboard/learning`, from
@@ -11,8 +12,15 @@ import { LearningStats } from "@/components/dashboard/learning/learning-stats"
  * Unlike `browse-courses.tsx` this composer is a Server Component: only the
  * tab/pagination state below needs the client, so the heading and stats never
  * reach the browser bundle.
+ *
+ * **It reads the learner's own enrolments.** This page used to render five
+ * hand-written enrolments from `lib/config/my-learning.ts` resolved against
+ * the static catalog, so somebody who had actually bought a course saw a demo
+ * shelf that nothing they did could change.
  */
-function MyLearning() {
+async function MyLearning() {
+  const { courses, stats } = await getMyLearning()
+
   return (
     <div>
       <div>
@@ -23,11 +31,11 @@ function MyLearning() {
       </div>
 
       <div className="mt-6">
-        <LearningStats />
+        <LearningStats stats={stats} />
       </div>
 
       <div className="mt-6">
-        <EnrolledCoursesSection />
+        <EnrolledCoursesSection courses={courses} />
       </div>
     </div>
   )

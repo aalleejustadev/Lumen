@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth"
 import { getOrCreateStripeCustomer } from "@/lib/billing"
 import { getCart } from "@/lib/cart"
 import { db } from "@/lib/db"
+import { getPlatformSettings } from "@/lib/admin/settings"
 import { getStripe } from "@/lib/stripe"
 
 /**
@@ -211,6 +212,10 @@ export async function createCheckoutSession(): Promise<string> {
     }
   }
 
+  // The platform's share **in force today**, snapshotted onto every item
+  // below so a payout computed later uses the rate at purchase.
+  const { defaultRevenueShareBps: shareBps } = await getPlatformSettings()
+
   const checkout = await stripe.checkout.sessions.create({
     ui_mode: "elements",
     mode: "payment",
@@ -236,10 +241,10 @@ export async function createCheckoutSession(): Promise<string> {
     excluded_payment_method_types: [...EXCLUDED_PAYMENT_METHODS],
     line_items: cart.lines.map((line) => ({
       quantity: 1,
-      // Inline `price_data` rather than a stored Stripe Price id: courses
-      // live in `lib/config/browse-courses.ts` and have never been pushed to
-      // Stripe as Products. When the instructor-authoring flow lands and
-      // `Course` holds real rows, create Prices there and pass ids here.
+      // Inline `price_data` rather than a stored Stripe Price id: courses are
+      // `Course` rows an instructor authors and have never been pushed to
+      // Stripe as Products. Create real Prices there if the catalog ever needs
+      // Stripe-side reporting per course.
       price_data: {
         currency: "usd",
         unit_amount: toCents(line.course.price),
@@ -269,6 +274,18 @@ export async function createCheckoutSession(): Promise<string> {
       items: {
         create: cart.lines.map((line) => ({
           courseSlug: line.course.slug,
+          // **The id, not just the slug.** Fulfilment enrols the buyer on
+          // each item, and resolving a slug at that point is a second lookup
+          // that can miss if the course was renamed in between.
+          courseId: line.course.id,
+          // **Both snapshots, taken now.** `OrderItem`'s own note is explicit:
+          // the platform's share is an editable admin setting, so a payout
+          // computed two years later must use the rate that was in force at
+          // purchase rather than today's. Without these two columns the sale
+          // could never be turned into an `InstructorEarning` at all, which is
+          // why Revenue & Payouts read zero for every real sale.
+          instructorId: line.course.instructorId,
+          revenueShareBps: shareBps,
           title: line.course.title,
           unitAmount: toCents(line.course.price),
         })),

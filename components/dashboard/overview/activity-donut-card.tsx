@@ -4,17 +4,23 @@ import { Cell, Pie, PieChart } from "recharts"
 
 import { Card } from "@/components/ui/card"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
-import { activityBreakdown } from "@/lib/config/dashboard-overview"
-
-const chartConfig: ChartConfig = Object.fromEntries(
-  activityBreakdown.map((slice) => [
-    slice.label,
-    { label: slice.label, color: slice.color },
-  ])
-) satisfies ChartConfig
+import type { ActivitySlice } from "@/lib/config/dashboard-overview-shape"
 
 /** How the week's time split across watching, reading and quizzes. */
-function ActivityDonutCard() {
+function ActivityDonutCard({
+  activityBreakdown,
+}: {
+  activityBreakdown: ActivitySlice[]
+}) {
+  // Built from the slices rather than at module scope: they are the learner's
+  // own counts now, not a constant.
+  const chartConfig: ChartConfig = Object.fromEntries(
+    activityBreakdown.map((slice) => [
+      slice.label,
+      { label: slice.label, color: slice.color },
+    ])
+  ) satisfies ChartConfig
+
   return (
     <Card className="gap-0 p-6.5 ring-border">
       <h2 className="text-base">Most Activity</h2>

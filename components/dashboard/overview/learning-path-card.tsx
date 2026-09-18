@@ -2,7 +2,7 @@ import { GitBranchPlusIcon } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { learningPaths } from "@/lib/config/dashboard-overview"
+import type { LearningPath } from "@/lib/config/dashboard-overview-shape"
 
 const toneClass = {
   success: "[&_[data-slot=progress-indicator]]:bg-success",
@@ -14,7 +14,11 @@ const toneClass = {
  * `bg-soft` tint — measured off the export, the interior is pure white, same
  * as the parent card, just outlined) rather than sitting flush on the card.
  */
-function LearningPathCard() {
+function LearningPathCard({
+  learningPaths,
+}: {
+  learningPaths: LearningPath[]
+}) {
   return (
     <Card className="gap-0 p-6.5 ring-border">
       <div className="flex items-center justify-between">

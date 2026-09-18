@@ -2,6 +2,7 @@ import { cache } from "react"
 
 import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { userHasBusinessPlan } from "@/lib/subscription"
 
 /**
  * Who may see a database course's **paid** lesson content — the uploaded
@@ -13,7 +14,7 @@ import { db } from "@/lib/db"
  * and a page that serves that to any signed-in visitor would give the course
  * away to anybody who guessed its URL.
  *
- * Three answers are yes:
+ * Four answers are yes:
  *
  *  - **An `Enrollment` row for this viewer.** The model has no status column,
  *    so a row is access; a refund that should revoke it would delete the row.
@@ -21,6 +22,19 @@ import { db } from "@/lib/db"
  *    course they are building rather than a locked one.
  *  - **An admin**, who reviews courses in the console and has to be able to
  *    watch one.
+ *  - **A live Lumen Business subscription**, when the course is PUBLISHED and
+ *    carries `Course.includedInBusiness`. That is the plan's entire promise —
+ *    "All courses unlocked", which `lib/config/pricing.ts` has advertised
+ *    since before anything could be bought — and it is what that column was
+ *    added for; nothing read it until now. Two conditions rather than one:
+ *    **PUBLISHED**, because a subscription must not open a draft or a course
+ *    the console rejected, which no learner was ever meant to see; and the
+ *    **opt-in flag**, which is per course and defaults true, so an instructor
+ *    can keep one out of the plan. It grants *access*, not enrolment — no
+ *    `Enrollment` row is written, so My Learning, the certificate flow and the
+ *    instructor's student list still describe people who actually enrolled.
+ *    Access ends with the plan, which is the difference between renting and
+ *    buying and is what the card's own "while your plan is active" says.
  *
  * Everyone else sees the lessons marked free preview and a lock on the rest.
  * The check runs **on the server, before the content is read**, so a locked
@@ -48,6 +62,17 @@ export const canAccessCourseContent = cache(
         select: { id: true },
       }),
     ])
-    return enrollment !== null || owned !== null
+    if (enrollment !== null || owned !== null) return true
+
+    // Asked last, and only when the cheap answers have all said no: the plan
+    // is the uncommon case, and this is two more queries on a gate that runs
+    // for every lesson on the page.
+    if (!(await userHasBusinessPlan(session.user.id))) return false
+
+    const included = await db.course.findFirst({
+      where: { id: courseId, status: "PUBLISHED", includedInBusiness: true },
+      select: { id: true },
+    })
+    return included !== null
   }
 )

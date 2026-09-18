@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { notifyCourseSubmitted } from "@/lib/notify"
 import { canTeach, getInstructorProfile } from "@/lib/instructor"
 import {
   articleWordCount,
@@ -1250,6 +1251,9 @@ export async function publishCourse(
       learningOutcomes: true,
       durationHours: true,
       thumbnailUrl: true,
+      // Named on the console's notification, so a reviewer sees who submitted
+      // without opening the course.
+      instructor: { select: { name: true } },
       sections: {
         select: { lessons: { select: { id: true, type: true, order: true } } },
       },
@@ -1316,6 +1320,17 @@ export async function publishCourse(
         category: "COURSES",
       },
     })
+  })
+
+  // **Tells the console, rather than relying on it to notice.** The sidebar
+  // badge already counted IN_REVIEW courses, but a badge is not a
+  // notification: it says how many, never which one or when. Outside the
+  // transaction, because a submission must not roll back over a feed row.
+  await notifyCourseSubmitted({
+    courseId: course.id,
+    courseTitle: course.title,
+    instructorName: course.instructor?.name ?? "An instructor",
+    instructorUserId: found.userId,
   })
 
   revalidateEditor()

@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Badge } from "@/components/ui/badge"
 import { DashboardOverview } from "@/components/dashboard/overview/dashboard-overview"
 import { getSession } from "@/lib/auth"
+import { getDashboardOverview } from "@/lib/dashboard-overview"
 import { siteConfig } from "@/lib/config/site"
 
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default async function DashboardPage() {
   const session = await getSession()
   const user = session!.user
   const firstName = user.name.split(" ")[0] || user.name
+  const overview = await getDashboardOverview()
 
   return (
     <main className="w-full px-6 py-6 md:px-8 md:py-8">
@@ -42,7 +44,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6">
-        <DashboardOverview firstName={firstName} />
+        <DashboardOverview firstName={firstName} data={overview} />
       </div>
     </main>
   )

@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { InstructorProfilePage } from "@/components/dashboard/instructors/instructor-profile-page"
-import { browseCourses } from "@/lib/config/browse-courses"
 import { siteConfig } from "@/lib/config/site"
 import { courseReturnLink } from "@/lib/course-return"
 import { db } from "@/lib/db"
@@ -58,9 +57,7 @@ export default async function InstructorPage({
   // Browse" rather than taking the profile down with it. Same reasoning as
   // `getProfileRelationship`'s own guard, which logs the cause.
   const databaseCourse =
-    typeof from === "string" &&
-    from !== "" &&
-    !browseCourses.some((course) => course.slug === from)
+    typeof from === "string" && from !== "" && !(await courseExists(from))
       ? await db.course
           .findUnique({ where: { slug: from }, select: { id: true } })
           .then((row) => row !== null)
@@ -85,4 +82,15 @@ export default async function InstructorPage({
       />
     </main>
   )
+}
+
+/** Whether `?from=` names a real course — the check that keeps a hand-edited
+ *  `?from=../../x` out of a rendered `href`. It was a lookup in the static
+ *  catalog; courses live in the database now. */
+async function courseExists(slug: string) {
+  const row = await db.course.findUnique({
+    where: { slug },
+    select: { id: true },
+  })
+  return row !== null
 }

@@ -3,6 +3,7 @@ import "server-only"
 import type Stripe from "stripe"
 
 import { db } from "@/lib/db"
+import { enrolInCourse } from "@/lib/enrolment"
 
 /**
  * Order fulfilment. Called from the Stripe webhook
@@ -36,7 +37,18 @@ export async function fulfillCheckoutSession(session: Stripe.Checkout.Session) {
 
   const order = await db.order.findUnique({
     where: { stripeSessionId: session.id },
-    include: { items: { select: { courseSlug: true } } },
+    include: {
+      items: {
+        select: {
+          id: true,
+          courseSlug: true,
+          courseId: true,
+          instructorId: true,
+          revenueShareBps: true,
+          unitAmount: true,
+        },
+      },
+    },
   })
 
   if (!order) {
@@ -79,6 +91,48 @@ export async function fulfillCheckoutSession(session: Stripe.Checkout.Session) {
     }),
   ])
 
+  // **Access is granted here, and only once the money is in.** This is what
+  // the order was *for*: before it existed, fulfilment marked the row PAID and
+  // stopped, so a paying customer got no course. It runs outside the
+  // transaction above on purpose — `enrolInCourse` also sends the instructor's
+  // welcome message and writes notifications, and none of that should be able
+  // to roll back a payment that succeeded.
+  //
+  // Sequential rather than `Promise.all`: a basket is a handful of courses,
+  // and each enrolment increments a counter on its own course row.
+  for (const item of order.items) {
+    const courseId =
+      item.courseId ??
+      (
+        await db.course.findUnique({
+          where: { slug: item.courseSlug },
+          select: { id: true },
+        })
+      )?.id
+    // An item naming no course we hold is skipped rather than failing the
+    // webhook — the order is still paid, and Stripe must not retry forever.
+    if (!courseId) continue
+
+    await enrolInCourse({
+      userId: order.userId,
+      courseId,
+      source: "PURCHASE",
+      orderId: order.id,
+    }).catch((error) => {
+      console.error("[fulfil] enrolment failed", item.courseSlug, error)
+    })
+
+    // **What the instructor earned.** Without this a sale was money the
+    // platform kept silently: Revenue & Payouts, My Courses' revenue column,
+    // the manage page's figure and the console's "Platform share" all read
+    // `InstructorEarning`, and nothing wrote one — every real sale showed as
+    // zero earned. The rate is the **snapshot on the item**, not today's
+    // setting, which is the whole reason `OrderItem.revenueShareBps` exists.
+    await recordEarning(item).catch((error) => {
+      console.error("[fulfil] earning failed", item.courseSlug, error)
+    })
+  }
+
   return { fulfilled: true, orderId: order.id }
 }
 
@@ -99,5 +153,53 @@ export async function expireCheckoutSession(session: Stripe.Checkout.Session) {
   await db.order.updateMany({
     where: { stripeSessionId: session.id, status: "PENDING" },
     data: { status: "EXPIRED" },
+  })
+}
+
+/** How long a sale is held before it can be paid out — the instructor Revenue
+ *  page's "clears within 30 days". */
+const CLEARING_DAYS = 30
+
+/**
+ * One `InstructorEarning` per sold item, idempotently.
+ *
+ * Keyed on `orderItemId`, so a replayed webhook finds the row rather than
+ * writing a second one — the same rule every other write on this path follows.
+ * An item with no instructor snapshot is skipped rather than guessed at: that
+ * means it was bought before the snapshot existed, and inventing a rate would
+ * put a number in a ledger nobody agreed to.
+ */
+async function recordEarning(item: {
+  id: string
+  instructorId: string | null
+  revenueShareBps: number | null
+  unitAmount: number
+  courseId: string | null
+}) {
+  if (!item.instructorId || item.revenueShareBps === null) return
+
+  const existing = await db.instructorEarning.findFirst({
+    where: { orderItemId: item.id },
+    select: { id: true },
+  })
+  if (existing) return
+
+  const gross = item.unitAmount
+  const net = Math.round((gross * item.revenueShareBps) / 10000)
+
+  await db.instructorEarning.create({
+    data: {
+      instructorId: item.instructorId,
+      courseId: item.courseId,
+      source: "SALE",
+      orderItemId: item.id,
+      grossCents: gross,
+      // The platform's cut is the remainder, so the two always add back to
+      // gross however the rate is rounded.
+      platformFeeCents: gross - net,
+      netCents: net,
+      status: "PENDING",
+      clearsAt: new Date(Date.now() + CLEARING_DAYS * 24 * 60 * 60 * 1000),
+    },
   })
 }

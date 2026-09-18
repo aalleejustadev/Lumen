@@ -3,9 +3,12 @@ import { ArrowRightIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { CatalogBrowser } from "@/components/marketing/catalog-browser"
+import { getCatalogCourses } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
 
-function CatalogSection({ className }: { className?: string }) {
+async function CatalogSection({ className }: { className?: string }) {
+  const courses = await getCatalogCourses()
+
   return (
     <section className={cn("w-full", className)}>
       <div className="mx-auto w-full max-w-[1200px] px-6 py-12 md:py-20">
@@ -30,7 +33,7 @@ function CatalogSection({ className }: { className?: string }) {
           </Button>
         </div>
 
-        <CatalogBrowser />
+        <CatalogBrowser courses={courses} />
       </div>
     </section>
   )

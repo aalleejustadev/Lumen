@@ -9,6 +9,7 @@ import { getCartCount, getWishlistCount } from "@/lib/cart"
 import { getUnreadCount } from "@/lib/notification-feed"
 import { getUnreadMessageCount } from "@/lib/messages"
 import { canBecomeInstructor, canTeach } from "@/lib/instructor"
+import { getBusinessOffer } from "@/lib/subscription"
 
 /**
  * Everything under this group requires a session — the guard lives here rather
@@ -50,6 +51,7 @@ export default async function DashboardLayout({
     teaches,
     unreadNotifications,
     unreadMessages,
+    businessOffer,
   ] = await Promise.all([
     getCartCount(),
     getWishlistCount(),
@@ -60,6 +62,11 @@ export default async function DashboardLayout({
     canTeach(user),
     getUnreadCount("LEARNER"),
     getUnreadMessageCount("LEARNER"),
+    // Decides whether the sidebar draws its Lumen Business promo, and quotes
+    // the plan's real Stripe price when it does. Read here rather than in the
+    // sidebar for the reason the cart badge and the wishlist count are: it is
+    // chrome shared by every dashboard route, so it belongs to the shell.
+    getBusinessOffer(),
   ])
 
   return (
@@ -77,6 +84,12 @@ export default async function DashboardLayout({
         user={{ name: user.name, email: user.email, image: user.image }}
         isAdmin={user.role === "admin"}
         canTeach={teaches}
+        // Only a student who could actually buy it: not a subscriber, and not
+        // when Stripe has no prices configured. The *mode* half needs no check
+        // here — the instructor and admin shells have their own sidebars and
+        // neither renders the card.
+        showUpgrade={businessOffer.state === "available"}
+        businessOffer={businessOffer}
         navCounts={{
           "/dashboard/wishlist": wishlistCount,
           // Omitted at zero rather than passed as 0: `NavRow` draws a badge

@@ -1,16 +1,19 @@
 import type { WishlistLine } from "@/lib/cart"
-import type { BrowseCourse } from "@/lib/config/browse-courses"
+import type { CatalogCourse } from "@/lib/config/catalog-shape"
 
 /**
  * A saved course as it crosses from the page (a Server Component) into
  * `wishlist-page.tsx` (a Client Component).
  *
- * `BrowseCourse.icon` is a `LucideIcon` — a function value, which can't cross
- * that boundary — so it's stripped here and looked back up from `category`
- * via `categoryIcons` on the other side. Same arrangement
- * `instructor-profile-page.tsx` uses for `InstructorCourseCard`.
+ * **The stripping this module used to do is gone.** `BrowseCourse` carried an
+ * `icon`, a `LucideIcon` — a function value, which cannot cross that boundary
+ * — so it had to be destructured away here and looked back up on the other
+ * side. `CatalogCourse` never carries one: it holds a `categorySlug` and every
+ * consumer resolves the glyph itself, so the row is serializable by
+ * construction. The alias and the mapper stay because a dozen call sites name
+ * them, and because the boundary is still worth naming.
  */
-export type WishlistCourse = Omit<BrowseCourse, "icon">
+export type WishlistCourse = CatalogCourse
 
 export type WishlistEntry = {
   id: string
@@ -18,9 +21,5 @@ export type WishlistEntry = {
 }
 
 export function toWishlistEntries(lines: WishlistLine[]): WishlistEntry[] {
-  return lines.map(({ id, course }) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructured only to drop it
-    const { icon, ...rest } = course
-    return { id, course: rest }
-  })
+  return lines.map(({ id, course }) => ({ id, course }))
 }

@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/command"
 import { Kbd } from "@/components/ui/kbd"
 import { CourseFeedbackDialog } from "@/components/dashboard/learning/course/course-feedback-dialog"
-import { browseCourses } from "@/lib/config/browse-courses"
 import { adminCommandPaletteGroups } from "@/lib/config/admin-nav"
 import { instructorCommandPaletteGroups } from "@/lib/config/instructor-nav"
 import { commandPaletteGroups } from "@/lib/config/dashboard"
@@ -31,7 +30,7 @@ import { commandPaletteGroups } from "@/lib/config/dashboard"
  * `course-feedback-dialog.tsx`**, which in the finished product prompts on its
  * own once a student is a few lessons in. That needs enrolment progress to be
  * real, so until then it hangs here. Delete this group — and the two pieces of
- * state and the `browseCourses` import feeding it — when the prompt becomes
+ * state feeding it — when the prompt becomes
  * automatic.
  *
  * `variant` picks which navigation the palette offers: the admin console and
@@ -68,10 +67,17 @@ function DashboardSearch({
   const slug = pathname.match(
     /^\/dashboard\/(?:courses|learning)\/([^/]+)/
   )?.[1]
-  const course =
-    browseCourses.find((entry) => entry.slug === slug) ??
-    browseCourses.find((entry) => entry.slug === "mastering-illustration") ??
-    browseCourses[0]!
+  // **Titled from the slug, not from a catalog.** This entry exists only so
+  // the feedback design can be looked at, and it used to reach into the
+  // static `browseCourses` array for a title — the last thing in the app that
+  // did. A slug is enough to demonstrate the dialog, and the real prompt will
+  // be handed a course by whatever triggers it.
+  const courseTitle = slug
+    ? slug
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")
+    : "this course"
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -149,10 +155,8 @@ function DashboardSearch({
         <CourseFeedbackDialog
           open={feedbackOpen}
           onOpenChange={setFeedbackOpen}
-          courseTitle={course.title}
-          instructorFirstName={
-            course.instructor.split(" ")[0] ?? "the instructor"
-          }
+          courseTitle={courseTitle}
+          instructorFirstName="the instructor"
         />
       ) : null}
     </>

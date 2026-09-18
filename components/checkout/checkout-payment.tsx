@@ -147,9 +147,17 @@ function PaymentColumn({ amount }: { amount: number }) {
                 buttonHeight: 46,
                 buttonTheme: undefined,
                 buttonType: undefined,
-                // One full-width row, matching the export's single black bar
-                // — never let Stripe wrap wallets onto a second line.
-                layout: { maxColumns: 1, maxRows: 1, overflow: "never" },
+                // One full-width row, matching the export's single black bar.
+                //
+                // **`overflow: "auto"`, not `"never"`.** Stripe rejects
+                // `"never"` unless `maxRows` is 0 ("only supported when
+                // options.layout.maxRows is 0") and logs an `IntegrationError`
+                // on every render of this page; with a row cap, `"auto"` is
+                // what keeps the bar to one line — anything that does not fit
+                // goes behind Stripe's own overflow control rather than
+                // wrapping onto a second row, which is the behaviour the
+                // export draws.
+                layout: { maxColumns: 1, maxRows: 1, overflow: "auto" },
                 paymentMethodOrder: undefined,
                 paymentMethods: undefined,
               }}

@@ -4,11 +4,11 @@ import { ArrowUpIcon, BadgeCheckIcon, BookOpenIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { overallProgress as p } from "@/lib/config/dashboard-overview"
+import type { OverviewData } from "@/lib/config/dashboard-overview-shape"
 
 /** The big headline figure, its history/target line, enrollment counts, and
  *  a second bar showing what fraction of enrolled courses are finished. */
-function OverallProgressCard() {
+function OverallProgressCard({ p }: { p: OverviewData["overall"] }) {
   const completedPercent = Math.round(
     (p.coursesCompleted / p.coursesEnrolled) * 100
   )
@@ -28,10 +28,11 @@ function OverallProgressCard() {
         value={p.percent}
         className="mt-4 [&_[data-slot=progress-indicator]]:bg-bar-fill [&_[data-slot=progress-track]]:h-2 [&_[data-slot=progress-track]]:bg-track"
       />
-      <div className="mt-2.5 flex items-center justify-between text-[13px] text-muted-foreground">
-        <span>Previous: {p.previousPercent}%</span>
-        <span>Target: {p.targetPercent}%</span>
-      </div>
+      {/* The export draws "Previous" and "Target" beside the bar. Neither is
+          stored — there is no progress history and no goal model — and
+          inventing both would be two numbers on a progress card that mean
+          nothing, so the row is dropped rather than filled. Add it back with
+          whatever writes those. */}
 
       <div className="mt-5 flex flex-col gap-3">
         <div className="flex items-center gap-2.5 text-sm">

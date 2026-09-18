@@ -1,19 +1,11 @@
 import type { Metadata } from "next"
-import Link from "next/link"
-import { PresentationIcon } from "lucide-react"
+import { notFound } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
+import { InstructorOverview } from "@/components/dashboard/instructor/overview/instructor-overview"
 import { instructorOverviewCopy } from "@/lib/config/instructor-nav"
 import { siteConfig } from "@/lib/config/site"
+import { getInstructorOverview } from "@/lib/instructor-overview"
 
 export const metadata: Metadata = {
   title: `Instructor · ${siteConfig.name}`,
@@ -32,16 +24,21 @@ export const metadata: Metadata = {
  * dashboard exports' own measurements give — `globals.css` sets every `h1` to
  * 800 and these draw 700.
  *
- * **The bento grid beneath it is not built yet.** `instructor-dashboard.png`
- * draws seven cards — production progress, completion rate, course output, a
- * watch-time donut, revenue by month and a top-courses table — each of which
- * needs reads that do not exist (`WatchTimeRollup`, lesson publication state,
- * per-instructor revenue). Rather than invent a different overview, or fill
- * the space with figures nobody can trust, the page says plainly where the
- * work stands. Replace this block with that grid; the shell, the guard and the
- * heading above it stay as they are.
+ * **The bento grid is the export's seven cards, over real rows.** It was a
+ * placeholder for a stated reason — production progress, completion, watch
+ * time and per-instructor revenue all needed reads that did not exist. They do
+ * now: enrolment is written on purchase, `LessonProgress` by the lesson
+ * player, `InstructorEarning` at fulfilment, and `CourseLesson.isPublished` by
+ * the editor. `lib/instructor-overview.ts` is the one read behind all seven,
+ * and an account with no courses gets empty states rather than seeded figures.
  */
-export default function InstructorDashboardPage() {
+export default async function InstructorDashboardPage() {
+  const data = await getInstructorOverview()
+  // The layout's guard already refuses anyone without a teaching profile, so
+  // a null here means the profile vanished mid-request rather than a visitor
+  // who should be redirected.
+  if (!data) notFound()
+
   return (
     <main className="w-full px-6 py-6 md:px-8 md:py-8">
       <div className="flex items-center gap-3">
@@ -57,28 +54,9 @@ export default function InstructorDashboardPage() {
         </Badge>
       </div>
 
-      <Empty className="mt-6 rounded-xl border bg-card py-16">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <PresentationIcon />
-          </EmptyMedia>
-          <EmptyTitle>Your teaching workspace is ready</EmptyTitle>
-          <EmptyDescription>
-            Everything in the sidebar is this mode — your courses, your
-            students, your earnings. The pages behind those rows are being
-            built; the Overview lands here first.
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link href="/dashboard" />}
-          >
-            Back to student mode
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <div className="mt-6">
+        <InstructorOverview data={data} />
+      </div>
     </main>
   )
 }

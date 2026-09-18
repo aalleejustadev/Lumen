@@ -13,7 +13,6 @@ import type {
   CourseLevel,
 } from "@/lib/config/browse-courses"
 import {
-  getCourseDetail,
   type CourseDetail,
   type CourseSection,
   type RatingBreakdownRow,
@@ -80,10 +79,8 @@ const REVIEW_LIMIT = 4
 export const getSaleCourse = cache(async function getSaleCourse(
   slug: string
 ): Promise<SaleCourse | null> {
-  const fromCatalog = getCourseDetail(slug)
-  if (fromCatalog) {
-    return { course: fromCatalog, previews: null, purchasable: true }
-  }
+  // The static catalog used to win here and is gone: every course on this
+  // page is a database row now, so there is one path rather than two.
   return buildFromDatabase(slug)
 })
 
@@ -355,7 +352,17 @@ async function buildFromDatabase(slug: string): Promise<SaleCourse | null> {
     ),
   }
 
-  return { course: detail, previews, purchasable: false }
+  // **Purchasable.** It was hard-coded false because the cart and checkout
+  // resolved slugs against the static catalog, so a course built in the app
+  // could be viewed and never bought. Both read the database now
+  // (`lib/catalog.ts`), and fulfilment enrols the buyer, so the only thing
+  // that decides whether a course can be sold is whether it is PUBLISHED —
+  // which `getCatalogCourse` already enforces on the way in.
+  return {
+    course: detail,
+    previews,
+    purchasable: course.status === "PUBLISHED",
+  }
 }
 
 function toDisplayLevel(

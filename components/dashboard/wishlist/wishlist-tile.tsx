@@ -8,7 +8,10 @@ import {
   RemoveFromWishlistButton,
 } from "@/components/dashboard/wishlist/wishlist-actions"
 import type { WishlistCourse } from "@/components/dashboard/wishlist/wishlist-course"
-import { categoryIcons } from "@/lib/config/browse-courses"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
 
 /**
  * The grid half of the wishlist's view switch. The export only draws the list
@@ -18,7 +21,8 @@ import { categoryIcons } from "@/lib/config/browse-courses"
  * instead of the catalog's "Add".
  */
 function WishlistTile({ course }: { course: WishlistCourse }) {
-  const Icon = categoryIcons[course.category]
+  const Icon =
+    databaseCategoryIcons[course.categorySlug] ?? FALLBACK_CATEGORY_ICON
   const href = `/dashboard/courses/${course.slug}`
 
   return (
@@ -29,7 +33,7 @@ function WishlistTile({ course }: { course: WishlistCourse }) {
         >
           <Icon className="size-12 text-white/25" />
           <Badge className="absolute top-3 left-3 h-[22px] bg-black/55 px-2.5 text-[11px] font-medium text-white backdrop-blur-sm">
-            {course.category}
+            {course.categoryName}
           </Badge>
         </div>
 

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/auth"
-import { browseCourses, type BrowseCourse } from "@/lib/config/browse-courses"
+import { getCatalogCoursesBySlug } from "@/lib/catalog"
+import type { CatalogCourse } from "@/lib/config/catalog-shape"
 
 /**
  * Server-side reads for the cart and wishlist — it pulls in `lib/db`, so the
@@ -19,7 +20,7 @@ import { browseCourses, type BrowseCourse } from "@/lib/config/browse-courses"
 export type CartLine = {
   /** The cart row's own id, so "Remove" can target it directly. */
   id: string
-  course: BrowseCourse
+  course: CatalogCourse
 }
 
 export type CartSummary = {
@@ -36,8 +37,17 @@ export type CartSummary = {
   total: number
 }
 
-function courseBySlug(slug: string) {
-  return browseCourses.find((course) => course.slug === slug)
+/**
+ * Resolve a cart's slugs against the **catalog**, in one query.
+ *
+ * It used to be `browseCourses.find(...)` over a hand-written array, which is
+ * why a course built in the app could never be bought: its slug resolved to
+ * nothing and every row was silently dropped. `getCatalogCoursesBySlug`
+ * returns only `PUBLISHED` courses, so the same call is also what stops a
+ * draft — or one the console rejected — sitting in somebody's basket.
+ */
+async function coursesBySlug(slugs: string[]) {
+  return getCatalogCoursesBySlug(slugs)
 }
 
 /** The signed-in user's cart, newest first. Empty for signed-out visitors. */
@@ -50,8 +60,9 @@ export async function getCart(): Promise<CartSummary> {
     orderBy: { createdAt: "desc" },
   })
 
+  const catalog = await coursesBySlug(rows.map((row) => row.courseSlug))
   const lines = rows.flatMap((row) => {
-    const course = courseBySlug(row.courseSlug)
+    const course = catalog.get(row.courseSlug)
     return course ? [{ id: row.id, course }] : []
   })
 
@@ -80,7 +91,8 @@ export async function getCartCount() {
     select: { courseSlug: true },
   })
 
-  return rows.filter((row) => courseBySlug(row.courseSlug) !== undefined).length
+  const catalog = await coursesBySlug(rows.map((row) => row.courseSlug))
+  return rows.filter((row) => catalog.has(row.courseSlug)).length
 }
 
 /** Whether this course is on the signed-in user's wishlist. */
@@ -97,7 +109,7 @@ export async function isWishlisted(slug: string) {
 export type WishlistLine = {
   /** The wishlist row's own id, so a list can key on it. */
   id: string
-  course: BrowseCourse
+  course: CatalogCourse
 }
 
 export type WishlistSummary = {
@@ -119,8 +131,9 @@ export async function getWishlist(): Promise<WishlistSummary> {
     orderBy: { createdAt: "desc" },
   })
 
+  const catalog = await coursesBySlug(rows.map((row) => row.courseSlug))
   const lines = rows.flatMap((row) => {
-    const course = courseBySlug(row.courseSlug)
+    const course = catalog.get(row.courseSlug)
     return course ? [{ id: row.id, course }] : []
   })
 
@@ -144,5 +157,6 @@ export async function getWishlistCount() {
     select: { courseSlug: true },
   })
 
-  return rows.filter((row) => courseBySlug(row.courseSlug) !== undefined).length
+  const catalog = await coursesBySlug(rows.map((row) => row.courseSlug))
+  return rows.filter((row) => catalog.has(row.courseSlug)).length
 }

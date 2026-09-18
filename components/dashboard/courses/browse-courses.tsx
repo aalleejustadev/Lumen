@@ -34,9 +34,8 @@ import {
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { CourseCard } from "@/components/dashboard/courses/course-card"
+import type { CatalogCourse } from "@/lib/config/catalog-shape"
 import {
-  browseCourseCategories,
-  browseCourses,
   COURSES_PER_PAGE,
   levelFilters,
   priceFilters,
@@ -99,8 +98,20 @@ function FilterSelect<T extends string>({
  * run client-side over the demo data in `lib/config/browse-courses.ts`;
  * swap that file for real `Course` queries once instructors can publish.
  */
-function BrowseCourses() {
+function BrowseCourses({ courses }: { courses: CatalogCourse[] }) {
   const [category, setCategory] = React.useState<string>("All")
+
+  // **The pills are the categories the catalog actually has**, not a fixed
+  // list. With courses coming from the database a hard-coded set would offer
+  // filters that can only ever return nothing — the dead affordance the
+  // Discussions board's own topic pills already refuse.
+  const categories = React.useMemo(
+    () => [
+      "All",
+      ...[...new Set(courses.map((course) => course.categoryName))].sort(),
+    ],
+    [courses]
+  )
   const [query, setQuery] = React.useState("")
   const [priceFilter, setPriceFilter] = React.useState<PriceFilter>("any")
   const [levelFilter, setLevelFilter] = React.useState<LevelFilterValue>("any")
@@ -113,8 +124,8 @@ function BrowseCourses() {
     const needle = query.trim().toLowerCase()
     const minRating = ratingFilter === "any" ? 0 : Number(ratingFilter)
 
-    const result = browseCourses.filter((course) => {
-      if (category !== "All" && course.category !== category) return false
+    const result = courses.filter((course) => {
+      if (category !== "All" && course.categoryName !== category) return false
       if (
         needle &&
         !course.title.toLowerCase().includes(needle) &&
@@ -135,7 +146,7 @@ function BrowseCourses() {
         case "rating":
           return b.rating - a.rating || b.reviews - a.reviews
         case "newest":
-          return b.id - a.id
+          return b.publishedAtMs - a.publishedAtMs
         case "price-asc":
           return a.price - b.price
         case "price-desc":
@@ -144,7 +155,7 @@ function BrowseCourses() {
           return b.reviews - a.reviews
       }
     })
-  }, [category, query, priceFilter, levelFilter, ratingFilter, sort])
+  }, [courses, category, query, priceFilter, levelFilter, ratingFilter, sort])
 
   // Any filter change can leave the current page out of range — snap back
   // rather than render an empty grid with pages left to click through.
@@ -196,7 +207,7 @@ function BrowseCourses() {
             aria-label="Filter courses by category"
             className="w-max flex-nowrap"
           >
-            {browseCourseCategories.map((option) => (
+            {categories.map((option) => (
               <ToggleGroupItem
                 key={option}
                 value={option}

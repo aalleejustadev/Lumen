@@ -48,6 +48,80 @@ npm run db:seed     # prisma db seed — populates the platform tables
 
 There is no test setup. Verify changes with `npm run typecheck` and `npm run lint`.
 
+## The app runs on real data — read this before trusting anything below
+
+**The static catalog and the demo seed are gone.** Large parts of the notes in
+this file were written while `/dashboard/courses`, the sale page, My Learning,
+the course player and the marketing catalog all read hand-authored config
+files, and while `prisma/seed.ts` wrote ~40 tables of demo rows. Where a note
+below says a surface "reads `lib/config/browse-courses.ts`" or "is demo data
+until there is an `Enrollment` model", **the note is stale and this section
+wins**. The measurements, the export references and the design reasoning in
+those notes are all still correct; only the data source changed.
+
+**Concretely, distrust any note that says:** "demo data" / "dummy data" about a
+*learner-facing* surface; "swap this file for real queries once X exists";
+"there is no `Enrollment` model"; "no lesson player"; "nothing emits
+notifications"; or that names `browse-courses.ts`, `course-details.ts`,
+`instructor-profiles.ts`, `my-learning.ts`, `catalog.ts`,
+`dashboard-overview.ts` or `seed-data.ts` as a **source of rows**. Those files
+are deleted or reduced to types. Notes saying "nothing on it is demo data"
+about an *admin or instructor* surface were already true and still are.
+
+What was deleted: `lib/config/browse-courses.ts`' 18 courses,
+`course-details.ts`, `instructor-profiles.ts`, `my-learning.ts`,
+`catalog.ts`, `dashboard-overview.ts`, the authored course in
+`config/course-player.ts`, and `prisma/seed-data.ts` entirely. What stayed in
+those files is the **view-model types and the filter vocabulary**, which a
+dozen components are typed against — the shapes, never the content. Three new
+`*-shape.ts` modules exist (`catalog-shape`, `my-learning-shape`,
+`dashboard-overview-shape`) for the same reason `lib/admin/users.ts` keeps
+`USERS_PAGE_SIZE` out of its own module: a client component may import a type
+from a `server-only` module but nothing else, or the Postgres driver lands in
+the browser bundle.
+
+- `lib/catalog.ts` — the catalog, `PUBLISHED` courses only. `browse-courses.tsx`
+  is still the client filter bar, but the page is a Server Component that hands
+  it rows. A row carries a `categorySlug`, **never an icon**: a glyph is a
+  function and cannot cross the boundary, so every card resolves it from the
+  slug (`ProfileCourse`'s arrangement, now used everywhere).
+- `lib/learning.ts` — My Learning, from `Enrollment`.
+- `lib/dashboard-overview.ts` — the student bento grid. The activity donut is a
+  real count by `CourseLesson.type` and the twelve-week curve is lessons
+  completed per week; the export's "Previous / Target" row on the progress card
+  is **dropped**, because neither is stored and inventing both would be two
+  meaningless numbers on a progress card.
+- **`prisma/seed.ts` writes scaffolding only** — it resolves categories (never
+  writes them), upserts the `PlatformSetting` singleton and writes 90 days of
+  uptime samples. It still clears every `seed_`-prefixed row, which is what
+  turns a demo database into an empty one. Everything else is created by using
+  the application.
+
+### The instructor → admin → student chain is closed
+
+Each hop was verified end to end against a real course and a real Stripe
+payment:
+
+- **Submit for review** writes a `CourseSubmission` and notifies every admin.
+- **Approve / request changes / reject** notifies the instructor
+  (`lib/notify.ts`). A badge counting `IN_REVIEW` is not a notification: it
+  says how many, never which one.
+- **Approval puts the course on sale**, because the catalog reads `status`.
+- **Purchase enrols the buyer** (`lib/enrolment.ts`, called from
+  `lib/orders.ts`), sends the instructor's `welcomeMessage` as a real
+  repliable `Conversation`, and notifies both sides. An instructor buying
+  their own course is not told they have a new student.
+- **Ticking a lesson** writes `LessonProgress`, recounts the enrolment and, on
+  the last one, stamps `completedAt`, issues the `Certificate`, sends
+  `congratulationsMessage` and notifies both sides (`lib/completion.ts`).
+  Counters are rewritten from the rows, never incremented.
+- **`lib/notify.ts` is the only writer of `Notification`**, and emitting never
+  fails the thing that caused it — a payment must not roll back because a feed
+  row could not be written.
+
+**The messaging gate is unchanged and deliberately so**: `resolvePairing` still
+requires an `Enrollment`. It simply has real rows to find now.
+
 ## Layout
 
 - `app/` — App Router routes. `layout.tsx` wires the Figtree/Geist Mono fonts, the `ThemeProvider`, and the marketing `SiteHeader`; `globals.css` holds all Tailwind/theme tokens.
@@ -274,11 +348,12 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   card (`welcome-card.tsx`, `learning-path-card.tsx`, `overall-progress-card.tsx`,
   `progress-statistics-card.tsx`, `activity-donut-card.tsx`,
   `progress-chart-card.tsx`, `continue-learning-card.tsx`), composed by
-  `dashboard-overview.tsx`. There is no course/enrollment schema yet, so every
-  number on this page is demo data from `lib/config/dashboard-overview.ts`
-  except the signed-in user's name — swap that file for real queries once
-  courses/enrollments exist as tables; the components don't need to change
-  shape. `activity-donut-card.tsx` and `progress-chart-card.tsx` are the app's
+  `dashboard-overview.tsx`. **Every number is the learner's own**, computed by
+  `lib/dashboard-overview.ts` from `Enrollment` and `LessonProgress`; the
+  config file this once read is deleted. The donut is a real count by
+  `CourseLesson.type` and the curve is lessons completed per week. The
+  progress card's "Previous / Target" row is **dropped** — neither is stored,
+  and two invented numbers on a progress card are worse than none. `activity-donut-card.tsx` and `progress-chart-card.tsx` are the app's
   first real `recharts` usage (`components/ui/chart.tsx`); give a Pie or Area
   chart's `ChartContainer` an explicit pixel size rather than `aspect-*` +
   `max-h-*` alone, and give any `Progress` bar inside a `flex` parent `w-full`
@@ -426,8 +501,8 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   `StatBox` inverted (tinted tile on a white card, not a white tile on a
   tinted box) and pulls its two lines in to `leading-7`/`leading-4` so the
   44px tile — not the type — sets the row's 82px height. Cards link to the
-  course page: there is no lesson player yet, so "Continue" would otherwise be
-  a dead link; point it at `/dashboard/learning/[slug]` once one exists.
+  course page. **There is a lesson player now** (`lesson-viewer.tsx`), and the
+  card's rows come from real `Enrollment` rows via `lib/learning.ts`.
   Rendered against the export, the card runs ~30px taller than drawn — the
   same divergence the shipped `course-card.tsx` has from
   `browse-courses-page.png` (these exports render type about 15% smaller than
@@ -510,9 +585,10 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   export draws the _unrated_ state, so that's what it opens on ("Maybe later",
   unfilled stars); picking a rating fills the row and swaps the button to a
   primary "Submit rating", because a star row that did nothing would be worse
-  than none. **Nothing is written** — there's no `CourseReview` table — and
-  nothing triggers it for real: it should appear on its own once a student is
-  a few lessons in, which needs enrolment progress. Until then
+  than none. **Nothing is written** — the dialog still files nothing, though
+  `CourseReview` exists — and nothing triggers it for real: it should appear on
+  its own once a student is a few lessons in, which `Enrollment.progressPercent`
+  can now answer. Until then
   `dashboard-search.tsx` carries a hand-written "Preview" group in the command
   palette purely so the design can be looked at; **delete that group when the
   prompt becomes automatic** — it's the one entry in the palette that isn't a
@@ -909,20 +985,150 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   an action that trusted the one it was handed would let one account detach
   another's card. Verified against a real payment method belonging to a
   different customer in the same test account.
-- **Lumen has no subscription product**, so the header's plan line is `null`
-  for every real account and renders "No active plan · you pay per course".
-  It is still read from Stripe (`subscriptions.list`) rather than stubbed, so
-  the day a plan exists it renders the export's line with the interval and
-  amount from the price. The export's own
-  `Billing monthly · Next payment on 02/09/2026 for $59.90` is deliberately
-  **not** reproduced — inventing a plan nobody is on would be a lie on a
-  billing screen. "Change plan" opens Stripe's **Customer Portal**, the only
-  real destination available; it needs a default configuration in the Stripe
-  Dashboard and degrades to a message saying so.
+- **Lumen Business is that subscription product, and the plan line is real
+  now.** The billing header reads Stripe (`subscriptions.list`) exactly as it
+  always did, so nothing in `lib/billing.ts` changed — it simply has something
+  to find, and renders the export's own shape
+  (`Billing monthly · Next payment on 10/17/2026 for $29.00`, verified against
+  a live test subscription). The export's invented `$59.90` is still not
+  reproduced; the figure comes from the price. "Change plan" opens Stripe's
+  **Customer Portal**, which is also where a subscriber cancels — it needs a
+  default configuration in the Stripe Dashboard and degrades to a message
+  saying so.
   Also worth knowing: the Stripe **test** account is shared with other
   projects, so its products, subscriptions and customers ("Docsy", "Replit
   Pro") are not Lumen's. Don't read anything in that Dashboard as this app's
   data.
+- `lib/subscription.ts` + `lib/subscription-sync.ts` + `lib/actions/subscription.ts`
+  — **Lumen Business**, the platform's one subscription, sold from `/pricing`
+  and the student sidebar's upgrade card. It needed **no migration**:
+  `Subscription`, `SubscriptionStatus`, `SubscriptionInterval`,
+  `User.stripeCustomerId` and `Course.includedInBusiness` were all already
+  shaped for it, and `includedInBusiness` had been read nowhere.
+  - **`/pricing` did not exist.** `siteConfig`'s header nav, the sidebar's
+    upgrade card and the Business plan's own CTA all pointed at it — three
+    dead links, the thing every other surface here refuses. It renders the
+    same `PricingSection` the marketing home page carries rather than a second
+    arrangement of the same three cards.
+  - **Our `Subscription` row is the source of truth for entitlement, not
+    Stripe.** The sidebar and the course-content gate ask on every render, and
+    a Stripe round trip there would put a third party in the critical path of
+    the dashboard shell. `lib/billing.ts` still reads Stripe directly for the
+    billing page, which is a different job: that page is *about* the Stripe
+    state. The row is written only by the webhook.
+  - **The webhook is the whole integration, not an extra.** Checkout says a
+    plan *started*; the renewal, the failed card and the cancellation somebody
+    makes in the Customer Portal arrive only as events, so
+    `customer.subscription.created/updated/deleted/paused/resumed` and
+    `invoice.paid`/`invoice.payment_failed` are all handled. Verified end to
+    end against a real test subscription: buying wrote `ACTIVE` with the right
+    price, interval and period end, and cancelling wrote `CANCELED` with
+    `canceledAt`. **`checkout.session.completed` now serves two products** —
+    each handler checks `session.mode` itself rather than the switch branching,
+    so a course order and a subscription cannot reach each other's code.
+  - **One status list, for the badge and for access alike.** `ACTIVE`,
+    `TRIALING` and `PAST_DUE`. `PAST_DUE` is the interesting one: Stripe keeps
+    a subscription there for weeks while dunning retries a card, and cutting
+    access on the first failed retry locks a paying customer out before Stripe
+    has even told them. Two lists — a lenient one for the badge, a strict one
+    for access — is how somebody gets told they are subscribed on one screen
+    and locked out on the next.
+  - **The plan grants content, not enrolment.** `canAccessCourseContent` gained
+    a fourth yes: a live plan plus a **PUBLISHED** course carrying
+    `includedInBusiness`. PUBLISHED because a subscription must not open a
+    draft or a rejected course; the per-course flag because an instructor can
+    opt out. No `Enrollment` row is written, so My Learning, certificates and
+    the instructor's student list still describe people who actually enrolled,
+    and access ends with the plan — which is what the card's own "while your
+    plan is active" says. It is asked **last**, after the cheap enrolment and
+    ownership checks, because the plan is the uncommon case on a gate that runs
+    per lesson. Note it only bites on **database** courses: a catalog slug
+    resolves through the static config, whose rows have no lesson id, so those
+    pages never consult the gate.
+  - **The browser never names a price.** `startBusinessCheckout` takes a
+    billing *period* and resolves the Stripe Price id from env server-side —
+    the rule `lib/actions/checkout.ts` follows when it builds `line_items` from
+    rows the server read itself. It also **refuses a second subscription**,
+    which Stripe would otherwise happily create and bill twice.
+  - **Hosted Checkout, not the cart's Elements panel.** That panel exists
+    because `checkout-page.png` draws a bespoke layout; there is no export for
+    a subscription checkout, and the hosted page brings proration, SCA, tax and
+    dunning-friendly card collection for free. No `payment_method_types`, per
+    Stripe's own rule. **No trial** — `subscription_data` sets none, at the
+    user's instruction, which is why the CTA reads "Get Lumen Business" and not
+    the config's original "Start free trial"; add `trial_period_days` and
+    change that label in the same commit.
+  - **The upgrade card is gated three ways, and only one of them was new.**
+    Student mode was never a real question — `instructor-sidebar.tsx` and
+    `admin-sidebar.tsx` each already record refusing the card, because it sells
+    a *learner* plan, and `dashboard-sidebar.tsx` is the student shell's own.
+    What was added: it is dropped for somebody already on the plan, and dropped
+    when Stripe has no prices configured, since an advert nobody can act on is
+    worse than none. The layout resolves `getBusinessOffer()` once and passes
+    it, the way the cart badge and wishlist count are already resolved there.
+  - **Prices are read back off Stripe**, module-cached for five minutes, so the
+    page cannot advertise one figure and charge another; a cold or failed read
+    falls back to the strings in `lib/config/pricing.ts`, which is what the
+    setup script created the prices *from*.
+- **The billing page's Transaction History has two sources, because the money
+  does.** A course is a one-time Checkout Session and lands as an `order` row;
+  a Lumen Business payment exists **only** as a Stripe **invoice** — a renewal
+  has no session and no order behind it, and never will. `readTransactions`
+  merges `readOrders` with `readInvoices` and sorts by date. Reading orders
+  alone is why somebody who had just paid for a plan opened this page and saw
+  no sign of it. Invoice statuses map onto `OrderStatus` rather than widening
+  the row type, so `billing-transactions.tsx` keeps one `STATUS_STYLES`; a
+  `draft` invoice is dropped, since it has not been issued to anybody. The
+  reference for an invoice is **Stripe's own `number`** (`PQG4VP0Y-0001`),
+  which is what the receipt shows and what support gets asked about, where an
+  order has to hash its cuid.
+- **A `pending` row in that table is a real abandoned checkout, not demo
+  data.** It stays pending until Stripe says the session expired, so a run of
+  them means the webhook was not receiving `checkout.session.expired` at the
+  time — nine of them on the developer's own account were exactly that, and
+  every one carried a real `stripeSessionId`. Worth knowing before anyone
+  concludes the table is showing something invented.
+- **`npm run stripe:reconcile` is the repair path, and the webhook is still the
+  design.** Events are delivered to a URL, so anything bought while the
+  endpoint was not yet configured — the usual case on a first deploy, and on
+  any machine where `stripe listen` was not running — never arrives, and an
+  account that has *paid* is left with no plan. That is not hypothetical: it
+  happened here, and the subscription had to be pulled back out of Stripe. The
+  script re-reads every customer's subscriptions and re-checks every `PENDING`
+  order against its session, both through the same idempotent upserts the
+  webhook uses, so it is safe to run repeatedly.
+  **`syncSubscriptionsForCustomer` also runs on the billing page when Checkout
+  returns somebody with `?subscribed=1`** — that flag was already being set by
+  the checkout action and read nowhere. It is the one write that route does,
+  deliberately not on every render: a page that re-synced each view would put a
+  Stripe round trip in front of every visit. `status: "all"` on the list is
+  load-bearing — a cancelled subscription has to be written too, or a row left
+  `ACTIVE` by a missed `deleted` event grants the plan forever.
+- **One entitlement list, shared with the console.** `/dashboard/admin/users`'
+  Business filter used a local `["ACTIVE", "TRIALING"]`, which was right while
+  nothing else read the table and became wrong the moment the plan granted
+  course access — it would have reported an account as *not* on Business while
+  the app served them the whole catalogue. It imports `ENTITLED_STATUSES` now.
+- **The seed still writes `Subscription` rows with fake Stripe ids**
+  (`sub_seed_…`, `price_business_month`). They exist so the console's Business
+  filter has something to find, and they are *demo* rows in the ordinary sense
+  — but they now also grant `canAccessCourseContent` on a course that was never
+  paid for, and `readPlan` finds nothing in Stripe for them, so those accounts
+  would read "no plan" on the billing page while the sidebar treats them as
+  subscribers. Nobody signs in as them, so this is recorded rather than fixed;
+  delete the `db.subscription.createMany` in `seedLearners` if the console's
+  filter stops being worth it.
+- **`npm run stripe:setup` creates the Product and its two Prices** and prints
+  the ids for `.env` (`STRIPE_BUSINESS_PRICE_MONTHLY` / `_YEARLY`). One Product
+  with a Price per interval, per Stripe's rule that separate Products are for
+  separate *tiers* — tiers sharing a Product make every invoice line read the
+  same name. **It keys on an explicit product id (`lumen_business`), not a
+  `products.search` on metadata**: Search is eventually consistent by up to a
+  minute, so the first version did not find the product it had just made and
+  created a duplicate. Caught by running the script twice; `retrieve` by a
+  known id is immediately consistent. A Price is immutable, so changing an
+  amount in `lib/config/pricing.ts` and re-running mints a *new* Price and
+  leaves the old one — existing subscribers keep what they signed up at.
 - **`/dashboard/settings/billing` loads Stripe.js and has no CSP.** The policy
   in `next.config.ts` is scoped to `/checkout*`; extending it here needs its
   own pass, because `default-src 'self'` would block the avatar images served
@@ -1333,15 +1539,13 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
     route existed. `notifications-page.png` is the *instructor's* export, so
     that page is finally rendering on the screen it was drawn for. The seed
     writes no INSTRUCTOR rows yet, so it opens on its empty state.
-  - **The landing page is the export's heading row and a placeholder.** The
-    badge is the sibling of the other two modes' pills — sampled off
+  - **The landing page is the export's heading row over its full bento grid.**
+    The badge is the sibling of the other two modes' pills — sampled off
     `instructor-dashboard.png`, its fill is the page ground (transparent, like
     the console's rather than the student's `bg-card`) and its dot is #8a5cf5,
-    which is `--role-instructor` exactly. The bento grid beneath it is **not**
-    built: that export draws seven cards needing reads that do not exist
-    (`WatchTimeRollup`, lesson publication state, per-instructor revenue), and
-    inventing a different overview would be worse than saying where the work
-    stands.
+    which is `--role-instructor` exactly. The grid beneath it was a placeholder
+    while its seven cards needed reads that did not exist; all of them do now.
+    See `components/dashboard/instructor/overview/` below.
   - **`DashboardNavItem` gained `tag`** for the export's green outlined "New"
     beside Create Course — a word rather than a count, and a separate field
     from `badge` because the two are different things in one slot: a badge is
@@ -1352,6 +1556,64 @@ There is no test setup. Verify changes with `npm run typecheck` and `npm run lin
   for a mode that did not exist — and is simply wrong now that one does: this
   is the student shell, and a pill naming the mode you are *not* in is worse
   than none.
+- `components/dashboard/instructor/overview/` — the instructor **Overview** at
+  `/dashboard/instructor`, from
+  `ui-design/light/dashboard/instructor/instructor-dashboard.png`: one file per
+  card (`welcome-card.tsx`, `production-card.tsx`, `completion-card.tsx`,
+  `output-card.tsx`, `spend-card.tsx`, `revenue-card.tsx`,
+  `top-courses-card.tsx`), composed by `instructor-overview.tsx`.
+  `lib/instructor-overview.ts` is the one read behind all seven and
+  `lib/config/instructor-overview.ts` is every word plus the shapes.
+  **Nothing on it is demo data and it needed no migration** — it was a
+  placeholder precisely because production progress, completion, watch time and
+  per-instructor revenue had no writers, and all four have one now (enrolment
+  on purchase, `LessonProgress` from the lesson player, `InstructorEarning` at
+  fulfilment, `CourseLesson.isPublished` from the editor).
+  Measured off that export at DPR 2 on a 1494px content box: two equal 737px
+  columns, then three equal 484.7px columns, then an uneven 778.5 : 695.5 pair
+  — `[1.12fr_1fr]`. **The gutter is `gap-5.5` (22px) against 20px of ground
+  measured between the drawn cards**, because `Card`'s hairline is a `ring` and
+  a ring paints *outside* the layout box; verified by re-measuring the render,
+  which lands on the drawn 20px exactly. Every sampled colour is an existing
+  token: the bars are `--success`/`--warning` over `--track`, the completion
+  fill is `--bar-fill`, the donut is `--chart-1/2/3` and the star is `--star`.
+  **Only three of the seven are Client Components** — the donut and the revenue
+  area chart need recharts, and the top-courses table owns its search and pager.
+  Five definitions decide what it means:
+  - **Completion rate is `Enrollment.completedAt` over enrolments**, and watch
+    completion is the mean of `Enrollment.progressPercent` — the manage page's
+    and the Students page's own definitions, reused rather than re-derived, so
+    three instructor screens cannot show three numbers under one label.
+  - **"In production" is any course not on sale** — DRAFT, IN_REVIEW *and*
+    NEEDS_CHANGES. A course the console sent back is still work in progress;
+    excluding it would hide the most urgent row on the account, the call My
+    Courses' own Drafts tab already makes.
+  - **"Where Students Spend Time" is a real count by `CourseLesson.type`** over
+    lessons students have *completed* — Video / Reading / Quizzes is exactly
+    that enum. An unopened lesson is not time spent, which is why it filters on
+    `LessonProgress.completedAt`. Same reading `lib/dashboard-overview.ts`
+    settled for the learner's own donut, so the two cannot disagree.
+  - **Revenue is net and excludes REVERSED**, the identical figure Revenue &
+    Payouts and My Courses draw. It plots six months built from computed
+    boundaries and filled from the rows, so a month with no sales draws a zero
+    rather than vanishing. Unlike the console's chart it **includes the current,
+    partial month**: this is one instructor looking at their own shop, where
+    "what have I made so far" is the question being asked.
+  - **The export's two unlabelled bars are the one thing not reproduced
+    literally.** It draws a 65% orange bar beside a 50% green one with nothing
+    saying what either measures; a bare percentage with no subject is the
+    number-that-means-nothing this codebase refuses, so the drawn geometry is
+    kept and a caption names them — lessons published against students
+    finished. Both are real columns.
+  Two bugs the first render caught, both fixed: the welcome illustration was
+  absolutely positioned and **ran underneath the headline** at some widths (it
+  is a flex row now, which cannot overlap); and the revenue card's date range
+  was computed from `revenue.length`, so an account with no courses produced a
+  window that **started after it ended** ("1 Oct – 18 Sep") — the empty branch
+  returns the same six zeroed months now, and the component floors the length.
+  Verified at 1552, 900 and 400px, in dark mode, and against a brand-new
+  teaching account: every card has an empty state and none of them renders a
+  zero as though it were a measurement.
 - `components/dashboard/instructor/help/` — `/dashboard/instructor/help`, from
   `ui-design/light/dashboard/instructor/instructor-help-center-page.png`:
   `help-topic-card.tsx` (one "Browse by topic" card), `help-faq-card.tsx` (the

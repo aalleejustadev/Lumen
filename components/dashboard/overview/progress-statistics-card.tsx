@@ -1,7 +1,9 @@
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { weeklyGoal } from "@/lib/config/dashboard-overview"
+import { CircleCheckIcon, PlayIcon } from "lucide-react"
+
+import type { OverviewData } from "@/lib/config/dashboard-overview-shape"
 
 const toneClasses = {
   warning: {
@@ -16,20 +18,66 @@ const toneClasses = {
   },
 }
 
-/** Weekly goal headline, the two-up bar breakdown, and the in-progress /
- *  completed counts that back it. */
-function ProgressStatisticsCard() {
+/**
+ * Weekly goal headline, the two-up bar breakdown, and the in-progress /
+ * completed counts that back it.
+ *
+ * **Every figure here used to be a constant** — 72.5%, two invented bars and
+ * two counts — so it read the same on an account that had never enrolled in
+ * anything. They come off the learner's own enrolments now.
+ *
+ * "Weekly Goal" is the share of enrolled courses finished. There is no goal
+ * model and no target column, so the honest reading of the export's dial is
+ * progress towards finishing what you started, not progress against a number
+ * nobody set.
+ */
+function ProgressStatisticsCard({ p }: { p: OverviewData["overall"] }) {
+  const inProgress = p.coursesEnrolled - p.coursesCompleted
+  const goal = p.coursesEnrolled
+    ? Math.round((p.coursesCompleted / p.coursesEnrolled) * 1000) / 10
+    : 0
+
+  const breakdown = [
+    {
+      value: p.coursesEnrolled
+        ? Math.round((inProgress / p.coursesEnrolled) * 100)
+        : 0,
+      tone: "warning" as const,
+    },
+    {
+      value: p.coursesEnrolled
+        ? Math.round((p.coursesCompleted / p.coursesEnrolled) * 100)
+        : 0,
+      tone: "success" as const,
+    },
+  ]
+
+  const stats = [
+    {
+      label: "In Progress",
+      count: inProgress,
+      tone: "warning" as const,
+      icon: PlayIcon,
+    },
+    {
+      label: "Completed",
+      count: p.coursesCompleted,
+      tone: "success" as const,
+      icon: CircleCheckIcon,
+    },
+  ]
+
   return (
     <Card className="gap-0 p-6.5 ring-border">
       <h2 className="text-base">Progress Statistics</h2>
 
       <div className="mt-4 flex flex-col items-center">
         <span className="text-[13px] text-muted-foreground">Weekly Goal</span>
-        <span className="stat-figure mt-1 text-5xl">{weeklyGoal.percent}%</span>
+        <span className="stat-figure mt-1 text-5xl">{goal}%</span>
       </div>
 
       <div className="mt-5 flex items-center gap-4">
-        {weeklyGoal.breakdown.map((bar, index) => (
+        {breakdown.map((bar, index) => (
           <div key={index} className="flex flex-1 items-center gap-2.5">
             <Progress
               value={bar.value}
@@ -43,7 +91,7 @@ function ProgressStatisticsCard() {
       </div>
 
       <div className="mt-5 flex flex-col gap-2.5">
-        {weeklyGoal.stats.map((stat) => (
+        {stats.map((stat) => (
           <div
             key={stat.label}
             className="flex items-center gap-3 rounded-xl border bg-soft p-3"

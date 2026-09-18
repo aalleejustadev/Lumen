@@ -21,8 +21,9 @@ import { EnrolledCourseCard } from "@/components/dashboard/learning/enrolled-cou
 import {
   LEARNING_PER_PAGE,
   learningTabs,
+  type EnrolledCourse,
   type LearningTabValue,
-} from "@/lib/config/my-learning"
+} from "@/lib/config/my-learning-shape"
 import { cn } from "@/lib/utils"
 
 /**
@@ -35,12 +36,18 @@ import { cn } from "@/lib/utils"
  * dark pill inside it. Each tab carries its own count, taken from the same
  * lists the stat row counts, so the two can't disagree.
  */
-function EnrolledCoursesSection() {
+function EnrolledCoursesSection({
+  courses: all,
+}: {
+  courses: EnrolledCourse[]
+}) {
   const [tab, setTab] = React.useState<LearningTabValue>("in-progress")
   const [page, setPage] = React.useState(1)
 
   const courses =
-    learningTabs.find((entry) => entry.value === tab)?.courses ?? []
+    tab === "completed"
+      ? all.filter((course) => course.completed)
+      : all.filter((course) => !course.completed)
 
   // Switching tabs can leave the current page out of range (9 completed
   // courses paginate further than 5 in-progress ones) — snap back rather
@@ -77,7 +84,12 @@ function EnrolledCoursesSection() {
           >
             {entry.label}
             <span className="text-subtle-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground/70">
-              {entry.courses.length}
+              {
+                (entry.value === "completed"
+                  ? all.filter((course) => course.completed)
+                  : all.filter((course) => !course.completed)
+                ).length
+              }
             </span>
           </ToggleGroupItem>
         ))}

@@ -5,6 +5,12 @@ import {
   failCheckoutSession,
   fulfillCheckoutSession,
 } from "@/lib/orders"
+import {
+  cancelSubscription,
+  fulfillSubscriptionCheckout,
+  syncInvoiceSubscription,
+  syncSubscription,
+} from "@/lib/subscription-sync"
 import { getStripe } from "@/lib/stripe"
 
 /**
@@ -15,6 +21,13 @@ import { getStripe } from "@/lib/stripe"
  * settle hours or days after the Checkout Session completes, long after every
  * browser tab is gone. The webhook is the only delivery Stripe guarantees, so
  * it owns fulfilment and the return page only reports what it finds.
+ *
+ * It carries **two** products now: one-time course orders (`lib/orders.ts`)
+ * and the Lumen Business subscription (`lib/subscription-sync.ts`). The
+ * subscription half is where that plan is *entirely* maintained — a renewal, a
+ * failed card and a cancellation are all events and nothing else, so an
+ * integration missing these handlers would show every subscriber as
+ * permanently active from their first payment onwards.
  *
  * Point the CLI at it while developing:
  *   stripe listen --forward-to localhost:3000/api/stripe/webhook
@@ -70,7 +83,38 @@ export async function POST(request: Request) {
       case "checkout.session.completed":
       // The delayed half of the pair: a bank debit or voucher that cleared.
       case "checkout.session.async_payment_succeeded": {
+        // One event type, two products. A course purchase is
+        // `mode: "payment"` and a Lumen Business plan is
+        // `mode: "subscription"`; each handler checks the mode itself rather
+        // than this switch branching, so neither can be reached by the other's
+        // session shape.
         await fulfillCheckoutSession(event.data.object)
+        await fulfillSubscriptionCheckout(event.data.object)
+        break
+      }
+
+      // --- Lumen Business lifecycle ------------------------------------
+      // These are not optional and not a later pass: everything that happens
+      // to a subscription after checkout — the renewal, the failed card, the
+      // cancellation somebody makes in the Customer Portal — arrives only
+      // here, with no browser involved. See `lib/subscription-sync.ts`.
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.paused":
+      case "customer.subscription.resumed": {
+        await syncSubscription(event.data.object)
+        break
+      }
+      case "customer.subscription.deleted": {
+        await cancelSubscription(event.data.object)
+        break
+      }
+      // Belt to the `updated` event's braces: Stripe raises one alongside
+      // each of these, but an invoice is the moment the money actually moved,
+      // and a dropped update would otherwise leave a lapsed plan entitled.
+      case "invoice.paid":
+      case "invoice.payment_failed": {
+        await syncInvoiceSubscription(event.data.object)
         break
       }
       case "checkout.session.async_payment_failed": {

@@ -23,20 +23,33 @@ const stripeFrame = `${stripeScript} https://hooks.stripe.com https://checkout.s
 const stripeConnect =
   "https://api.stripe.com https://checkout.stripe.com https://link.com https://*.link.com"
 
+/**
+ * Google Fonts, for **Stripe's iframe only**.
+ *
+ * `next/font` self-hosts Figtree out of `/_next`, which the rest of the app
+ * uses and which needs no external origin — but Stripe's Elements render in a
+ * cross-origin iframe that cannot read those files, so
+ * `checkout-appearance.ts` hands Stripe a `fonts.googleapis.com` URL instead.
+ * Without these three directives that fetch is refused and the payment form
+ * silently falls back to a system font, which is only visible on a real
+ * deploy: the stylesheet is fetched (`connect-src`), injected (`style-src`)
+ * and then pulls the woff2 from a second origin (`font-src`).
+ */
+const googleFonts = "https://fonts.googleapis.com"
+const googleFontFiles = "https://fonts.gstatic.com"
+
 const checkoutCsp = [
   "default-src 'self'",
   // `'unsafe-eval'` is dev-only — Turbopack's HMR runtime needs it, a
   // production build does not.
   `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval' " : ""}${stripeScript} https://checkout.stripe.com`,
-  "style-src 'self' 'unsafe-inline'",
+  `style-src 'self' 'unsafe-inline' ${googleFonts}`,
   "img-src 'self' data: blob: https://*.stripe.com https://*.link.com",
-  // next/font self-hosts the Figtree/Geist files out of /_next, so no Google
-  // Fonts origin is needed here.
-  "font-src 'self' data:",
+  `font-src 'self' data: ${googleFontFiles}`,
   `frame-src ${stripeFrame}`,
   // `'self'` covers the Server Action POST that fetches the client secret;
   // dev adds the HMR websocket.
-  `connect-src 'self' ${isDev ? "ws: " : ""}${stripeConnect}`,
+  `connect-src 'self' ${isDev ? "ws: " : ""}${stripeConnect} ${googleFonts}`,
   "form-action 'self'",
   "base-uri 'self'",
   "object-src 'none'",

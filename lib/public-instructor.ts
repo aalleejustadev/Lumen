@@ -6,8 +6,6 @@ import {
   FALLBACK_CATEGORY_GRADIENT,
 } from "@/lib/config/admin-overview"
 import {
-  catalogProfileCourse,
-  getInstructorProfile,
   type InstructorReview,
   type ProfileCourse,
   type PublicInstructorProfile,
@@ -58,13 +56,9 @@ const REVIEW_LIMIT = 2
 export const getPublicInstructor = cache(async function getPublicInstructor(
   slug: string
 ): Promise<PublicInstructorProfile | null> {
-  const fromCatalog = getInstructorProfile(slug)
-  if (fromCatalog) {
-    return {
-      ...fromCatalog,
-      courses: fromCatalog.courses.map(catalogProfileCourse),
-    }
-  }
+  // **One source.** The static profiles used to win here, which is why a
+  // course built in the app had a "View profile" that 404'd until the database
+  // fallback was added. They are gone, so there is only the database.
   return buildFromDatabase(slug)
 })
 

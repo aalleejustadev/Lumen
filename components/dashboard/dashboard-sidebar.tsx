@@ -17,13 +17,37 @@ import { SidebarUser } from "@/components/dashboard/sidebar-user"
 import { Logo } from "@/components/shared/logo"
 import { type MenuUser } from "@/lib/user"
 import { dashboardNav } from "@/lib/config/dashboard"
-import { plans } from "@/lib/config/pricing"
+import { type BusinessOffer, plans } from "@/lib/config/pricing"
 import { siteConfig } from "@/lib/config/site"
 
 /** Figures come from the pricing config so the two can't drift apart. */
 const business = plans.find((plan) => plan.id === "lumen-business")
 
-function UpgradeCard() {
+/**
+ * The sidebar's Lumen Business promo.
+ *
+ * **It is drawn only for a student who could actually buy the plan.** Three
+ * things decide that, and only one of them was ever true here:
+ *
+ *  - **Student mode only.** It always was — `instructor-sidebar.tsx` and
+ *    `admin-sidebar.tsx` each record refusing it, because the promo sells a
+ *    *learner* plan. This file is the student shell's own sidebar, so there
+ *    was nothing to fix; the note is here so the next shell to appear knows
+ *    the card is not shared furniture.
+ *  - **Not already subscribed.** A card selling somebody the plan they are
+ *    paying for is the dead affordance every unbuilt row in this app refuses.
+ *    The layout asks `hasBusinessPlan()` and passes `showUpgrade`.
+ *  - **Configured at all.** With no Stripe prices the button would open a
+ *    checkout that cannot be built, so the card is dropped rather than drawn
+ *    inert — an advert nobody can act on is worse than no advert.
+ *
+ * Its amounts come from the same `BusinessOffer` the pricing page renders, so
+ * the sidebar cannot quote a price the checkout would not charge.
+ */
+function UpgradeCard({ offer }: { offer?: BusinessOffer }) {
+  const monthly = offer?.price.monthly ?? business?.price.monthly
+  const yearly = offer?.price.yearly ?? business?.price.yearly
+
   return (
     <div className="rounded-xl border bg-card p-5">
       <p className="text-[15px] font-bold">Unlock {business?.name}</p>
@@ -31,8 +55,7 @@ function UpgradeCard() {
           short last line, which is exactly the break the export uses. */}
       <p className="mt-2 text-[13px] leading-5 [text-wrap:wrap] text-muted-foreground">
         Go beyond single courses. One plan unlocks every course from every
-        instructor — {business?.price.monthly}/mo or {business?.price.yearly}
-        /yr.
+        instructor — {monthly}/mo or {yearly}/yr.
       </p>
       <Button
         nativeButton={false}
@@ -57,9 +80,16 @@ function DashboardSidebar({
   isAdmin,
   canTeach,
   navCounts,
+  showUpgrade,
+  businessOffer,
 }: {
   user: MenuUser
   isAdmin?: boolean
+  /** Whether to draw the Lumen Business promo at all — see `UpgradeCard`. The
+   *  layout resolves it, because it is the only place that already has the
+   *  session and can read the subscription. */
+  showUpgrade?: boolean
+  businessOffer?: BusinessOffer
   /** Whether the switch offers Instructor — decided in the layout by
    *  `canTeach`, the same answer the instructor shell's guard acts on. */
   canTeach?: boolean
@@ -116,7 +146,7 @@ function DashboardSidebar({
             </div>
           ))}
           <div className="sticky bottom-0 mt-auto bg-sidebar pt-8 pb-1 group-data-[collapsible=icon]:hidden">
-            <UpgradeCard />
+            {showUpgrade ? <UpgradeCard offer={businessOffer} /> : null}
           </div>
         </SidebarContent>
 

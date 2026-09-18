@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/auth"
-import { browseCourses } from "@/lib/config/browse-courses"
+import { getCatalogCourse } from "@/lib/catalog"
 import { getWishlist } from "@/lib/cart"
 
 /**
@@ -38,8 +38,17 @@ export type CartActionResult = {
   message: string
 }
 
-function findCourse(slug: string) {
-  return browseCourses.find((course) => course.slug === slug)
+/**
+ * Resolve the slug the client sent against the **catalog**, server-side.
+ *
+ * It was a lookup in a hand-written array, which is why a course built in the
+ * app could not be added to a basket at all. `getCatalogCourse` returns only
+ * `PUBLISHED` rows, so this is also the check that stops a draft, a course in
+ * review or a rejected one being bought — the client never names a price or a
+ * title, exactly as before.
+ */
+async function findCourse(slug: string) {
+  return getCatalogCourse(slug)
 }
 
 export async function addToCart(slug: string): Promise<CartActionResult> {
@@ -47,7 +56,7 @@ export async function addToCart(slug: string): Promise<CartActionResult> {
   if (!session)
     return { ok: false, message: "Sign in to add courses to your cart." }
 
-  const course = findCourse(slug)
+  const course = await findCourse(slug)
   if (!course)
     return { ok: false, message: "That course is no longer available." }
 
@@ -83,7 +92,7 @@ export async function removeFromCart(slug: string): Promise<CartActionResult> {
   }
 
   revalidatePath("/dashboard", "layout")
-  const course = findCourse(slug)
+  const course = await findCourse(slug)
   return {
     ok: true,
     message: course ? `${course.title} was removed` : "Course removed",

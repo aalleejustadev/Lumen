@@ -1,5 +1,18 @@
 export type BillingPeriod = "monthly" | "yearly"
 
+/**
+ * The one plan on this page that is a real Stripe subscription.
+ *
+ * Named rather than matched on a string in four places — the pricing section,
+ * the sidebar's upgrade card, `lib/subscription.ts` and the setup script all
+ * address it, and an id typo would fail silently as "no such plan".
+ */
+export const BUSINESS_PLAN_ID = "lumen-business"
+
+/** What `Subscription.plan` stores. Separate from the display id because the
+ *  column is written by a webhook and outlives any marketing rename. */
+export const BUSINESS_PLAN_KEY = "business"
+
 export type Plan = {
   id: string
   name: string
@@ -41,7 +54,12 @@ export const plans: Plan[] = [
       "Priority support",
       "Cancel any time",
     ],
-    cta: { label: "Start free trial", href: "/register" },
+    // **Not "Start free trial".** There is no trial — `subscription_data`
+    // sets none — and a button promising one is the kind of lie the billing
+    // page's plan line already refuses. The href is only used for the
+    // signed-out case; a signed-in visitor gets a real checkout button
+    // instead, so the label is overridden per state by `businessCta`.
+    cta: { label: "Get Lumen Business", href: "/register" },
     featured: true,
   },
   {
@@ -59,3 +77,37 @@ export const plans: Plan[] = [
     cta: { label: "Become an instructor", href: "/teach" },
   },
 ]
+
+/**
+ * What the Business card's button says and does, by who is looking at it.
+ *
+ * Four states rather than one button, because each is a different promise:
+ * an anonymous visitor cannot be charged before they have an account, a
+ * subscriber must not be sold the plan twice, and an unconfigured Stripe must
+ * say so rather than opening a checkout that would throw — the treatment every
+ * unbuilt surface in this app gets.
+ */
+export type BusinessOfferState =
+  "anonymous" | "available" | "subscribed" | "unconfigured"
+
+export const businessCta: Record<
+  BusinessOfferState,
+  { label: string; hint?: string }
+> = {
+  anonymous: { label: "Get Lumen Business" },
+  available: { label: "Get Lumen Business" },
+  subscribed: { label: "Manage plan", hint: "You are on this plan." },
+  unconfigured: {
+    label: "Get Lumen Business",
+    hint: "Subscriptions aren't configured yet.",
+  },
+}
+
+/** Everything the pricing card needs that only the server can answer. */
+export type BusinessOffer = {
+  state: BusinessOfferState
+  /** Live from Stripe when configured, the strings above otherwise — so the
+   *  page can never advertise a price different from the one it charges. */
+  price: Record<BillingPeriod, string>
+  suffix: Record<BillingPeriod, string>
+}

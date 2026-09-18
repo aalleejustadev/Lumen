@@ -1,4 +1,3 @@
-import { browseCourses } from "@/lib/config/browse-courses"
 import {
   editorStepHref,
   editorStepKeys,
@@ -82,12 +81,13 @@ export function courseReturnLink({
   /** Set by the route after confirming `from` names a `Course` row. */
   databaseCourse?: boolean
 }) {
-  const course = from
-    ? browseCourses.find((entry) => entry.slug === from)
-    : undefined
   const carried = isPreviewVia(preview) ? `?via=${preview}` : ""
 
-  const slug = course?.slug ?? (from && databaseCourse ? from : null)
+  // `databaseCourse` is the route's own confirmation that `from` names a real
+  // `Course` row — which is now the only kind there is, the static catalog
+  // having gone. It stays a parameter rather than a lookup here because this
+  // module is imported by client components and must not reach the database.
+  const slug = from && databaseCourse ? from : null
   if (!slug) return { href: "/dashboard/courses", label: "Back to Browse" }
 
   const surface: CourseSurface = via === "learning" ? "learning" : "sale"

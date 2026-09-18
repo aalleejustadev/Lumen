@@ -1,6 +1,10 @@
 import Link from "next/link"
 
 import { Card } from "@/components/ui/card"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
 import { RemoveFromCartButton } from "@/components/dashboard/cart/remove-from-cart-button"
 import type { CartLine } from "@/lib/cart"
 import { cn } from "@/lib/utils"
@@ -26,7 +30,11 @@ function CartItemCard({ line }: { line: CartLine }) {
           course.art
         )}
       >
-        <course.icon className="size-7 text-white/30" />
+        {(() => {
+          const Icon =
+            databaseCategoryIcons[course.categorySlug] ?? FALLBACK_CATEGORY_ICON
+          return <Icon className="size-7 text-white/30" />
+        })()}
       </div>
 
       <div className="flex min-w-0 flex-1 items-start justify-between gap-4">

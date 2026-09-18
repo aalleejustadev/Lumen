@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card"
-import type { LearningStat } from "@/lib/config/my-learning"
+import type { LucideIcon } from "lucide-react"
 
 /**
  * One tile from the four-up row at the top of `my-learning-page.png`: a
@@ -11,7 +11,15 @@ import type { LearningStat } from "@/lib/config/my-learning"
  * token that matches the export's fill exactly (`--soft` is near-white, so
  * it would vanish against `bg-card`).
  */
-function LearningStatCard({ icon: Icon, value, label }: LearningStat) {
+function LearningStatCard({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: LucideIcon
+  value: string
+  label: string
+}) {
   return (
     <Card className="flex-row items-center gap-4 p-5 ring-border">
       <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-hover">

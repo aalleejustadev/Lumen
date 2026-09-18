@@ -8,7 +8,10 @@ import {
   RemoveFromWishlistButton,
 } from "@/components/dashboard/wishlist/wishlist-actions"
 import type { WishlistCourse } from "@/components/dashboard/wishlist/wishlist-course"
-import { categoryIcons } from "@/lib/config/browse-courses"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
 import { cn } from "@/lib/utils"
 
 /**
@@ -27,7 +30,8 @@ import { cn } from "@/lib/utils"
  * navigate — the same split `course-card.tsx` makes for its "Add" button.
  */
 function WishlistRow({ course }: { course: WishlistCourse }) {
-  const Icon = categoryIcons[course.category]
+  const Icon =
+    databaseCategoryIcons[course.categorySlug] ?? FALLBACK_CATEGORY_ICON
   const href = `/dashboard/courses/${course.slug}`
 
   return (
@@ -43,7 +47,7 @@ function WishlistRow({ course }: { course: WishlistCourse }) {
       >
         <Icon className="size-7 text-white/25" />
         <Badge className="absolute top-2.5 left-3 h-5 bg-black/55 px-2 text-[10px] font-medium text-white backdrop-blur-sm">
-          {course.category}
+          {course.categoryName}
         </Badge>
       </Link>
 

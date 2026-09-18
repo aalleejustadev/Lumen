@@ -20,7 +20,6 @@ import {
   buildQuizzes,
   buildSections,
   buildSuitFor,
-  getCoursePlayer,
   type CoursePlayerCourse,
   type CourseQuestion,
   type CourseQuiz,
@@ -90,8 +89,9 @@ const REPLY_LIMIT = 12
 export const getEnrolledCourse = cache(async function getEnrolledCourse(
   slug: string
 ): Promise<CoursePlayerCourse | null> {
-  const fromCatalog = getCoursePlayer(slug)
-  if (fromCatalog) return fromCatalog
+  // The static catalog used to win here. It is gone, so this resolves from
+  // the database alone — the swap `lib/course-player.ts`' own header always
+  // described as the other half of the `Enrollment` work.
   return buildFromDatabase(slug)
 })
 
@@ -490,6 +490,10 @@ export type LessonView = {
   total: number
   previousId: string | null
   nextId: string | null
+  /** Whether *this viewer* has ticked it. Drives the Mark-as-complete button,
+   *  and is false for anyone without an enrolment — an instructor previewing
+   *  their own course has no progress of their own to show. */
+  completed: boolean
 } & (
   | {
       kind: "video"
@@ -526,6 +530,22 @@ export async function getLessonView(
       : withIds.findIndex((row) => row.lesson.state === "current")
   )
   const { lesson: row, sectionTitle } = withIds[index]!
+
+  // Whether this viewer has ticked it. One indexed lookup through their own
+  // enrolment, so somebody previewing a course they do not take reads false
+  // rather than borrowing a student's progress.
+  const session = await getSession()
+  const progress = session
+    ? await db.lessonProgress.findFirst({
+        where: {
+          lessonId: row.id!,
+          enrollment: { userId: session.user.id },
+          NOT: { completedAt: null },
+        },
+        select: { id: true },
+      })
+    : null
+
   const base = {
     id: row.id!,
     title: row.title,
@@ -534,6 +554,7 @@ export async function getLessonView(
     total: withIds.length,
     previousId: withIds[index - 1]?.lesson.id ?? null,
     nextId: withIds[index + 1]?.lesson.id ?? null,
+    completed: progress !== null,
   }
 
   if (row.locked) return { ...base, kind: "locked", lessonKind: row.type }

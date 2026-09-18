@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/auth"
-import { browseCourses } from "@/lib/config/browse-courses"
+import { getCatalogCourse } from "@/lib/catalog"
 
 /**
  * Wishlist mutations — same shape and same server-side session/slug checks as
@@ -37,7 +37,7 @@ export async function toggleWishlist(
     }
   }
 
-  const course = browseCourses.find((candidate) => candidate.slug === slug)
+  const course = await getCatalogCourse(slug)
   if (!course) {
     return {
       ok: false,
@@ -105,7 +105,7 @@ export async function removeFromWishlist(
   }
 
   revalidatePath("/dashboard", "layout")
-  const course = browseCourses.find((candidate) => candidate.slug === slug)
+  const course = await getCatalogCourse(slug)
   return {
     ok: true,
     wishlisted: false,

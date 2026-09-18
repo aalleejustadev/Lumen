@@ -5,7 +5,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import type { EnrolledCourse } from "@/lib/config/my-learning"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
+import type { EnrolledCourse } from "@/lib/config/my-learning-shape"
 
 /**
  * An enrolled-course card from `my-learning-page.png`. Same shell as the
@@ -18,6 +22,9 @@ import type { EnrolledCourse } from "@/lib/config/my-learning"
  * who haven't bought yet.
  */
 function EnrolledCourseCard({ course }: { course: EnrolledCourse }) {
+  const Icon =
+    databaseCategoryIcons[course.categorySlug] ?? FALLBACK_CATEGORY_ICON
+
   const href = `/dashboard/learning/${course.slug}`
 
   return (
@@ -26,9 +33,9 @@ function EnrolledCourseCard({ course }: { course: EnrolledCourse }) {
         <div
           className={`relative grid aspect-[725/242] place-items-center bg-gradient-to-br ${course.art}`}
         >
-          <course.icon className="size-12 text-white/25" />
+          <Icon className="size-12 text-white/25" />
           <Badge className="absolute top-3 left-3 h-[22px] bg-black/55 px-2.5 text-[11px] font-medium text-white backdrop-blur-sm">
-            {course.category}
+            {course.categoryName}
           </Badge>
         </div>
 

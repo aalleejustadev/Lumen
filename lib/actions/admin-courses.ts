@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { getSession } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { notifyCourseDecision } from "@/lib/notify"
 import {
   changeReasonOptions,
   NOTE_MAX_LENGTH,
@@ -81,8 +82,12 @@ async function decide(
     where: { id: courseId },
     select: {
       id: true,
+      slug: true,
       title: true,
       status: true,
+      // Who to tell about the decision — the profile's account, which is
+      // nullable because an `Instructor` row can exist without one.
+      instructor: { select: { userId: true } },
       submissions: {
         orderBy: { submittedAt: "desc" },
         take: 1,
@@ -150,6 +155,19 @@ async function decide(
       },
     }),
   ])
+
+  // **The instructor is told.** Before this, a decision changed a status pill
+  // on a page they had no reason to revisit — approval, rejection and a
+  // request for changes all arrived silently. Outside the transaction, for
+  // the reason the submission side gives.
+  await notifyCourseDecision({
+    instructorUserId: course.instructor?.userId ?? null,
+    courseId: course.id,
+    courseSlug: course.slug,
+    courseTitle: course.title,
+    outcome: decision,
+    note: extra.noteToInstructor ?? null,
+  })
 
   // The **layout**, not the page: the console sidebar's Courses badge is the
   // review-queue size and it is rendered by `app/(admin)/layout.tsx`, and every

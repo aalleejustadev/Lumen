@@ -1,6 +1,7 @@
 import { cache } from "react"
 
 import { db } from "@/lib/db"
+import { ENTITLED_STATUSES } from "@/lib/subscription"
 import { USERS_PAGE_SIZE } from "@/lib/config/admin-users"
 import type { Prisma, UserStatus } from "@/lib/generated/prisma/client"
 
@@ -157,11 +158,19 @@ export function parseUsersQuery(params: {
 /**
  * A live Business subscription. `Subscription` is not unique per user — a
  * lapsed one is history worth keeping — so the plan is "has a row in one of
- * these two states", never a column read. TRIALING counts: someone inside a
- * trial has the plan, they just haven't paid for it yet.
+ * these states", never a column read.
+ *
+ * **The list is `ENTITLED_STATUSES`, imported rather than written out here.**
+ * It used to be a local `["ACTIVE", "TRIALING"]`, which was right while
+ * nothing else read the table and became wrong the moment the plan started
+ * granting course access: entitlement also honours `PAST_DUE` (Stripe holds a
+ * subscription there for weeks while dunning retries a card), so a console
+ * filtering on the shorter list would report an account as *not* on Business
+ * while the app was serving them the whole catalogue. One list, the reason
+ * `lib/subscription.ts` gives in full.
  */
 const LIVE_SUBSCRIPTION = {
-  status: { in: ["ACTIVE", "TRIALING"] },
+  status: { in: ENTITLED_STATUSES },
 } satisfies Prisma.SubscriptionWhereInput
 
 /**

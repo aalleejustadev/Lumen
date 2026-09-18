@@ -6,7 +6,6 @@ import { CalendarIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
-import { monthlyProgress } from "@/lib/config/dashboard-overview"
 
 const chartConfig = {
   value: { label: "Progress", color: "var(--bar-fill)" },
@@ -16,7 +15,11 @@ const chartConfig = {
  * The wavy area chart. The date-range control is a static label — there's no
  * date-scoped query behind it yet, so it isn't wired as a real picker.
  */
-function ProgressChartCard() {
+function ProgressChartCard({
+  monthlyProgress,
+}: {
+  monthlyProgress: { week: string; value: number }[]
+}) {
   return (
     <Card className="gap-0 p-6.5 ring-border">
       <div className="flex flex-wrap items-start justify-between gap-4">

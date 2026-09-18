@@ -13,15 +13,23 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { catalogCategories, courses, type Course } from "@/lib/config/catalog"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
+import type { CatalogCourse } from "@/lib/config/catalog-shape"
 import { cn } from "@/lib/utils"
 
-/** Course sale pages aren't built yet — this is where they'll live. */
-function courseHref(course: Course) {
-  return `/courses/${course.slug}`
+/** The sale page, which exists now — this used to point at an unbuilt
+ *  `/courses/[slug]`. */
+function courseHref(course: CatalogCourse) {
+  return `/dashboard/courses/${course.slug}`
 }
 
-function CourseCard({ course }: { course: Course }) {
+function CourseCard({ course }: { course: CatalogCourse }) {
+  const Icon =
+    databaseCategoryIcons[course.categorySlug] ?? FALLBACK_CATEGORY_ICON
+
   return (
     <Card className="group gap-0 overflow-hidden p-0 transition-shadow hover:shadow-card">
       <Link href={courseHref(course)} className="flex flex-col">
@@ -31,9 +39,9 @@ function CourseCard({ course }: { course: Course }) {
             course.art
           )}
         >
-          <course.icon className="size-12 text-white/25" />
+          <Icon className="size-12 text-white/25" />
           <Badge className="absolute top-3 left-3 h-[22px] bg-black/55 px-2.5 text-[11px] font-medium text-white backdrop-blur-sm">
-            {course.category}
+            {course.categoryName}
           </Badge>
         </div>
 
@@ -65,15 +73,26 @@ function CourseCard({ course }: { course: Course }) {
   )
 }
 
-function CatalogBrowser() {
+function CatalogBrowser({ courses }: { courses: CatalogCourse[] }) {
   const [active, setActive] = React.useState<string>("All")
+
+  // The categories the catalog actually has, not a fixed list — a filter that
+  // can only ever return nothing is the dead affordance every other surface
+  // here refuses.
+  const categories = React.useMemo(
+    () => [
+      "All",
+      ...[...new Set(courses.map((course) => course.categoryName))].sort(),
+    ],
+    [courses]
+  )
 
   const visible = React.useMemo(
     () =>
       active === "All"
         ? courses
-        : courses.filter((course) => course.category === active),
-    [active]
+        : courses.filter((course) => course.categoryName === active),
+    [active, courses]
   )
 
   return (
@@ -91,7 +110,7 @@ function CatalogBrowser() {
           aria-label="Filter courses by category"
           className="w-max flex-nowrap"
         >
-          {catalogCategories.map((category) => (
+          {categories.map((category) => (
             <ToggleGroupItem
               key={category}
               value={category}

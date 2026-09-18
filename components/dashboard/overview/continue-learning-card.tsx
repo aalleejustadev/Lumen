@@ -23,9 +23,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
+import {
   CONTINUE_THRESHOLD,
-  continueLearning,
-} from "@/lib/config/dashboard-overview"
+  type ContinueLearningCourse,
+} from "@/lib/config/dashboard-overview-shape"
 
 /** The right-hand cell: a near-empty bar with a "Continue" CTA for a
  *  just-started course, or a filled bar with a "more" menu once underway. */
@@ -71,10 +75,14 @@ function ProgressCell({ progress }: { progress: number }) {
 /** Courses picked up where they were left off — filterable by title, and
  *  paginated (both chevrons stay disabled: there's only the one page of demo
  *  rows the export shows). */
-function ContinueLearningCard() {
+function ContinueLearningCard({
+  courses,
+}: {
+  courses: ContinueLearningCourse[]
+}) {
   const [query, setQuery] = React.useState("")
 
-  const visible = continueLearning.filter((course) =>
+  const visible = courses.filter((course) =>
     course.title.toLowerCase().includes(query.trim().toLowerCase())
   )
 
@@ -125,7 +133,12 @@ function ContinueLearningCard() {
                   <span
                     className={`grid size-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br text-white ${course.art}`}
                   >
-                    <course.icon className="size-4" />
+                    {(() => {
+                      const Icon =
+                        databaseCategoryIcons[course.categorySlug] ??
+                        FALLBACK_CATEGORY_ICON
+                      return <Icon className="size-4" />
+                    })()}
                   </span>
                   <span className="font-medium text-wrap">{course.title}</span>
                 </Link>
@@ -155,7 +168,7 @@ function ContinueLearningCard() {
 
       <div className="mt-4 flex items-center justify-between">
         <p className="text-[13px] text-muted-foreground">
-          {continueLearning.length} course(s)
+          {courses.length} course(s)
         </p>
         <div className="flex items-center gap-2">
           <Button

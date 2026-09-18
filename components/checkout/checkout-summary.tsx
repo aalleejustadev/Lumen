@@ -2,6 +2,10 @@ import Link from "next/link"
 import { ArrowLeftIcon } from "lucide-react"
 
 import { LogoMark } from "@/components/shared/logo"
+import {
+  categoryIcons as databaseCategoryIcons,
+  FALLBACK_CATEGORY_ICON,
+} from "@/lib/config/admin-overview"
 import { siteConfig } from "@/lib/config/site"
 import type { CartSummary } from "@/lib/cart"
 import { cn } from "@/lib/utils"
@@ -77,7 +81,12 @@ function CheckoutSummary({ summary }: { summary: CartSummary }) {
                   line.course.art
                 )}
               >
-                <line.course.icon className="size-5 text-white/30" />
+                {(() => {
+                  const Icon =
+                    databaseCategoryIcons[line.course.categorySlug] ??
+                    FALLBACK_CATEGORY_ICON
+                  return <Icon className="size-5 text-white/30" />
+                })()}
               </div>
               {/* The quantity pill on the thumbnail's top-right corner. A
                   course is bought once, so it is always 1 — kept because the

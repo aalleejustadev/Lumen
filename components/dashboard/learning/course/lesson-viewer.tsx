@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { LessonCompleteButton } from "@/components/dashboard/learning/course/lesson-complete-button"
 import { Card } from "@/components/ui/card"
 import { ArticleBody } from "@/components/dashboard/courses/article-body"
 import type { LessonView } from "@/lib/course-player"
@@ -166,6 +167,15 @@ function LessonViewer({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* Not drawn on a locked lesson: a lock answers "may I", and
+              offering to tick something you cannot open would be the dead
+              affordance every unbuilt row in this app refuses. */}
+          {lesson.kind !== "locked" ? (
+            <LessonCompleteButton
+              lessonId={lesson.id}
+              completed={lesson.completed}
+            />
+          ) : null}
           <StepLink
             href={lesson.previousId ? hrefFor(lesson.previousId) : null}
             label="Previous"
